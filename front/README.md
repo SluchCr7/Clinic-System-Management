@@ -22,6 +22,7 @@ This directory contains the Next.js client application for the clinic management
 - medical attachments and consultation modules
 - real-time notifications via Socket.IO
 - responsive, RTL-friendly UI for clinical workflows
+- appointment reminders with admin-configurable timing in Settings → Clinic
 
 ## Project Structure
 

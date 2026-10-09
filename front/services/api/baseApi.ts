@@ -17,6 +17,7 @@ export const TAG_TYPES = [
   "MedicalAttachment",
   "LabOrder",
   "Notification",
+  "ReminderSettings",
   "AuditLog",
   "Dashboard",
   "Search",

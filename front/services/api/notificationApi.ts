@@ -6,6 +6,7 @@ import type {
   CreateNotificationRequest,
   NotificationQueryParams,
   UnreadCountResponseData,
+  AppointmentReminderSettings,
 } from "@/types/notification";
 
 export const notificationApi = baseApi.injectEndpoints({
@@ -136,6 +137,29 @@ export const notificationApi = baseApi.injectEndpoints({
         { type: "Notification", id: "UNREAD_COUNT" },
       ],
     }),
+
+    getAppointmentReminderSettings: builder.query<
+      ApiResponse<AppointmentReminderSettings>,
+      void
+    >({
+      query: () => ({
+        url: "/notifications/reminder-settings",
+        method: "GET",
+      }),
+      providesTags: ["ReminderSettings"],
+    }),
+
+    updateAppointmentReminderSettings: builder.mutation<
+      ApiResponse<AppointmentReminderSettings>,
+      Pick<AppointmentReminderSettings, "enabled" | "minutesBefore">
+    >({
+      query: (body) => ({
+        url: "/notifications/reminder-settings",
+        method: "PATCH",
+        body,
+      }),
+      invalidatesTags: ["ReminderSettings"],
+    }),
   }),
 });
 
@@ -146,4 +170,6 @@ export const {
   useCreateNotificationMutation,
   useMarkAsReadMutation,
   useMarkAllAsReadMutation,
+  useGetAppointmentReminderSettingsQuery,
+  useUpdateAppointmentReminderSettingsMutation,
 } = notificationApi;

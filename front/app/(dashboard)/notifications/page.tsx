@@ -8,7 +8,6 @@ import {
   useMarkAllAsReadMutation,
 } from "@/services/api/notificationApi";
 import type {
-  Notification,
   NotificationQueryParams,
   NotificationType,
 } from "@/types/notification";
@@ -43,8 +42,11 @@ export default function NotificationsPage() {
     type: undefined,
   });
 
-  const { data, isLoading, isError, refetch } = useGetNotificationsQuery(queryParams);
-  const [markAsRead, { isLoading: isMarkingSingle }] = useMarkAsReadMutation();
+  const { data, isLoading, isError, refetch } = useGetNotificationsQuery(
+    queryParams,
+    { pollingInterval: 60_000 }
+  );
+  const [markAsRead] = useMarkAsReadMutation();
   const [markAllAsRead, { isLoading: isMarkingAll }] = useMarkAllAsReadMutation();
 
   const handleMarkAsRead = async (id: string) => {

@@ -47,6 +47,7 @@ const createNotification = async (
     message,
     relatedModel,
     relatedId,
+    eventKey,
   } = data;
 
   await validateRecipient(recipient);
@@ -67,15 +68,33 @@ const createNotification = async (
     );
   }
 
-  const notification = await Notification.create({
+  const notificationData = {
     recipient,
     type,
     title,
     message,
     relatedModel: relatedModel || null,
     relatedId: relatedId || null,
+    eventKey: eventKey || undefined,
     createdBy: currentUser?._id || null,
-  });
+  };
+  let notification;
+
+  if (eventKey) {
+    notification = await Notification.findOne({ eventKey });
+    if (notification) return notification;
+  }
+
+  try {
+    notification = await Notification.create(notificationData);
+  } catch (error) {
+    if (eventKey && error.code === 11000) {
+      notification = await Notification.findOne({ eventKey });
+      if (notification) return notification;
+    }
+    throw error;
+  }
+
   const io = getIO();
 
   io.to(`user:${recipient}`).emit("notification:new", {
@@ -85,19 +104,21 @@ const createNotification = async (
   // Audit Log
   // ---------------------------------------------
 
-  await auditLogService.logActivity({
-    actor: currentUser,
-    action: "NOTIFICATION_CREATED",
-    resource: "Notification",
-    resourceId: notification._id,
-    details: {
-      recipient: notification.recipient,
-      type: notification.type,
-      title: notification.title,
-      relatedModel: notification.relatedModel,
-      relatedId: notification.relatedId,
-    },
-  });
+  if (currentUser?._id) {
+    await auditLogService.logActivity({
+      actor: currentUser,
+      action: "NOTIFICATION_CREATED",
+      resource: "Notification",
+      resourceId: notification._id,
+      details: {
+        recipient: notification.recipient,
+        type: notification.type,
+        title: notification.title,
+        relatedModel: notification.relatedModel,
+        relatedId: notification.relatedId,
+      },
+    });
+  }
 
   return notification;
 };

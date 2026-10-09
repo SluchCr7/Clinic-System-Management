@@ -53,6 +53,12 @@ const NotificationSchema = new mongoose.Schema(
       default: null,
     },
 
+    eventKey: {
+      type: String,
+      trim: true,
+      maxlength: 200,
+    },
+
     isRead: {
       type: Boolean,
       default: false,
@@ -84,6 +90,11 @@ NotificationSchema.index({
   recipient: 1,
   createdAt: -1,
 });
+
+NotificationSchema.index(
+  { eventKey: 1 },
+  { unique: true, sparse: true }
+);
 
 module.exports = mongoose.model(
   "Notification",

@@ -16,6 +16,13 @@ export type NotificationRelatedModel =
   | "Prescription"
   | "MedicalAttachment";
 
+export interface AppointmentReminderSettings {
+  enabled: boolean;
+  minutesBefore: number;
+  lastCheckedAt: string | null;
+  updatedAt: string;
+}
+
 export interface Notification {
   _id: string;
   recipient: User | string;

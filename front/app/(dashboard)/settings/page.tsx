@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppSelector } from "@/redux/hooks";
 import { selectCurrentUser } from "@/features/auth/authSelectors";
@@ -9,6 +9,10 @@ import {
   useUpdateUserMutation,
   useUpdateProfilePhotoMutation,
 } from "@/services/api/userApi";
+import {
+  useGetAppointmentReminderSettingsQuery,
+  useUpdateAppointmentReminderSettingsMutation,
+} from "@/services/api/notificationApi";
 import { useTheme, type Theme } from "@/components/providers/ThemeProvider";
 import {
   PageHeader,
@@ -37,6 +41,7 @@ import {
   LuMonitor,
   LuCheck,
   LuSparkles,
+  LuBell,
 } from "react-icons/lu";
 
 export default function SettingsPage() {
@@ -63,6 +68,43 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  const isAdmin = currentUser?.role === "admin";
+  const {
+    data: reminderSettingsResponse,
+    isLoading: isLoadingReminderSettings,
+    isError: isReminderSettingsError,
+    refetch: refetchReminderSettings,
+  } = useGetAppointmentReminderSettingsQuery(undefined, {
+    skip: !isAdmin,
+  });
+  const [
+    updateReminderSettings,
+    { isLoading: isSavingReminderSettings },
+  ] = useUpdateAppointmentReminderSettingsMutation();
+  const [reminderSettingsDraft, setReminderSettingsDraft] = useState<{
+    enabled: boolean;
+    minutesBefore: number;
+  } | null>(null);
+  const remindersEnabled =
+    reminderSettingsDraft?.enabled ??
+    reminderSettingsResponse?.data.enabled ??
+    true;
+  const reminderMinutesBefore =
+    reminderSettingsDraft?.minutesBefore ??
+    reminderSettingsResponse?.data.minutesBefore ??
+    120;
+  const reminderTimingOptions: Array<{ minutes: number; label: string }> = [
+    { minutes: 1, label: "1 minute" },
+    { minutes: 5, label: "5 minutes" },
+    { minutes: 15, label: "15 minutes" },
+    { minutes: 30, label: "30 minutes" },
+    { minutes: 60, label: "1 hour" },
+    { minutes: 120, label: "2 hours" },
+    { minutes: 360, label: "6 hours" },
+    { minutes: 720, label: "12 hours" },
+    { minutes: 1440, label: "24 hours" },
+  ];
 
   // Mutations
   const [updateUser, { isLoading: isUpdatingProfile }] = useUpdateUserMutation();
@@ -137,6 +179,25 @@ export default function SettingsPage() {
     } catch (err) {
       const extracted = extractApiError(err);
       toast.error(extracted.message || t("settings.messages.passwordChangeFailed", "Failed to change password"));
+    }
+  };
+
+  const handleSaveReminderSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await updateReminderSettings({
+        enabled: remindersEnabled,
+        minutesBefore: reminderMinutesBefore,
+      }).unwrap();
+      toast.success(
+        t("settings.reminders.saved", "Appointment reminder settings saved")
+      );
+    } catch (err) {
+      const extracted = extractApiError(err);
+      toast.error(
+        extracted.message ||
+          t("settings.reminders.saveFailed", "Could not save reminder settings")
+      );
     }
   };
 
@@ -500,42 +561,155 @@ export default function SettingsPage() {
 
       {/* Tab: Clinic Configuration */}
       {activeTab === "clinic" && (
-        <Card>
-          <CardHeader
-            title={t("settings.clinicTitle", "Clinic Profile & Institutional Parameters")}
-            subtitle={t("settings.clinicSubtitle", "Global clinical operational guidelines and institutional identifiers")}
-          />
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              <div className="p-3 bg-paper rounded-lg border border-border-subtle">
-                <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.clinicFacilityName", "Clinic Name")}</span>
-                <p className="font-bold text-ink mt-0.5">Aegis Precision Clinic</p>
-              </div>
+        <div className="flex flex-col gap-5">
+          <Card>
+            <CardHeader
+              title={t("settings.clinicTitle", "Clinic Profile & Institutional Parameters")}
+              subtitle={t("settings.clinicSubtitle", "Global clinical operational guidelines and institutional identifiers")}
+            />
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div className="p-3 bg-paper rounded-lg border border-border-subtle">
+                  <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.clinicFacilityName", "Clinic Name")}</span>
+                  <p className="font-bold text-ink mt-0.5">Aegis Precision Clinic</p>
+                </div>
 
-              <div className="p-3 bg-paper rounded-lg border border-border-subtle">
-                <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.institutionalLicense", "License Number")}</span>
-                <p className="font-mono font-semibold text-teal-dark mt-0.5">MOH-CLN-88319</p>
-              </div>
+                <div className="p-3 bg-paper rounded-lg border border-border-subtle">
+                  <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.institutionalLicense", "License Number")}</span>
+                  <p className="font-mono font-semibold text-teal-dark mt-0.5">MOH-CLN-88319</p>
+                </div>
 
-              <div className="p-3 bg-paper rounded-lg border border-border-subtle">
-                <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.standardSlotDuration", "Slot Duration")}</span>
-                <p className="font-medium text-ink mt-0.5">15 Minutes per Consultation</p>
-              </div>
+                <div className="p-3 bg-paper rounded-lg border border-border-subtle">
+                  <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.standardSlotDuration", "Slot Duration")}</span>
+                  <p className="font-medium text-ink mt-0.5">15 Minutes per Consultation</p>
+                </div>
 
-              <div className="p-3 bg-paper rounded-lg border border-border-subtle">
-                <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.billingCurrency", "Billing Currency")}</span>
-                <p className="font-medium text-ink mt-0.5">USD ($) • Zero-Rated Clinical Tax</p>
-              </div>
+                <div className="p-3 bg-paper rounded-lg border border-border-subtle">
+                  <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.billingCurrency", "Billing Currency")}</span>
+                  <p className="font-medium text-ink mt-0.5">USD ($) • Zero-Rated Clinical Tax</p>
+                </div>
 
-              <div className="p-3 bg-paper rounded-lg border border-border-subtle col-span-2">
-                <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.operationalHours", "Operational Hours")}</span>
-                <p className="font-medium text-ink mt-0.5">
-                  Monday – Friday: 08:00 AM – 06:00 PM • Saturday: 09:00 AM – 02:00 PM • Sunday: Urgent Care Only
-                </p>
+                <div className="p-3 bg-paper rounded-lg border border-border-subtle col-span-2">
+                  <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.operationalHours", "Operational Hours")}</span>
+                  <p className="font-medium text-ink mt-0.5">
+                    Monday – Friday: 08:00 AM – 06:00 PM • Saturday: 09:00 AM – 02:00 PM • Sunday: Urgent Care Only
+                  </p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          {isAdmin && (
+            <Card>
+              <CardHeader
+                title={t("settings.reminders.title", "Appointment Reminders")}
+                subtitle={t(
+                  "settings.reminders.subtitle",
+                  "Choose whether staff receive an in-app reminder before each scheduled appointment."
+                )}
+              />
+              <CardContent>
+                {isLoadingReminderSettings ? (
+                  <p className="text-xs text-slate-muted">
+                    {t("common.loading", "Loading...")}
+                  </p>
+                ) : isReminderSettingsError ? (
+                  <div className="flex items-center gap-3">
+                    <p className="text-xs text-status-error">
+                      {t(
+                        "settings.reminders.loadFailed",
+                        "Could not load reminder settings."
+                      )}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => refetchReminderSettings()}
+                    >
+                      {t("common.retry", "Retry")}
+                    </Button>
+                  </div>
+                ) : (
+                  <form
+                    onSubmit={handleSaveReminderSettings}
+                    className="flex flex-col gap-5"
+                  >
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={remindersEnabled}
+                        onChange={(event) =>
+                          setReminderSettingsDraft({
+                            enabled: event.target.checked,
+                            minutesBefore: reminderMinutesBefore,
+                          })
+                        }
+                        className="mt-0.5 accent-teal-primary"
+                      />
+                      <span>
+                        <span className="flex items-center gap-2 text-sm font-semibold text-ink">
+                          <LuBell className="w-4 h-4 text-teal-primary" />
+                          {t(
+                            "settings.reminders.enabled",
+                            "Enable appointment reminders"
+                          )}
+                        </span>
+                        <span className="block text-xs text-slate-muted mt-1">
+                          {t(
+                            "settings.reminders.enabledDescription",
+                            "Reminders appear in the notifications page and dashboard for the assigned doctor and booking staff."
+                          )}
+                        </span>
+                      </span>
+                    </label>
+
+                    <div className="max-w-sm">
+                      <label
+                        htmlFor="reminder-minutes-before"
+                        className="text-xs font-semibold text-ink mb-2 block"
+                      >
+                        {t(
+                          "settings.reminders.timing",
+                          "Send reminder before appointment"
+                        )}
+                      </label>
+                      <select
+                        id="reminder-minutes-before"
+                        value={reminderMinutesBefore}
+                        onChange={(event) =>
+                          setReminderSettingsDraft({
+                            enabled: remindersEnabled,
+                            minutesBefore: Number(event.target.value),
+                          })
+                        }
+                        disabled={!remindersEnabled}
+                        className="w-full rounded-lg border border-border-subtle bg-surface px-3 py-2 text-sm text-ink disabled:opacity-50"
+                      >
+                        {reminderTimingOptions.map(({ minutes, label }) => (
+                          <option key={minutes} value={minutes}>
+                            {t(`settings.reminders.timing${minutes}`, label)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex justify-end border-t border-border-subtle pt-4">
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        size="sm"
+                        isLoading={isSavingReminderSettings}
+                      >
+                        {t("settings.reminders.save", "Save reminder settings")}
+                      </Button>
+                    </div>
+                  </form>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
     </div>
   );

@@ -16,6 +16,7 @@ const { errorHandler } = require("./middlewares/errorHandler");
 const http = require("http");
 const { Server } = require("socket.io");
 const socketAuth = require("./middlewares/socketAuth")
+const { startReminderJob, stopReminderJob } = require("./utils/reminder");
 // Validate essential environment variables
 validateEnv();
 
@@ -185,7 +186,7 @@ app.use(errorHandler);
 let server;
 
 if (process.env.NODE_ENV !== "test") {
-  connectDB();
+  connectDB().then(() => startReminderJob());
   const PORT = process.env.PORT || 5000;
   server = httpServer.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
@@ -196,6 +197,7 @@ if (process.env.NODE_ENV !== "test") {
     if (server) {
       server.close(async () => {
         console.log("HTTP server closed.");
+        await stopReminderJob();
         try {
           await mongoose.connection.close(false);
           console.log("MongoDB connection closed.");

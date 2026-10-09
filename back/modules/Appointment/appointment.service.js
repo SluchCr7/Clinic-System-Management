@@ -358,6 +358,9 @@ const updateAppointment = async (id, data, currentUser) => {
   }
 
   Object.assign(appointment, data);
+  if (isRescheduled) {
+    appointment.reminderSent = false;
+  }
   appointment.updatedBy = currentUser._id;
 
   await appointment.save();

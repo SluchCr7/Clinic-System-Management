@@ -90,6 +90,71 @@ cd back
 npm test
 ```
 
+## Appointment Reminders
+
+The reminder worker starts after MongoDB connects and checks for eligible
+appointments once per minute. It sends an in-app notification to the assigned
+doctor and the staff member who booked the appointment, then sets
+`reminderSent` to `true`. Rescheduling an appointment resets that flag.
+
+Only administrators can read or change the persisted clinic-wide settings:
+
+- `GET /api/notifications/reminder-settings`
+- `PATCH /api/notifications/reminder-settings` with
+  `{ "enabled": true, "minutesBefore": 120 }`
+
+`minutesBefore` accepts 1–1440 minutes. The admin Settings page exposes common
+intervals from one minute to 24 hours. The notification list supports polling
+and Socket.IO updates; reading notifications and the unread-count endpoint are
+already part of the notifications API. The worker is in-app only; SMS/WhatsApp
+delivery can be connected using the shared message formatter in
+`utils/appointmentReminder.js`.
+
+### Local reminder test
+
+1. Start the backend and frontend, sign in as an administrator, and open
+   **Settings → Clinic**. Enable reminders and set the interval to **1 minute**.
+2. In `mongosh`, use existing active patient/doctor/staff records to insert a
+   test appointment about three minutes in the future:
+
+   ```javascript
+   const patient = db.patients.findOne({ isActive: true });
+   const doctor = db.doctors.findOne({ isActive: true });
+   const staff = db.users.findOne({ isActive: true, role: "receptionist" });
+
+   const appointmentId = db.appointments.insertOne({
+     patient: patient._id,
+     doctor: doctor._id,
+     createdBy: staff._id,
+     appointmentDate: new Date(Date.now() + 3 * 60 * 1000),
+     duration: 30,
+     status: "scheduled",
+     reminderSent: false,
+     createdAt: new Date(),
+     updatedAt: new Date()
+   }).insertedId;
+   ```
+
+   Ensure all three lookups returned a document. The inserted appointment ID
+   can be retained from the `insertOne` result.
+3. The reminder is due about one minute before the inserted appointment. Since
+   the worker checks once per minute, allow about one to three minutes after
+   inserting it. Verify the flag and notification documents in `mongosh`:
+
+   ```javascript
+   db.appointments.findOne({ _id: appointmentId }, { reminderSent: 1 });
+   db.notifications.find({
+     relatedModel: "Appointment",
+     relatedId: appointmentId
+   });
+   ```
+
+   The worker notifies the assigned doctor and booking staff.
+4. In the frontend, open **Notifications** while signed in as either recipient.
+   The list refreshes every minute and also receives live Socket.IO updates.
+   Confirm the appointment reminder is present and that **Mark as read** and
+   the unread count work.
+
 ## Notes
 
 - The backend is intentionally strict about validation, authorization, and file upload safety.

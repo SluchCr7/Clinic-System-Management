@@ -11,6 +11,7 @@ const validate = require("../../middlewares/validation");
 const {
   createNotificationSchema,
   notificationListQuerySchema,
+  reminderSettingsSchema,
 } = require("./notification.validation");
 const { validateQuery, validateId } = validate;
 
@@ -60,6 +61,21 @@ router.patch(
   protect,
   authorize("admin", "doctor", "receptionist"),
   notificationController.markAllAsRead
+);
+
+router.get(
+  "/reminder-settings",
+  protect,
+  authorize("admin"),
+  notificationController.getReminderSettings
+);
+
+router.patch(
+  "/reminder-settings",
+  protect,
+  authorize("admin"),
+  validate(reminderSettingsSchema),
+  notificationController.updateReminderSettings
 );
 
 // ---------------------------------------------

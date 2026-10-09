@@ -67,6 +67,10 @@ const AppointmentSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+    reminderSent: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
@@ -80,6 +84,12 @@ AppointmentSchema.index({
 
 AppointmentSchema.index({
   patient: 1,
+  appointmentDate: 1,
+});
+
+AppointmentSchema.index({
+  status: 1,
+  reminderSent: 1,
   appointmentDate: 1,
 });
 

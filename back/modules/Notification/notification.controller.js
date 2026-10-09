@@ -1,6 +1,7 @@
 const asyncHandler = require("express-async-handler");
 
 const notificationService = require("./notification.service");
+const reminderSettingsService = require("./reminderSettings.service");
 
 const { AppError } = require("../../middlewares/errorHandler");
 
@@ -146,6 +147,30 @@ const markAllAsRead = asyncHandler(
   }
 );
 
+const getReminderSettings = asyncHandler(async (req, res) => {
+  const settings =
+    await reminderSettingsService.getReminderSettings();
+
+  res.status(200).json({
+    success: true,
+    data: settings,
+  });
+});
+
+const updateReminderSettings = asyncHandler(async (req, res) => {
+  const settings =
+    await reminderSettingsService.updateReminderSettings(
+      req.body,
+      req.user
+    );
+
+  res.status(200).json({
+    success: true,
+    message: "Appointment reminder settings updated",
+    data: settings,
+  });
+});
+
 module.exports = {
   createNotification,
   getNotifications,
@@ -153,4 +178,6 @@ module.exports = {
   getUnreadCount,
   markAsRead,
   markAllAsRead,
+  getReminderSettings,
+  updateReminderSettings,
 };

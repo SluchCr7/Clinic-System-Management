@@ -65,8 +65,14 @@ const notificationListQuerySchema = createListQuerySchema({
   },
 });
 
+const reminderSettingsSchema = Joi.object({
+  enabled: Joi.boolean().required(),
+  minutesBefore: Joi.number().integer().min(1).max(1440).required(),
+});
+
 module.exports = {
   createNotificationSchema,
   markAsReadSchema,
   notificationListQuerySchema,
+  reminderSettingsSchema,
 };
