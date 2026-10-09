@@ -1,0 +1,261 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* Surface & Background Hierarchy - Light */
+  --background: #F8FAFC;
+  --surface: #FFFFFF;
+  --surface-secondary: #F1F5F9;
+  --surface-tertiary: #E2E8F0;
+
+  /* Typography Hierarchy - Light */
+  --text-primary: #0F172A;
+  --text-secondary: #334155;
+  --text-muted: #64748B;
+  --text-disabled: #94A3B8;
+
+  /* Structural Borders - Light */
+  --border: #E2E8F0;
+  --border-strong: #CBD5E1;
+
+  /* Medical Teal Brand - Light */
+  --primary: #14B8A6;
+  --primary-hover: #0D9488;
+  --primary-active: #0F766E;
+  --primary-soft: #CCFBF1;
+  --primary-foreground: #FFFFFF;
+  --teal-text: #0F766E;
+
+  /* Semantic Status Indicators - Light */
+  --success: #16A34A;
+  --success-light: #DCFCE7;
+  --success-dark: #166534;
+
+  --warning: #D97706;
+  --warning-light: #FEF3C7;
+  --warning-dark: #92400E;
+
+  --error: #DC2626;
+  --error-light: #FEE2E2;
+  --error-dark: #991B1B;
+
+  --info: #0284C7;
+  --info-light: #E0F2FE;
+  --info-dark: #075985;
+
+  /* Form Inputs - Light */
+  --input: #FFFFFF;
+  --input-border: #CBD5E1;
+  --input-hover: #94A3B8;
+  --input-focus: #14B8A6;
+
+  /* Sidebar Tokens - Light */
+  --sidebar: #FFFFFF;
+  --sidebar-hover: #F1F5F9;
+  --sidebar-active: #CCFBF1;
+
+  /* Overlays & Backdrops - Light */
+  --overlay: rgba(15, 23, 42, 0.5);
+
+  /* Shadows - Light */
+  --shadow-subtle: 0 1px 2px 0 rgba(16, 24, 39, 0.04);
+  --shadow-card: 0 1px 3px 0 rgba(16, 24, 39, 0.05), 0 1px 2px -1px rgba(16, 24, 39, 0.05);
+  --shadow-elevated: 0 4px 6px -1px rgba(16, 24, 39, 0.07), 0 2px 4px -2px rgba(16, 24, 39, 0.05);
+  --shadow-dialog: 0 10px 15px -3px rgba(16, 24, 39, 0.08), 0 4px 6px -4px rgba(16, 24, 39, 0.04);
+
+  /* Scrollbars - Light */
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: #CBD5E1;
+  --scrollbar-thumb-hover: #94A3B8;
+}
+
+.dark {
+  /* Surface & Background Hierarchy - Dark (Layered Deep Slate) */
+  --background: #0B1120;
+  --surface: #111827;
+  --surface-secondary: #172033;
+  --surface-tertiary: #1E293B;
+
+  /* Typography Hierarchy - Dark */
+  --text-primary: #F8FAFC;
+  --text-secondary: #CBD5E1;
+  --text-muted: #94A3B8;
+  --text-disabled: #64748B;
+
+  /* Structural Borders - Dark */
+  --border: #273449;
+  --border-strong: #334155;
+
+  /* Medical Teal Brand - Dark */
+  --primary: #2DD4BF;
+  --primary-hover: #14B8A6;
+  --primary-active: #0D9488;
+  --primary-soft: #134E4A;
+  --primary-foreground: #042F2E;
+  --teal-text: #2DD4BF;
+
+  /* Semantic Status Indicators - Dark */
+  --success: #22C55E;
+  --success-light: rgba(34, 197, 94, 0.15);
+  --success-dark: #4ADE80;
+
+  --warning: #F59E0B;
+  --warning-light: rgba(245, 158, 11, 0.15);
+  --warning-dark: #FBBF24;
+
+  --error: #EF4444;
+  --error-light: rgba(239, 68, 68, 0.15);
+  --error-dark: #F87171;
+
+  --info: #38BDF8;
+  --info-light: rgba(56, 189, 248, 0.15);
+  --info-dark: #7DD3FC;
+
+  /* Form Inputs - Dark */
+  --input: #111827;
+  --input-border: #334155;
+  --input-hover: #475569;
+  --input-focus: #2DD4BF;
+
+  /* Sidebar Tokens - Dark */
+  --sidebar: #0F172A;
+  --sidebar-hover: #172033;
+  --sidebar-active: #134E4A;
+
+  /* Overlays & Backdrops - Dark */
+  --overlay: rgba(0, 0, 0, 0.65);
+
+  /* Shadows - Dark (Subtle elevation & contrast, avoiding harsh light shadows) */
+  --shadow-subtle: 0 1px 2px 0 rgba(0, 0, 0, 0.25);
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.35), 0 1px 2px -1px rgba(0, 0, 0, 0.25);
+  --shadow-elevated: 0 4px 6px -1px rgba(0, 0, 0, 0.45), 0 2px 4px -2px rgba(0, 0, 0, 0.35);
+  --shadow-dialog: 0 10px 15px -3px rgba(0, 0, 0, 0.55), 0 4px 6px -4px rgba(0, 0, 0, 0.45);
+
+  /* Scrollbars - Dark */
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: #334155;
+  --scrollbar-thumb-hover: #475569;
+}
+
+@theme {
+  --font-sans: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  /* Semantic Design Tokens */
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-secondary: var(--surface-secondary);
+  --color-surface-tertiary: var(--surface-tertiary);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-disabled: var(--text-disabled);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --color-info: var(--info);
+
+  --color-input: var(--input);
+  --color-input-border: var(--input-border);
+  --color-input-hover: var(--input-hover);
+  --color-input-focus: var(--input-focus);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-active: var(--sidebar-active);
+
+  --color-overlay: var(--overlay);
+
+  /* Semantic Aliases with Existing Codebase */
+  --color-paper: var(--background);
+  --color-ink: var(--text-primary);
+  --color-slate-muted: var(--text-muted);
+  --color-slate-light: var(--text-disabled);
+  --color-slate-dark: var(--text-secondary);
+  --color-border-subtle: var(--border);
+  --color-border-medium: var(--border-strong);
+
+  --color-teal-primary: var(--primary);
+  --color-teal-dark: var(--teal-text);
+  --color-teal-light: var(--primary);
+  --color-mint: var(--primary-soft);
+  --color-mint-subtle: var(--surface-secondary);
+  --color-mint-dark: var(--primary-soft);
+
+  --color-status-success: var(--success);
+  --color-status-success-bg: var(--success-light);
+  --color-status-warning: var(--warning);
+  --color-status-warning-bg: var(--warning-light);
+  --color-status-error: var(--error);
+  --color-status-error-bg: var(--error-light);
+  --color-status-info: var(--info);
+  --color-status-info-bg: var(--info-light);
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-full: 9999px;
+
+  --shadow-subtle: var(--shadow-subtle);
+  --shadow-card: var(--shadow-card);
+  --shadow-elevated: var(--shadow-elevated);
+  --shadow-dialog: var(--shadow-dialog);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Native select styling for dark mode */
+select option {
+  background-color: var(--surface);
+  color: var(--text-primary);
+}
+
+/* Print styles */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+}
