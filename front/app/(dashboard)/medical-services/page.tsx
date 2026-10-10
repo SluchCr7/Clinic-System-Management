@@ -26,9 +26,11 @@ import {
   type Column,
 } from "@/components/ui";
 import { extractApiError } from "@/services/api/baseQuery";
+import { selectUserRole } from "@/features/auth/authSelectors";
+import { useAppSelector } from "@/redux/hooks";
+import { hasPermission } from "@/lib/permissions";
 import {
   LuPlus,
-  LuActivity,
   LuPencil,
   LuTrash2,
   LuCircleCheck,
@@ -37,6 +39,8 @@ import {
 
 export default function MedicalServicesPage() {
   const { t } = useTranslation();
+  const role = useAppSelector(selectUserRole);
+  const canManageServices = hasPermission(role, "medicalServices.manage");
   const [queryParams, setQueryParams] = useState<MedicalServiceQueryParams>({
     page: 1,
     limit: 10,
@@ -234,7 +238,7 @@ export default function MedicalServicesPage() {
       key: "actions",
       header: "",
       align: "right",
-      render: (svc) => (
+      render: (svc) => canManageServices ? (
         <div className="flex items-center justify-end gap-1.5">
           <Button
             variant="ghost"
@@ -256,7 +260,7 @@ export default function MedicalServicesPage() {
             </Button>
           )}
         </div>
-      ),
+      ) : null,
     },
   ];
 
@@ -265,7 +269,7 @@ export default function MedicalServicesPage() {
       <PageHeader
         title={t("medicalServices.title")}
         subtitle={t("medicalServices.subtitle")}
-        actions={
+        actions={canManageServices ? (
           <Button
             variant="primary"
             size="sm"
@@ -274,7 +278,7 @@ export default function MedicalServicesPage() {
           >
             {t("medicalServices.addService")}
           </Button>
-        }
+        ) : undefined}
       />
 
       {/* Filter and Control Bar */}
@@ -328,7 +332,7 @@ export default function MedicalServicesPage() {
 
       {/* Create Medical Service Modal */}
       <Modal
-        isOpen={isCreateOpen}
+        isOpen={canManageServices && isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
         title="Add New Medical Service"
         subtitle="Define a new procedure, consultation type, or clinical diagnostic item"
@@ -429,7 +433,7 @@ export default function MedicalServicesPage() {
 
       {/* Edit Medical Service Modal */}
       <Modal
-        isOpen={Boolean(editingService)}
+        isOpen={canManageServices && Boolean(editingService)}
         onClose={() => setEditingService(null)}
         title="Edit Medical Service"
         subtitle={`Editing ${editingService?.code} • ${editingService?.name}`}
@@ -532,7 +536,7 @@ export default function MedicalServicesPage() {
 
       {/* Deactivate Service Modal */}
       <Modal
-        isOpen={Boolean(deactivateTarget)}
+        isOpen={canManageServices && Boolean(deactivateTarget)}
         onClose={() => setDeactivateTarget(null)}
         title="Deactivate Medical Service"
       >

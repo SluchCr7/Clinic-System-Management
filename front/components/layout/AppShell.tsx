@@ -2,12 +2,17 @@
 
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAppSelector } from "@/redux/hooks";
-import { selectIsAuthenticated, selectIsInitialized } from "@/features/auth/authSelectors";
+import {
+  selectIsAuthenticated,
+  selectIsInitialized,
+  selectUserRole,
+} from "@/features/auth/authSelectors";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import Drawer from "@/components/ui/Drawer";
+import { getRequiredRoutePermission, hasPermission } from "@/lib/permissions";
 
 export interface AppShellProps {
   children: React.ReactNode;
@@ -15,9 +20,14 @@ export interface AppShellProps {
 
 export default function AppShell({ children }: AppShellProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { t } = useTranslation();
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const isInitialized = useAppSelector(selectIsInitialized);
+  const role = useAppSelector(selectUserRole);
+  const requiredPermission = getRequiredRoutePermission(pathname);
+  const hasRouteAccess =
+    !requiredPermission || hasPermission(role, requiredPermission);
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
@@ -38,6 +48,28 @@ export default function AppShell({ children }: AppShellProps) {
           <p className="text-xs text-slate-muted font-medium">
             {t("session.verifying")}
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasRouteAccess) {
+    return (
+      <div className="min-h-screen bg-paper flex items-center justify-center p-6">
+        <div className="flex max-w-md flex-col items-center gap-3 text-center">
+          <h1 className="text-lg font-semibold text-ink">
+            {t("authorization.accessDeniedTitle")}
+          </h1>
+          <p className="text-sm text-slate-muted">
+            {t("authorization.accessDeniedDescription")}
+          </p>
+          <button
+            type="button"
+            onClick={() => router.replace("/dashboard")}
+            className="rounded-md bg-teal-primary px-4 py-2 text-sm font-medium text-white"
+          >
+            {t("authorization.returnToDashboard")}
+          </button>
         </div>
       </div>
     );

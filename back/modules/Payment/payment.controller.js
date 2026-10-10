@@ -43,7 +43,8 @@ const getPayments = asyncHandler(async (req, res) => {
 
 const getPaymentById = asyncHandler(async (req, res) => {
   const payment = await paymentService.getPaymentById(
-    req.params.id
+    req.params.id,
+    req.user
   );
 
   if (!payment) {

@@ -34,7 +34,8 @@ const getAppointments = asyncHandler(async (req, res) => {
 const getAppointmentById = asyncHandler(async (req, res) => {
   const appointment =
     await appointmentService.getAppointmentById(
-      req.params.id
+    req.params.id,
+    req.user
     );
 
   if (!appointment) {

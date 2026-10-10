@@ -11,6 +11,7 @@ const {
   getSort,
   applyCairoDateRange,
   applyDoctorScope,
+  getDoctorScopeId,
 } = require("../../utils/listQuery");
 
 const validatePatient = async (patientId) => {
@@ -133,6 +134,17 @@ const createPerformedService = async (data, currentUser) => {
     performedAt,
   } = data;
 
+  if (currentUser?.role === "doctor") {
+    const doctorId = await getDoctorScopeId(currentUser, Doctor);
+    if (!doctorId || doctorId.toString() !== doctor.toString()) {
+      throw new AppError(
+        "Doctors can only create performed services for their own visits",
+        403,
+        "FORBIDDEN"
+      );
+    }
+  }
+
   const [patientData, doctorData, visitData, medicalService] = await Promise.all([
     validatePatient(patient),
     validateDoctor(doctor),
@@ -247,8 +259,15 @@ const getPerformedServices = async (query = {}, currentUser = null) => {
   );
 };
 
-const getPerformedServiceById = async (id) => {
-  return await PerformedService.findById(id)
+const getPerformedServiceById = async (id, currentUser = null) => {
+  const filter = { _id: id };
+  if (currentUser?.role === "doctor") {
+    const doctorId = await getDoctorScopeId(currentUser, Doctor);
+    if (!doctorId) return null;
+    filter.doctor = doctorId;
+  }
+
+  return await PerformedService.findOne(filter)
     .populate("patient", "firstName lastName phone email dateOfBirth gender bloodType")
     .populate({
       path: "doctor",
@@ -266,7 +285,14 @@ const getPerformedServiceById = async (id) => {
 };
 
 const updatePerformedService = async (id, data, currentUser) => {
-  const performedService = await PerformedService.findById(id);
+  const filter = { _id: id };
+  if (currentUser?.role === "doctor") {
+    const doctorId = await getDoctorScopeId(currentUser, Doctor);
+    if (!doctorId) return null;
+    filter.doctor = doctorId;
+  }
+
+  const performedService = await PerformedService.findOne(filter);
 
   if (!performedService) {
     return null;

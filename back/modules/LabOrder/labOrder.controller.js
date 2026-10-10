@@ -52,7 +52,8 @@ const getLabOrderById = asyncHandler(
   async (req, res) => {
     const labOrder =
       await labOrderService.getLabOrderById(
-        req.params.id
+        req.params.id,
+        req.user
       );
 
     if (!labOrder) {

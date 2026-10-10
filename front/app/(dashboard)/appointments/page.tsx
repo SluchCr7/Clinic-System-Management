@@ -28,6 +28,9 @@ import {
   type Column,
 } from "@/components/ui";
 import { extractApiError } from "@/services/api/baseQuery";
+import { selectUserRole } from "@/features/auth/authSelectors";
+import { useAppSelector } from "@/redux/hooks";
+import { hasPermission } from "@/lib/permissions";
 import {
   LuPlus,
   LuCalendar,
@@ -38,6 +41,9 @@ import {
 
 export default function AppointmentsPage() {
   const { t } = useTranslation();
+  const role = useAppSelector(selectUserRole);
+  const canCreateAppointment = hasPermission(role, "appointments.create");
+  const canEditAppointment = hasPermission(role, "appointments.edit");
   const [viewMode, setViewMode] = useState<"list" | "agenda">("list");
   const [queryParams, setQueryParams] = useState<AppointmentQueryParams>({
     page: 1,
@@ -222,7 +228,9 @@ export default function AppointmentsPage() {
       header: "",
       align: "right",
       render: (apt) =>
-        apt.status !== "cancelled" && apt.status !== "completed" ? (
+        canEditAppointment &&
+        apt.status !== "cancelled" &&
+        apt.status !== "completed" ? (
           <Button
             variant="ghost"
             size="sm"
@@ -273,14 +281,16 @@ export default function AppointmentsPage() {
               </button>
             </div>
 
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<LuPlus className="w-3.5 h-3.5" />}
-              onClick={handleOpenBookModal}
-            >
-              {t("appointments.book")}
-            </Button>
+            {canCreateAppointment && (
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<LuPlus className="w-3.5 h-3.5" />}
+                onClick={handleOpenBookModal}
+              >
+                {t("appointments.book")}
+              </Button>
+            )}
           </div>
         }
       />

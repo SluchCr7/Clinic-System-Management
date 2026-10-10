@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useCreatePatientMutation } from "@/services/api/patientApi";
@@ -22,6 +23,7 @@ import { LuArrowLeft, LuSave } from "react-icons/lu";
 
 export default function NewPatientPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [createPatient, { isLoading }] = useCreatePatientMutation();
 
   const [formData, setFormData] = useState({
@@ -53,7 +55,7 @@ export default function NewPatientPage() {
     setFormError(null);
 
     if (!formData.firstName || !formData.lastName || !formData.dateOfBirth || !formData.phone) {
-      setFormError("Please fill out all required fields (Name, Date of Birth, Phone).");
+      setFormError(t("patientForm.requiredFields"));
       return;
     }
 
@@ -86,21 +88,26 @@ export default function NewPatientPage() {
 
       const res = await createPatient(payload).unwrap();
       if (res.success && res.data) {
-        toast.success(`Patient ${res.data.firstName} ${res.data.lastName} registered successfully.`);
+        toast.success(
+          t("patientForm.success", {
+            firstName: res.data.firstName,
+            lastName: res.data.lastName,
+          })
+        );
         router.push(`/patients/${res.data._id}`);
       }
     } catch (err) {
       const extracted = extractApiError(err);
-      setFormError(extracted.message || "Failed to register patient. Please verify the input.");
-      toast.error(extracted.message || "Failed to register patient.");
+      setFormError(extracted.message || t("patientForm.requiredMessage"));
+      toast.error(extracted.message || t("patientForm.saveFailed"));
     }
   };
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6 max-w-4xl mx-auto">
       <PageHeader
-        title="Register New Patient"
-        subtitle="Complete the clinical intake form to create a new medical file"
+        title={t("patientForm.title")}
+        subtitle={t("patientForm.subtitle")}
         backAction={
           <Link href="/patients">
             <Button
@@ -108,7 +115,7 @@ export default function NewPatientPage() {
               size="sm"
               leftIcon={<LuArrowLeft className="w-4 h-4" />}
             >
-              Back
+              {t("patientForm.back")}
             </Button>
           </Link>
         }
@@ -120,7 +127,7 @@ export default function NewPatientPage() {
             isLoading={isLoading}
             leftIcon={<LuSave className="w-4 h-4" />}
           >
-            Save Patient File
+            {t("patientForm.save")}
           </Button>
         }
       />
@@ -134,30 +141,30 @@ export default function NewPatientPage() {
       {/* 1. Personal Identity */}
       <Card>
         <CardHeader
-          title="1. Personal Information"
-          subtitle="Legal name and demographic details"
+          title={t("patientForm.sectionPersonalTitle")}
+          subtitle={t("patientForm.sectionPersonalSubtitle")}
         />
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
-            label="First Name"
+            label={t("patientForm.firstName")}
             required
             value={formData.firstName}
             onChange={(e) =>
               setFormData({ ...formData, firstName: e.target.value })
             }
-            placeholder="John"
+            placeholder={t("patientForm.firstNamePlaceholder")}
           />
           <Input
-            label="Last Name"
+            label={t("patientForm.lastName")}
             required
             value={formData.lastName}
             onChange={(e) =>
               setFormData({ ...formData, lastName: e.target.value })
             }
-            placeholder="Doe"
+            placeholder={t("patientForm.lastNamePlaceholder")}
           />
           <Input
-            label="Date of Birth"
+            label={t("patientForm.dateOfBirth")}
             type="date"
             required
             value={formData.dateOfBirth}
@@ -166,15 +173,15 @@ export default function NewPatientPage() {
             }
           />
           <Select
-            label="Gender"
+            label={t("patientForm.gender")}
             required
             value={formData.gender}
             onChange={(e) =>
               setFormData({ ...formData, gender: e.target.value as Gender })
             }
             options={[
-              { value: "male", label: "Male" },
-              { value: "female", label: "Female" },
+              { value: "male", label: t("patientForm.male") },
+              { value: "female", label: t("patientForm.female") },
             ]}
           />
         </CardContent>
@@ -183,32 +190,32 @@ export default function NewPatientPage() {
       {/* 2. Contact & Residence */}
       <Card>
         <CardHeader
-          title="2. Contact Details & Address"
-          subtitle="Communication and physical residence"
+          title={t("patientForm.sectionContactTitle")}
+          subtitle={t("patientForm.sectionContactSubtitle")}
         />
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
-            label="Phone Number"
+            label={t("patientForm.phoneNumber")}
             type="tel"
             required
             value={formData.phone}
             onChange={(e) =>
               setFormData({ ...formData, phone: e.target.value })
             }
-            placeholder="+20 100 000 0000"
+            placeholder={t("patientForm.phonePlaceholder")}
           />
           <Input
-            label="Email Address"
+            label={t("patientForm.emailAddress")}
             type="email"
             value={formData.email}
             onChange={(e) =>
               setFormData({ ...formData, email: e.target.value })
             }
-            placeholder="patient@email.com (optional)"
+            placeholder={t("patientForm.emailPlaceholder")}
           />
           <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Input
-              label="Street Address"
+              label={t("patientForm.streetAddress")}
               value={formData.address.street}
               onChange={(e) =>
                 setFormData({
@@ -216,10 +223,10 @@ export default function NewPatientPage() {
                   address: { ...formData.address, street: e.target.value },
                 })
               }
-              placeholder="123 Clinical Way"
+              placeholder={t("patientForm.addressPlaceholder")}
             />
             <Input
-              label="City"
+              label={t("patientForm.city")}
               value={formData.address.city}
               onChange={(e) =>
                 setFormData({
@@ -227,10 +234,9 @@ export default function NewPatientPage() {
                   address: { ...formData.address, city: e.target.value },
                 })
               }
-              placeholder="Cairo"
             />
             <Input
-              label="Country"
+              label={t("patientForm.country")}
               value={formData.address.country}
               onChange={(e) =>
                 setFormData({
@@ -238,7 +244,6 @@ export default function NewPatientPage() {
                   address: { ...formData.address, country: e.target.value },
                 })
               }
-              placeholder="Egypt"
             />
           </div>
         </CardContent>
@@ -247,12 +252,12 @@ export default function NewPatientPage() {
       {/* 3. Emergency Contact */}
       <Card>
         <CardHeader
-          title="3. Emergency Contact"
-          subtitle="Authorized relative or guardian in urgent medical situations"
+          title={t("patientForm.sectionEmergencyTitle")}
+          subtitle={t("patientForm.sectionEmergencySubtitle")}
         />
         <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Input
-            label="Contact Full Name"
+            label={t("patientForm.emergencyContactName")}
             value={formData.emergencyContact.name}
             onChange={(e) =>
               setFormData({
@@ -263,10 +268,10 @@ export default function NewPatientPage() {
                 },
               })
             }
-            placeholder="Jane Doe"
+            placeholder={t("patientForm.emergencyContactNamePlaceholder")}
           />
           <Input
-            label="Relationship"
+            label={t("patientForm.emergencyContactRelationship")}
             value={formData.emergencyContact.relationship}
             onChange={(e) =>
               setFormData({
@@ -277,10 +282,10 @@ export default function NewPatientPage() {
                 },
               })
             }
-            placeholder="Spouse / Parent / Sibling"
+            placeholder={t("patientForm.relationshipPlaceholder")}
           />
           <Input
-            label="Contact Phone"
+            label={t("patientForm.emergencyContactPhone")}
             type="tel"
             value={formData.emergencyContact.phone}
             onChange={(e) =>
@@ -292,7 +297,7 @@ export default function NewPatientPage() {
                 },
               })
             }
-            placeholder="+20 100 000 0000"
+            placeholder={t("patientForm.phonePlaceholder")}
           />
         </CardContent>
       </Card>
@@ -300,12 +305,12 @@ export default function NewPatientPage() {
       {/* 4. Clinical Indicators */}
       <Card>
         <CardHeader
-          title="4. Baseline Medical Information"
-          subtitle="Critical physiological baseline for clinical safety"
+          title={t("patientForm.sectionClinicalTitle")}
+          subtitle={t("patientForm.sectionClinicalSubtitle")}
         />
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Select
-            label="Blood Type"
+            label={t("patientForm.bloodType")}
             value={formData.bloodType}
             onChange={(e) =>
               setFormData({
@@ -313,7 +318,7 @@ export default function NewPatientPage() {
                 bloodType: e.target.value as BloodType,
               })
             }
-            placeholder="Select Blood Type"
+            placeholder={t("patientForm.bloodTypePlaceholder")}
             options={[
               { value: "A+", label: "A+" },
               { value: "A-", label: "A-" },
@@ -329,23 +334,23 @@ export default function NewPatientPage() {
           <div className="hidden sm:block" />
 
           <Textarea
-            label="Known Allergies"
+            label={t("patientForm.knownAllergies")}
             value={formData.allergies}
             onChange={(e) =>
               setFormData({ ...formData, allergies: e.target.value })
             }
-            placeholder="Separate multiple allergies with commas (e.g., Penicillin, Latex, Peanuts)"
-            helperText="Leave empty if none reported"
+            placeholder={t("patientForm.allergiesPlaceholder")}
+            helperText={t("patientForm.helperNoAllergies")}
           />
 
           <Textarea
-            label="Chronic Conditions & Diseases"
+            label={t("patientForm.chronicConditions")}
             value={formData.chronicDiseases}
             onChange={(e) =>
               setFormData({ ...formData, chronicDiseases: e.target.value })
             }
-            placeholder="Separate conditions with commas (e.g., Hypertension, Diabetes Type 2, Asthma)"
-            helperText="Leave empty if none reported"
+            placeholder={t("patientForm.chronicConditionsPlaceholder")}
+            helperText={t("patientForm.helperNoConditions")}
           />
         </CardContent>
         <CardFooter className="justify-end">
@@ -356,7 +361,7 @@ export default function NewPatientPage() {
             isLoading={isLoading}
             leftIcon={<LuSave className="w-4 h-4" />}
           >
-            Create Medical File
+            {t("patientForm.createMedicalFile")}
           </Button>
         </CardFooter>
       </Card>

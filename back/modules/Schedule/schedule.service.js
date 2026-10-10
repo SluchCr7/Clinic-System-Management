@@ -6,6 +6,7 @@ const { paginateQuery } = require("../../utils/pagination");
 const {
   getSort,
   applyDoctorScope,
+  getDoctorScopeId,
 } = require("../../utils/listQuery");
 
 const timeToMinutes = (time) => {
@@ -175,8 +176,15 @@ const getSchedules = async (query = {}, currentUser = null) => {
   );
 };
 
-const getScheduleById = async (id) => {
-  return await Schedule.findById(id).populate(
+const getScheduleById = async (id, currentUser = null) => {
+  const filter = { _id: id };
+  if (currentUser?.role === "doctor") {
+    const doctorId = await getDoctorScopeId(currentUser, Doctor);
+    if (!doctorId) return null;
+    filter.doctor = doctorId;
+  }
+
+  return await Schedule.findOne(filter).populate(
     "doctor",
     "specialization licenseNumber consultationFee profilePhoto"
   );

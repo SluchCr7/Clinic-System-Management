@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   useGetRevenueReportQuery,
   useGetAppointmentsReportQuery,
@@ -35,6 +36,7 @@ import {
 } from "react-icons/lu";
 
 export default function ReportsPage() {
+  const { t } = useTranslation();
   const [period, setPeriod] = useState<DashboardReportPeriod>("month");
   const [activeTab, setActiveTab] = useState<string>("revenue");
 
@@ -48,30 +50,30 @@ export default function ReportsPage() {
   const { data: svcsData, isLoading: svcsLoading } = useGetMedicalServicesReportQuery({ period });
 
   const tabs = [
-    { id: "revenue", label: "Financial Revenue", icon: <LuDollarSign className="w-3.5 h-3.5" /> },
-    { id: "appointments", label: "Appointments", icon: <LuCalendar className="w-3.5 h-3.5" /> },
-    { id: "patients", label: "Patient Demographics", icon: <LuUsers className="w-3.5 h-3.5" /> },
-    { id: "doctors", label: "Physicians", icon: <LuStethoscope className="w-3.5 h-3.5" /> },
-    { id: "lab", label: "Diagnostic Lab", icon: <LuFlaskConical className="w-3.5 h-3.5" /> },
-    { id: "payments", label: "Collections", icon: <LuCreditCard className="w-3.5 h-3.5" /> },
-    { id: "services", label: "Clinical Services", icon: <LuActivity className="w-3.5 h-3.5" /> },
+    { id: "revenue", label: t("reports.tabs.revenue"), icon: <LuDollarSign className="w-3.5 h-3.5" /> },
+    { id: "appointments", label: t("reports.tabs.appointments"), icon: <LuCalendar className="w-3.5 h-3.5" /> },
+    { id: "patients", label: t("reports.tabs.patients"), icon: <LuUsers className="w-3.5 h-3.5" /> },
+    { id: "doctors", label: t("reports.tabs.doctors"), icon: <LuStethoscope className="w-3.5 h-3.5" /> },
+    { id: "lab", label: t("reports.tabs.lab"), icon: <LuFlaskConical className="w-3.5 h-3.5" /> },
+    { id: "payments", label: t("reports.tabs.payments"), icon: <LuCreditCard className="w-3.5 h-3.5" /> },
+    { id: "services", label: t("reports.tabs.services"), icon: <LuActivity className="w-3.5 h-3.5" /> },
   ];
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Analytics & Clinical Reports"
-        subtitle="Operational metrics, patient throughput, financial yield, and clinician performance"
+        title={t("reports.title")}
+        subtitle={t("reports.subtitle")}
         actions={
           <div className="w-36">
             <Select
               value={period}
               onChange={(e) => setPeriod(e.target.value as DashboardReportPeriod)}
               options={[
-                { value: "today", label: "Today" },
-                { value: "week", label: "This Week" },
-                { value: "month", label: "This Month" },
-                { value: "year", label: "This Year" },
+                { value: "today", label: t("reports.period.today") },
+                { value: "week", label: t("reports.period.week") },
+                { value: "month", label: t("reports.period.month") },
+                { value: "year", label: t("reports.period.year") },
               ]}
             />
           </div>
@@ -92,22 +94,22 @@ export default function ReportsPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <StatCard
-                title="Total Collected Revenue"
+                title={t("reports.revenue.totalCollectedRevenue")}
                 value={`$${(revData?.data?.totalRevenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-                description="Realized cash and card transactions"
+                description={t("reports.revenue.collectedDescription")}
                 icon={<LuDollarSign className="w-5 h-5" />}
                 variant="teal"
               />
               <StatCard
-                title="Total Invoiced Value"
+                title={t("reports.revenue.totalInvoicedValue")}
                 value={`$${(revData?.data?.totalInvoiced || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-                description="Total billed clinical charges"
+                description={t("reports.revenue.invoicedDescription")}
                 icon={<LuTrendingUp className="w-5 h-5" />}
               />
               <StatCard
-                title="Outstanding Receivables"
+                title={t("reports.revenue.outstandingReceivables")}
                 value={`$${(revData?.data?.totalOutstanding || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-                description="Unpaid patient balances"
+                description={t("reports.revenue.outstandingDescription")}
                 icon={<LuCreditCard className="w-5 h-5" />}
                 variant="warning"
               />
@@ -117,8 +119,8 @@ export default function ReportsPage() {
           {/* Daily Revenue Table */}
           <Card>
             <CardHeader
-              title="Daily Financial Trajectory"
-              subtitle="Daily revenue collection records for the selected period"
+              title={t("reports.revenue.dailyTitle")}
+              subtitle={t("reports.revenue.dailySubtitle")}
             />
             <CardContent>
               {revData?.data?.dailyRevenue && revData.data.dailyRevenue.length > 0 ? (
@@ -126,8 +128,8 @@ export default function ReportsPage() {
                   <table className="w-full text-xs text-left">
                     <thead className="bg-paper text-slate-muted font-medium border-b border-border-subtle">
                       <tr>
-                        <th className="py-2.5 px-4">Date</th>
-                        <th className="py-2.5 px-4 text-right">Daily Collected Amount</th>
+                        <th className="py-2.5 px-4">{t("reports.date")}</th>
+                        <th className="py-2.5 px-4 text-right">{t("reports.revenue.dailyCollectedAmount")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border-subtle">
@@ -144,7 +146,7 @@ export default function ReportsPage() {
                 </div>
               ) : (
                 <p className="text-xs text-slate-muted py-6 text-center">
-                  No revenue collection activity recorded for this period.
+                  {t("reports.revenue.empty")}
                 </p>
               )}
             </CardContent>
@@ -160,29 +162,29 @@ export default function ReportsPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <StatCard
-                title="Total Encounters"
+                title={t("reports.appointments.totalEncounters")}
                 value={apptData?.data?.totalAppointments || 0}
-                description="Booked patient consultations"
+                description={t("reports.appointments.totalEncountersDescription")}
                 icon={<LuCalendar className="w-5 h-5" />}
                 variant="teal"
               />
               <StatCard
-                title="Completed"
+                title={t("reports.appointments.completed")}
                 value={apptData?.data?.byStatus?.completed || 0}
-                description="Finished clinical visits"
+                description={t("reports.appointments.completedDescription")}
                 icon={<LuCalendar className="w-5 h-5" />}
                 variant="success"
               />
               <StatCard
-                title="Scheduled / Confirmed"
+                title={t("reports.appointments.scheduledConfirmed")}
                 value={(apptData?.data?.byStatus?.scheduled || 0) + (apptData?.data?.byStatus?.confirmed || 0)}
-                description="Upcoming or pending visits"
+                description={t("reports.appointments.scheduledDescription")}
                 icon={<LuCalendar className="w-5 h-5" />}
               />
               <StatCard
-                title="Cancellations & No-Shows"
+                title={t("reports.appointments.cancellationsNoShows")}
                 value={(apptData?.data?.byStatus?.cancelled || 0) + (apptData?.data?.byStatus?.no_show || 0)}
-                description="Missed clinic bookings"
+                description={t("reports.appointments.cancellationsDescription")}
                 icon={<LuCalendar className="w-5 h-5" />}
                 variant="warning"
               />
@@ -191,8 +193,8 @@ export default function ReportsPage() {
 
           <Card>
             <CardHeader
-              title="Appointment Volume by Status"
-              subtitle="Distribution of patient appointments"
+              title={t("reports.appointments.volumeByStatus")}
+              subtitle={t("reports.appointments.volumeSubtitle")}
             />
             <CardContent>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -216,23 +218,23 @@ export default function ReportsPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <StatCard
-                title="New Registered Patients"
+                title={t("reports.patients.newRegistered")}
                 value={patData?.data?.totalNewPatients || 0}
-                description="Newly enrolled patient profiles"
+                description={t("reports.patients.newRegisteredDescription")}
                 icon={<LuUsers className="w-5 h-5" />}
                 variant="teal"
               />
               <StatCard
-                title="Active Patient Files"
+                title={t("reports.patients.activeFiles")}
                 value={patData?.data?.activePatients || 0}
-                description="Eligible for ongoing care"
+                description={t("reports.patients.activeFilesDescription")}
                 icon={<LuUsers className="w-5 h-5" />}
                 variant="success"
               />
               <StatCard
-                title="Inactive Records"
+                title={t("reports.patients.inactiveRecords")}
                 value={patData?.data?.inactivePatients || 0}
-                description="Archived clinical files"
+                description={t("reports.patients.inactiveRecordsDescription")}
                 icon={<LuUsers className="w-5 h-5" />}
               />
             </div>
@@ -240,12 +242,12 @@ export default function ReportsPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card>
-              <CardHeader title="Gender Distribution" subtitle="Demographic composition" />
+              <CardHeader title={t("reports.patients.genderDistribution")} subtitle={t("reports.patients.genderSubtitle")} />
               <CardContent>
                 <div className="flex flex-col gap-3">
                   {Object.entries(patData?.data?.patientsByGender || {}).map(([gender, count]) => (
                     <div key={gender} className="flex justify-between items-center text-xs p-2.5 bg-paper rounded-md">
-                      <span className="capitalize font-medium text-ink">{gender}</span>
+                      <span className="capitalize font-medium text-ink">{t(`reports.genders.${gender}`, { defaultValue: gender })}</span>
                       <span className="font-bold text-teal-dark">{count}</span>
                     </div>
                   ))}
@@ -254,7 +256,7 @@ export default function ReportsPage() {
             </Card>
 
             <Card>
-              <CardHeader title="Age Demographics" subtitle="Patients categorized by age bracket" />
+              <CardHeader title={t("reports.patients.ageDemographics")} subtitle={t("reports.patients.ageSubtitle")} />
               <CardContent>
                 <div className="flex flex-col gap-3">
                   {Object.entries(patData?.data?.patientsByAgeGroup || {}).map(([ageGroup, count]) => (
@@ -278,16 +280,16 @@ export default function ReportsPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <StatCard
-                title="Total Medical Staff"
+                title={t("reports.doctors.totalStaff")}
                 value={docData?.data?.totalDoctors || 0}
-                description="Physicians on clinical register"
+                description={t("reports.doctors.totalStaffDescription")}
                 icon={<LuStethoscope className="w-5 h-5" />}
                 variant="teal"
               />
               <StatCard
-                title="Active Practitioners"
+                title={t("reports.doctors.activePractitioners")}
                 value={docData?.data?.activeDoctors || 0}
-                description="Currently on active duty"
+                description={t("reports.doctors.activePractitionersDescription")}
                 icon={<LuStethoscope className="w-5 h-5" />}
                 variant="success"
               />
@@ -296,8 +298,8 @@ export default function ReportsPage() {
 
           <Card>
             <CardHeader
-              title="Physician Productivity Breakdown"
-              subtitle="Encounters, consultations, and generated fees by doctor"
+              title={t("reports.doctors.productivityTitle")}
+              subtitle={t("reports.doctors.productivitySubtitle")}
             />
             <CardContent>
               {docData?.data?.doctorPerformance && docData.data.doctorPerformance.length > 0 ? (
@@ -305,11 +307,11 @@ export default function ReportsPage() {
                   <table className="w-full text-xs text-left">
                     <thead className="bg-paper text-slate-muted font-medium border-b border-border-subtle">
                       <tr>
-                        <th className="py-2.5 px-4">Physician Name</th>
-                        <th className="py-2.5 px-4">Specialization</th>
-                        <th className="py-2.5 px-3 text-right">Appointments</th>
-                        <th className="py-2.5 px-3 text-right">Visits Conducted</th>
-                        <th className="py-2.5 px-4 text-right">Revenue Yield</th>
+                        <th className="py-2.5 px-4">{t("reports.doctors.name")}</th>
+                        <th className="py-2.5 px-4">{t("reports.doctors.specialization")}</th>
+                        <th className="py-2.5 px-3 text-right">{t("reports.doctors.appointments")}</th>
+                        <th className="py-2.5 px-3 text-right">{t("reports.doctors.visitsConducted")}</th>
+                        <th className="py-2.5 px-4 text-right">{t("reports.doctors.revenueYield")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border-subtle">
@@ -329,7 +331,7 @@ export default function ReportsPage() {
                 </div>
               ) : (
                 <p className="text-xs text-slate-muted py-6 text-center">
-                  No physician consultation data found for this period.
+                  {t("reports.doctors.empty")}
                 </p>
               )}
             </CardContent>
@@ -345,43 +347,43 @@ export default function ReportsPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <StatCard
-                title="Total Lab Requisitions"
+                title={t("reports.lab.totalRequisitions")}
                 value={labData?.data?.totalOrders || 0}
-                description="Diagnostic specimens handled"
+                description={t("reports.lab.totalRequisitionsDescription")}
                 icon={<LuFlaskConical className="w-5 h-5" />}
                 variant="teal"
               />
               <StatCard
-                title="STAT / Urgent Orders"
+                title={t("reports.lab.urgentOrders")}
                 value={(labData?.data?.byPriority?.stat || 0) + (labData?.data?.byPriority?.urgent || 0)}
-                description="High priority specimens"
+                description={t("reports.lab.urgentOrdersDescription")}
                 icon={<LuFlaskConical className="w-5 h-5" />}
                 variant="warning"
               />
               <StatCard
-                title="Routine Orders"
+                title={t("reports.lab.routineOrders")}
                 value={labData?.data?.byPriority?.routine || 0}
-                description="Standard pathology tests"
+                description={t("reports.lab.routineOrdersDescription")}
                 icon={<LuFlaskConical className="w-5 h-5" />}
               />
             </div>
           )}
 
           <Card>
-            <CardHeader title="Top Diagnostic Tests" subtitle="Most frequent laboratory investigations" />
+            <CardHeader title={t("reports.lab.topTests")} subtitle={t("reports.lab.topTestsSubtitle")} />
             <CardContent>
               {labData?.data?.topTests && labData.data.topTests.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  {labData.data.topTests.map((t, idx) => (
+                  {labData.data.topTests.map((test, idx) => (
                     <div key={idx} className="p-3 bg-paper rounded-lg border border-border-subtle flex justify-between items-center">
-                      <span className="font-semibold text-xs text-ink">{t.name}</span>
-                      <Badge variant="teal" size="sm">{t.count} orders</Badge>
+                      <span className="font-semibold text-xs text-ink">{test.name}</span>
+                      <Badge variant="teal" size="sm">{t("reports.lab.orderCount", { count: test.count })}</Badge>
                     </div>
                   ))}
                 </div>
               ) : (
                 <p className="text-xs text-slate-muted py-6 text-center">
-                  No diagnostic laboratory investigations recorded for this period.
+                  {t("reports.lab.empty")}
                 </p>
               )}
             </CardContent>
@@ -397,28 +399,28 @@ export default function ReportsPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <StatCard
-                title="Total Collected"
+                title={t("reports.payments.totalCollected")}
                 value={`$${(payData?.data?.totalCollected || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-                description="Total received funds"
+                description={t("reports.payments.totalCollectedDescription")}
                 icon={<LuCreditCard className="w-5 h-5" />}
                 variant="teal"
               />
               <StatCard
-                title="Payment Transactions"
+                title={t("reports.payments.transactions")}
                 value={payData?.data?.totalTransactions || 0}
-                description="Successful settlement vouchers"
+                description={t("reports.payments.transactionsDescription")}
                 icon={<LuCreditCard className="w-5 h-5" />}
               />
             </div>
           )}
 
           <Card>
-            <CardHeader title="Collections by Payment Instrument" subtitle="Payment methods distribution" />
+            <CardHeader title={t("reports.payments.collectionsByMethod")} subtitle={t("reports.payments.collectionsSubtitle")} />
             <CardContent>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 {Object.entries(payData?.data?.byMethod || {}).map(([method, amount]) => (
                   <div key={method} className="p-3.5 bg-paper rounded-lg border border-border-subtle flex flex-col gap-1">
-                    <span className="text-[11px] font-semibold uppercase text-slate-muted">{method.replace("_", " ")}</span>
+                    <span className="text-[11px] font-semibold uppercase text-slate-muted">{t(`payments.methods.${method}`, { defaultValue: method.replace("_", " ") })}</span>
                     <span className="text-base font-bold text-teal-dark mt-1">
                       ${amount?.toFixed(2)}
                     </span>
@@ -438,16 +440,16 @@ export default function ReportsPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <StatCard
-                title="Services Performed"
+                title={t("reports.services.performed")}
                 value={svcsData?.data?.totalPerformed || 0}
-                description="Procedures and consultations conducted"
+                description={t("reports.services.performedDescription")}
                 icon={<LuActivity className="w-5 h-5" />}
                 variant="teal"
               />
               <StatCard
-                title="Services Revenue Yield"
+                title={t("reports.services.revenueYield")}
                 value={`$${(svcsData?.data?.totalRevenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-                description="Gross service fee value"
+                description={t("reports.services.revenueDescription")}
                 icon={<LuActivity className="w-5 h-5" />}
                 variant="success"
               />
@@ -455,16 +457,16 @@ export default function ReportsPage() {
           )}
 
           <Card>
-            <CardHeader title="Top Clinical Procedures & Services" subtitle="Highest volume medical services" />
+            <CardHeader title={t("reports.services.topTitle")} subtitle={t("reports.services.topSubtitle")} />
             <CardContent>
               {svcsData?.data?.topServices && svcsData.data.topServices.length > 0 ? (
                 <div className="border border-border-subtle rounded-md overflow-hidden">
                   <table className="w-full text-xs text-left">
                     <thead className="bg-paper text-slate-muted font-medium border-b border-border-subtle">
                       <tr>
-                        <th className="py-2.5 px-4">Service Name</th>
-                        <th className="py-2.5 px-4 text-right">Performed Count</th>
-                        <th className="py-2.5 px-4 text-right">Gross Generated Revenue</th>
+                        <th className="py-2.5 px-4">{t("reports.services.name")}</th>
+                        <th className="py-2.5 px-4 text-right">{t("reports.services.performedCount")}</th>
+                        <th className="py-2.5 px-4 text-right">{t("reports.services.grossRevenue")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border-subtle">
@@ -482,7 +484,7 @@ export default function ReportsPage() {
                 </div>
               ) : (
                 <p className="text-xs text-slate-muted py-6 text-center">
-                  No service performance data recorded for this period.
+                  {t("reports.services.empty")}
                 </p>
               )}
             </CardContent>

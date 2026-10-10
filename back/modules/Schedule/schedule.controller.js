@@ -30,7 +30,10 @@ const getSchedules = asyncHandler(async (req, res) => {
 })
 
 const getScheduleById = asyncHandler(async (req, res) => {
-    const schedule = await scheduleService.getScheduleById(req.params.id)
+    const schedule = await scheduleService.getScheduleById(
+        req.params.id,
+        req.user
+    )
 
     if (!schedule) {
         throw new AppError(

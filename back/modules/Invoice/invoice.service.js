@@ -17,6 +17,7 @@ const {
   getSort,
   applyCairoDateRange,
   applyDoctorScope,
+  getDoctorScopeId,
 } = require("../../utils/listQuery");
 
 // ---------------------------------------------
@@ -388,8 +389,15 @@ const getInvoices = async (query = {}, currentUser = null) => {
 // Get Invoice By ID
 // ---------------------------------------------
 
-const getInvoiceById = async (id) => {
-  return await Invoice.findById(id)
+const getInvoiceById = async (id, currentUser = null) => {
+  const filter = { _id: id };
+  if (currentUser?.role === "doctor") {
+    const doctorId = await getDoctorScopeId(currentUser, Doctor);
+    if (!doctorId) return null;
+    filter.doctor = doctorId;
+  }
+
+  return await Invoice.findOne(filter)
     .populate(
       "patient",
       "firstName lastName phone email dateOfBirth gender"

@@ -12,6 +12,7 @@ const {
   getSort,
   applyCairoDateRange,
   applyDoctorScope,
+  getDoctorScopeId,
 } = require("../../utils/listQuery");
 
 // ---------------------------------------------
@@ -147,6 +148,17 @@ const createLabOrder = async (
     notes,
     orderedAt,
   } = data;
+
+  if (currentUser?.role === "doctor") {
+    const doctorId = await getDoctorScopeId(currentUser, Doctor);
+    if (!doctorId || doctorId.toString() !== doctor.toString()) {
+      throw new AppError(
+        "Doctors can only create lab orders for their own visits",
+        403,
+        "FORBIDDEN"
+      );
+    }
+  }
 
   await Promise.all([
     validatePatient(patient),
@@ -303,8 +315,15 @@ const getLabOrders = async (query = {}, currentUser = null) => {
 // Get Lab Order By ID
 // ---------------------------------------------
 
-const getLabOrderById = async (id) => {
-  return await LabOrder.findById(id)
+const getLabOrderById = async (id, currentUser = null) => {
+  const filter = { _id: id };
+  if (currentUser?.role === "doctor") {
+    const doctorId = await getDoctorScopeId(currentUser, Doctor);
+    if (!doctorId) return null;
+    filter.doctor = doctorId;
+  }
+
+  return await LabOrder.findOne(filter)
     .populate(
       "patient",
       "firstName lastName phone email dateOfBirth gender bloodType"
@@ -342,8 +361,15 @@ const updateLabOrder = async (
   data,
   currentUser
 ) => {
+  const filter = { _id: id };
+  if (currentUser?.role === "doctor") {
+    const doctorId = await getDoctorScopeId(currentUser, Doctor);
+    if (!doctorId) return null;
+    filter.doctor = doctorId;
+  }
+
   const labOrder =
-    await LabOrder.findById(id);
+    await LabOrder.findOne(filter);
 
   if (!labOrder) {
     return null;

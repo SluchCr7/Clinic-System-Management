@@ -97,7 +97,7 @@ export default function LoginPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@clinic.com"
+              placeholder={t("auth.login.emailPlaceholder")}
               leftIcon={<LuMail className="w-4 h-4" />}
               required
               autoComplete="email"
@@ -108,7 +108,7 @@ export default function LoginPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
+              placeholder={t("auth.login.passwordPlaceholder")}
               leftIcon={<LuLock className="w-4 h-4" />}
               required
               autoComplete="current-password"
@@ -137,21 +137,21 @@ export default function LoginPage() {
                 onClick={() => handleQuickFill("admin@clinic.com")}
                 className="p-1.5 rounded-md border border-border-subtle bg-paper/50 hover:bg-mint hover:border-teal-primary/30 text-[11px] font-medium text-slate-dark transition-colors"
               >
-                Admin
+                {t("auth.login.quickFillAdmin")}
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickFill("doctor@clinic.com")}
                 className="p-1.5 rounded-md border border-border-subtle bg-paper/50 hover:bg-mint hover:border-teal-primary/30 text-[11px] font-medium text-slate-dark transition-colors"
               >
-                Doctor
+                {t("auth.login.quickFillDoctor")}
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickFill("receptionist@clinic.com")}
                 className="p-1.5 rounded-md border border-border-subtle bg-paper/50 hover:bg-mint hover:border-teal-primary/30 text-[11px] font-medium text-slate-dark transition-colors"
               >
-                Receptionist
+                {t("auth.login.quickFillReceptionist")}
               </button>
             </div>
           </div>

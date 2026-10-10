@@ -11,6 +11,7 @@ const { paginateQuery } = require("../../utils/pagination");
 const {
   getSort,
   applyCairoDateRange,
+  getDoctorScopeId,
 } = require("../../utils/listQuery");
 
 // ---------------------------------------------
@@ -389,8 +390,18 @@ const getPayments = async (query = {}, currentUser = null) => {
 // Get Payment By ID
 // ---------------------------------------------
 
-const getPaymentById = async (id) => {
-  return await Payment.findById(id)
+const getPaymentById = async (id, currentUser = null) => {
+  const filter = { _id: id };
+  if (currentUser?.role === "doctor") {
+    const doctorId = await getDoctorScopeId(currentUser, Doctor);
+    if (!doctorId) return null;
+    const invoiceIds = await Invoice.distinct("_id", {
+      doctor: doctorId,
+    });
+    filter.invoice = { $in: invoiceIds };
+  }
+
+  return await Payment.findOne(filter)
     .populate(
       "patient",
       "firstName lastName phone email"

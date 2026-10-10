@@ -98,7 +98,7 @@ export default function Sidebar({
           label: t("nav.visits"),
           href: "/visits",
           icon: <LuClipboardCheck className="w-4 h-4" />,
-          roles: ["admin", "doctor"],
+          roles: ["admin", "doctor", "receptionist"],
         },
         {
           label: t("nav.prescriptions"),
@@ -121,13 +121,13 @@ export default function Sidebar({
           label: t("nav.invoices"),
           href: "/invoices",
           icon: <LuReceipt className="w-4 h-4" />,
-          roles: ["admin", "receptionist"],
+          roles: ["admin", "doctor", "receptionist"],
         },
         {
           label: t("nav.payments"),
           href: "/payments",
           icon: <LuCreditCard className="w-4 h-4" />,
-          roles: ["admin", "receptionist"],
+          roles: ["admin", "doctor", "receptionist"],
         },
         {
           label: t("nav.medicalServices"),

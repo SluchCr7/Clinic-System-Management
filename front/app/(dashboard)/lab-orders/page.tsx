@@ -23,10 +23,15 @@ import {
   type Column,
 } from "@/components/ui";
 import { extractApiError } from "@/services/api/baseQuery";
-import { LuFlaskConical, LuCircleCheck } from "react-icons/lu";
+import { selectUserRole } from "@/features/auth/authSelectors";
+import { useAppSelector } from "@/redux/hooks";
+import { hasPermission } from "@/lib/permissions";
+import { LuCircleCheck } from "react-icons/lu";
 
 export default function LabOrdersPage() {
   const { t } = useTranslation();
+  const role = useAppSelector(selectUserRole);
+  const canManageLabOrders = hasPermission(role, "laboratory.manage");
   const [queryParams, setQueryParams] = useState<LabOrderQueryParams>({
     page: 1,
     limit: 10,
@@ -127,7 +132,7 @@ export default function LabOrdersPage() {
       key: "actions",
       header: "",
       align: "right",
-      render: (l) => (
+      render: (l) => canManageLabOrders ? (
         <Button
           variant="secondary"
           size="sm"
@@ -135,7 +140,7 @@ export default function LabOrdersPage() {
         >
           {t("labOrders.updateStatus")}
         </Button>
-      ),
+      ) : null,
     },
   ];
 

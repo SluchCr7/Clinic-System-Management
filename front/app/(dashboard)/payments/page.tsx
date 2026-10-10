@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useGetPaymentsQuery } from "@/services/api/paymentApi";
 import type { Payment, PaymentQueryParams, PaymentMethod } from "@/types/payment";
 import {
@@ -23,6 +24,7 @@ import {
 } from "react-icons/lu";
 
 export default function PaymentsPage() {
+  const { t } = useTranslation();
   const [queryParams, setQueryParams] = useState<PaymentQueryParams>({
     page: 1,
     limit: 10,
@@ -39,42 +41,46 @@ export default function PaymentsPage() {
       case "cash":
         return (
           <Badge variant="teal" size="sm" className="gap-1">
-            <LuBanknote className="w-3 h-3" /> Cash
+            <LuBanknote className="w-3 h-3" /> {t("payments.methods.cash")}
           </Badge>
         );
       case "card":
         return (
           <Badge variant="info" size="sm" className="gap-1">
-            <LuCreditCard className="w-3 h-3" /> Card
+            <LuCreditCard className="w-3 h-3" /> {t("payments.methods.card")}
           </Badge>
         );
       case "bank_transfer":
         return (
           <Badge variant="neutral" size="sm" className="gap-1">
-            <LuBuilding2 className="w-3 h-3" /> Bank Transfer
+            <LuBuilding2 className="w-3 h-3" /> {t("payments.methods.bank_transfer")}
           </Badge>
         );
       case "online":
         return (
           <Badge variant="teal" size="sm" className="gap-1">
-            <LuGlobe className="w-3 h-3" /> Online
+            <LuGlobe className="w-3 h-3" /> {t("payments.methods.online")}
           </Badge>
         );
       case "insurance":
         return (
           <Badge variant="warning" size="sm" className="gap-1">
-            <LuShield className="w-3 h-3" /> Insurance
+            <LuShield className="w-3 h-3" /> {t("payments.methods.insurance")}
           </Badge>
         );
       default:
-        return <Badge variant="neutral" size="sm">{method}</Badge>;
+        return (
+          <Badge variant="neutral" size="sm">
+            {t("common.notAvailable")}
+          </Badge>
+        );
     }
   };
 
   const columns: Column<Payment>[] = [
     {
       key: "paidAt",
-      header: "Payment Date",
+      header: t("payments.paymentDate"),
       render: (p) => (
         <span className="text-xs font-mono text-ink">
           {new Date(p.paidAt || p.createdAt).toLocaleString()}
@@ -83,7 +89,7 @@ export default function PaymentsPage() {
     },
     {
       key: "invoice",
-      header: "Invoice Reference",
+      header: t("payments.invoiceReference"),
       render: (p) => {
         const inv = typeof p.invoice === "object" && p.invoice ? p.invoice : null;
         return (
@@ -95,24 +101,24 @@ export default function PaymentsPage() {
     },
     {
       key: "patient",
-      header: "Patient",
+      header: t("payments.patient"),
       render: (p) => {
         const pt = typeof p.patient === "object" && p.patient ? p.patient : null;
         return (
           <span className="font-medium text-ink text-xs">
-            {pt ? `${pt.firstName} ${pt.lastName}` : "Patient"}
+            {pt ? `${pt.firstName} ${pt.lastName}` : t("payments.patient")}
           </span>
         );
       },
     },
     {
       key: "method",
-      header: "Payment Method",
+      header: t("payments.paymentMethod"),
       render: (p) => getMethodBadge(p.method),
     },
     {
       key: "transactionReference",
-      header: "Reference #",
+      header: t("payments.referenceNumber"),
       render: (p) => (
         <span className="font-mono text-xs text-slate-muted">
           {p.transactionReference || "—"}
@@ -121,7 +127,7 @@ export default function PaymentsPage() {
     },
     {
       key: "amount",
-      header: "Amount Paid",
+      header: t("payments.amountPaid"),
       render: (p) => (
         <span className="font-bold text-ink text-xs">
           ${p.amount?.toFixed(2)}
@@ -139,7 +145,7 @@ export default function PaymentsPage() {
           onClick={() => setReceiptPayment(p)}
           leftIcon={<LuEye className="w-3.5 h-3.5" />}
         >
-          Receipt
+          {t("payments.receipt")}
         </Button>
       ),
     },
@@ -148,8 +154,8 @@ export default function PaymentsPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Payment Transactions"
-        subtitle="Historical financial receipts, settling methods, and transaction vouchers"
+        title={t("payments.title")}
+        subtitle={t("payments.subtitle")}
       />
 
       {/* Filter and Overview */}
@@ -165,21 +171,21 @@ export default function PaymentsPage() {
                   page: 1,
                 }))
               }
-              placeholder="All Payment Methods"
+              placeholder={t("payments.allMethods")}
               options={[
-                { value: "", label: "All Payment Methods" },
-                { value: "cash", label: "Cash" },
-                { value: "card", label: "Card" },
-                { value: "bank_transfer", label: "Bank Transfer" },
-                { value: "online", label: "Online Gateway" },
-                { value: "insurance", label: "Insurance" },
+                { value: "", label: t("payments.allMethods") },
+                { value: "cash", label: t("payments.methods.cash") },
+                { value: "card", label: t("payments.methods.card") },
+                { value: "bank_transfer", label: t("payments.methods.bank_transfer") },
+                { value: "online", label: t("payments.methods.onlineGateway") },
+                { value: "insurance", label: t("payments.methods.insurance") },
               ]}
             />
           </div>
         </div>
 
         <div className="text-xs text-slate-muted">
-          Total Transactions: <strong className="text-ink">{data?.pagination?.total || 0}</strong>
+          {t("payments.totalTransactions")}: <strong className="text-ink">{data?.pagination?.total || 0}</strong>
         </div>
       </div>
 
@@ -189,8 +195,8 @@ export default function PaymentsPage() {
         isLoading={isLoading}
         isError={isError}
         onRetry={refetch}
-        emptyTitle="No payment records found"
-        emptyDescription="There are no settlement receipts recorded matching this criteria."
+        emptyTitle={t("payments.emptyTitle")}
+        emptyDescription={t("payments.emptyDescription")}
         pagination={data?.pagination}
         onPageChange={(page) => setQueryParams((prev) => ({ ...prev, page }))}
       />
@@ -199,27 +205,27 @@ export default function PaymentsPage() {
       <Modal
         isOpen={Boolean(receiptPayment)}
         onClose={() => setReceiptPayment(null)}
-        title="Payment Receipt Voucher"
-        subtitle={`Voucher ID: ${receiptPayment?._id.slice(-8).toUpperCase()}`}
+        title={t("payments.receiptTitle")}
+        subtitle={`${t("payments.voucherId")}: ${receiptPayment?._id.slice(-8).toUpperCase()}`}
       >
         {receiptPayment && (
           <div className="flex flex-col gap-4 text-xs">
             {/* Clinical Brand Receipt Header */}
             <div className="text-center pb-3 border-b border-border-subtle">
               <h3 className="font-bold text-base text-ink">AEGIS CLINICAL SUITE</h3>
-              <p className="text-slate-muted text-[11px]">Official Payment Settlement Receipt</p>
+              <p className="text-slate-muted text-[11px]">{t("payments.officialReceipt")}</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 p-3 bg-paper rounded-lg">
               <div>
-                <span className="text-[10px] uppercase text-slate-muted font-semibold">Date & Time:</span>
+                <span className="text-[10px] uppercase text-slate-muted font-semibold">{t("common.dateTime")}:</span>
                 <p className="font-medium text-ink">
                   {new Date(receiptPayment.paidAt || receiptPayment.createdAt).toLocaleString()}
                 </p>
               </div>
 
               <div>
-                <span className="text-[10px] uppercase text-slate-muted font-semibold">Invoice Ref:</span>
+                <span className="text-[10px] uppercase text-slate-muted font-semibold">{t("payments.invoiceReference")}:</span>
                 <p className="font-mono font-medium text-teal-dark">
                   #{typeof receiptPayment.invoice === "object" && receiptPayment.invoice
                     ? receiptPayment.invoice.invoiceNumber
@@ -228,22 +234,22 @@ export default function PaymentsPage() {
               </div>
 
               <div>
-                <span className="text-[10px] uppercase text-slate-muted font-semibold">Patient:</span>
+                <span className="text-[10px] uppercase text-slate-muted font-semibold">{t("payments.patient")}:</span>
                 <p className="font-semibold text-ink">
                   {typeof receiptPayment.patient === "object" && receiptPayment.patient
                     ? `${receiptPayment.patient.firstName} ${receiptPayment.patient.lastName}`
-                    : "Patient"}
+                    : t("payments.patient")}
                 </p>
               </div>
 
               <div>
-                <span className="text-[10px] uppercase text-slate-muted font-semibold">Payment Method:</span>
+                <span className="text-[10px] uppercase text-slate-muted font-semibold">{t("payments.paymentMethod")}:</span>
                 <div className="mt-0.5">{getMethodBadge(receiptPayment.method)}</div>
               </div>
 
               {receiptPayment.transactionReference && (
                 <div className="col-span-2">
-                  <span className="text-[10px] uppercase text-slate-muted font-semibold">Transaction Reference:</span>
+                  <span className="text-[10px] uppercase text-slate-muted font-semibold">{t("payments.transactionReference")}:</span>
                   <p className="font-mono text-ink">{receiptPayment.transactionReference}</p>
                 </div>
               )}
@@ -251,7 +257,7 @@ export default function PaymentsPage() {
 
             {/* Total Paid Display */}
             <div className="flex items-center justify-between p-3.5 bg-mint/50 border border-teal-primary/20 rounded-lg">
-              <span className="font-bold text-ink uppercase tracking-wider text-xs">Amount Collected</span>
+              <span className="font-bold text-ink uppercase tracking-wider text-xs">{t("payments.amountCollected")}</span>
               <span className="font-bold text-xl text-teal-dark">
                 ${receiptPayment.amount?.toFixed(2)}
               </span>
@@ -259,7 +265,7 @@ export default function PaymentsPage() {
 
             {receiptPayment.notes && (
               <div className="p-2.5 bg-paper rounded text-slate-muted text-xs">
-                <span className="font-semibold text-ink">Remarks: </span>
+                <span className="font-semibold text-ink">{t("payments.remarks")}: </span>
                 {receiptPayment.notes}
               </div>
             )}
@@ -267,12 +273,12 @@ export default function PaymentsPage() {
             {/* Footer / Signature line */}
             <div className="pt-4 border-t border-dashed border-border-subtle flex justify-between items-end text-[11px] text-slate-muted">
               <div>
-                <p>Status: <span className="text-status-success font-semibold">Settled & Verified</span></p>
-                <p className="text-[10px]">Thank you for your visit.</p>
+                <p>{t("common.status")}: <span className="text-status-success font-semibold">{t("payments.settledVerified")}</span></p>
+                <p className="text-[10px]">{t("payments.thankYou")}</p>
               </div>
               <div className="text-right">
                 <div className="w-32 border-b border-border-subtle mb-1"></div>
-                <span>Authorized Cashier</span>
+                <span>{t("payments.authorizedCashier")}</span>
               </div>
             </div>
 
@@ -284,14 +290,14 @@ export default function PaymentsPage() {
                 onClick={() => window.print()}
                 leftIcon={<LuPrinter className="w-3.5 h-3.5" />}
               >
-                Print Voucher
+                {t("payments.printVoucher")}
               </Button>
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => setReceiptPayment(null)}
               >
-                Done
+                {t("common.done")}
               </Button>
             </div>
           </div>

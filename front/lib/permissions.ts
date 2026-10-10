@@ -17,8 +17,10 @@ export type Permission =
   | "prescriptions.create"
   | "laboratory.view"
   | "laboratory.create"
+  | "laboratory.manage"
   | "billing.view"
   | "billing.manage"
+  | "medicalServices.manage"
   | "reports.view"
   | "users.manage"
   | "auditLogs.view"
@@ -43,8 +45,10 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "prescriptions.create",
     "laboratory.view",
     "laboratory.create",
+    "laboratory.manage",
     "billing.view",
     "billing.manage",
+    "medicalServices.manage",
     "reports.view",
     "users.manage",
     "auditLogs.view",
@@ -62,8 +66,8 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "prescriptions.create",
     "laboratory.view",
     "laboratory.create",
+    "laboratory.manage",
     "billing.view",
-    "reports.view",
     "notifications.view",
     "settings.view",
   ],
@@ -85,6 +89,27 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "settings.view",
   ],
 };
+
+export function getRequiredRoutePermission(pathname: string): Permission | null {
+  if (pathname === "/dashboard") return "dashboard.view";
+  if (pathname === "/patients/new") return "patients.create";
+  if (pathname.startsWith("/patients")) return "patients.view";
+  if (pathname.startsWith("/doctors")) return "doctors.view";
+  if (pathname.startsWith("/appointments")) return "appointments.view";
+  if (pathname === "/visits/new") return "visits.create";
+  if (pathname.startsWith("/visits")) return "visits.view";
+  if (pathname.startsWith("/prescriptions")) return "prescriptions.view";
+  if (pathname.startsWith("/lab-orders")) return "laboratory.view";
+  if (pathname.startsWith("/invoices") || pathname.startsWith("/payments")) {
+    return "billing.view";
+  }
+  if (pathname.startsWith("/reports")) return "reports.view";
+  if (pathname.startsWith("/users")) return "users.manage";
+  if (pathname.startsWith("/audit-logs")) return "auditLogs.view";
+  if (pathname.startsWith("/notifications")) return "notifications.view";
+  if (pathname.startsWith("/settings")) return "settings.view";
+  return null;
+}
 
 export function hasPermission(
   role: UserRole | undefined,

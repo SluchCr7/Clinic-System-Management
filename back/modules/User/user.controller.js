@@ -5,11 +5,13 @@ const userService = require("./user.service")
 
 const createUser = asyncHandler(async (req, res) => {
     const user = await userService.createUser(req.body, req.user);
+    const userResponse = user.toObject();
+    delete userResponse.password;
 
     res.status(201).json({
         success: true,
         message: "User created successfully",
-        data: user,
+        data: userResponse,
     });
 });
 

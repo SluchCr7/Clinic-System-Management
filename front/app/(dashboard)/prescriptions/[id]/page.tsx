@@ -3,6 +3,7 @@
 import React from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { useTranslation } from "react-i18next";
 import { useGetPrescriptionByIdQuery } from "@/services/api/prescriptionApi";
 import {
   PageHeader,
@@ -15,6 +16,7 @@ import {
 import { LuArrowLeft, LuPrinter } from "react-icons/lu";
 
 export default function PrescriptionDetailPage() {
+  const { t } = useTranslation();
   const params = useParams();
   const rxId = params.id as string;
 
@@ -23,7 +25,7 @@ export default function PrescriptionDetailPage() {
   const rx = rxData?.data;
 
   if (isError) {
-    return <ErrorState message="Could not find prescription file." onRetry={refetch} />;
+    return <ErrorState message={t("prescriptions.notFound")} onRetry={refetch} />;
   }
 
   if (isLoading || !rx) {
@@ -48,12 +50,12 @@ export default function PrescriptionDetailPage() {
       {/* Top action bar - hidden when printing */}
       <div className="no-print">
         <PageHeader
-          title="Prescription Document"
-          subtitle={`RX Reference: ${rx._id}`}
+          title={t("prescriptions.documentTitle")}
+          subtitle={`${t("prescriptions.reference")}: ${rx._id}`}
           backAction={
             <Link href="/prescriptions">
               <Button variant="ghost" size="sm" leftIcon={<LuArrowLeft className="w-4 h-4" />}>
-                Prescriptions
+                {t("prescriptions.title")}
               </Button>
             </Link>
           }
@@ -64,7 +66,7 @@ export default function PrescriptionDetailPage() {
               onClick={handlePrint}
               leftIcon={<LuPrinter className="w-3.5 h-3.5" />}
             >
-              Print Prescription
+              {t("prescriptions.printPrescription")}
             </Button>
           }
         />
@@ -77,25 +79,25 @@ export default function PrescriptionDetailPage() {
           <div>
             <Logo size="md" />
             <p className="text-xs text-slate-muted mt-2">
-              AuraClinic Medical Center • Outpatient Care
+              {t("prescriptions.clinicDescriptor")}
             </p>
             <p className="text-[11px] text-slate-light">
-              Tel: +20 2 2456 7890 • Cairo, Egypt
+              {t("prescriptions.clinicContact")}
             </p>
           </div>
 
           <div className="text-right">
             <h2 className="text-sm font-bold text-ink">
-              {doctorUser ? `Dr. ${doctorUser.firstName} ${doctorUser.lastName}` : "Physician"}
+              {doctorUser ? `Dr. ${doctorUser.firstName} ${doctorUser.lastName}` : t("prescriptions.physician")}
             </h2>
             <p className="text-xs text-teal-primary font-medium">
-              {doctor?.specialization || "Clinical Practice"}
+              {doctor?.specialization || t("prescriptions.clinicalPractice")}
             </p>
             <p className="text-[11px] text-slate-muted font-mono mt-0.5">
-              License: {doctor?.licenseNumber || "N/A"}
+              {t("prescriptions.license")}: {doctor?.licenseNumber || t("common.notAvailable")}
             </p>
             <p className="text-xs text-slate-dark mt-1 font-mono">
-              Date: {new Date(rx.createdAt).toLocaleDateString()}
+              {t("prescriptions.date")}: {new Date(rx.createdAt).toLocaleDateString()}
             </p>
           </div>
         </div>
@@ -104,31 +106,31 @@ export default function PrescriptionDetailPage() {
         <div className="p-3.5 rounded-lg bg-paper border border-border-subtle grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
           <div>
             <span className="text-[10px] uppercase font-semibold text-slate-muted block">
-              Patient Name:
+              {t("prescriptions.patientName")}:
             </span>
             <span className="font-bold text-ink">
-              {patient ? `${patient.firstName} ${patient.lastName}` : "Patient"}
+              {patient ? `${patient.firstName} ${patient.lastName}` : t("prescriptions.patient")}
             </span>
           </div>
           <div>
             <span className="text-[10px] uppercase font-semibold text-slate-muted block">
-              Phone:
+              {t("common.phone")}:
             </span>
             <span className="font-mono text-slate-dark">
-              {patient?.phone || "N/A"}
+              {patient?.phone || t("common.notAvailable")}
             </span>
           </div>
           <div>
             <span className="text-[10px] uppercase font-semibold text-slate-muted block">
-              Blood Group:
+              {t("prescriptions.bloodGroup")}:
             </span>
             <span className="font-mono font-bold text-ink">
-              {patient?.bloodType || "N/A"}
+              {patient?.bloodType || t("common.notAvailable")}
             </span>
           </div>
           <div>
             <span className="text-[10px] uppercase font-semibold text-slate-muted block">
-              Rx Code:
+              {t("prescriptions.code")}:
             </span>
             <span className="font-mono text-slate-muted">
               {rx._id.slice(-8).toUpperCase()}
@@ -143,7 +145,7 @@ export default function PrescriptionDetailPage() {
               ℞
             </span>
             <span className="text-xs font-bold uppercase tracking-wider text-slate-muted">
-              Prescribed Medications
+              {t("prescriptions.prescribedMedications")}
             </span>
           </div>
 
@@ -155,19 +157,19 @@ export default function PrescriptionDetailPage() {
                     #
                   </th>
                   <th className="py-2.5 px-3 font-semibold text-slate-muted text-[11px]">
-                    Drug Name & Form
+                    {t("prescriptions.drugNameAndForm")}
                   </th>
                   <th className="py-2.5 px-3 font-semibold text-slate-muted text-[11px]">
-                    Dosage
+                    {t("prescriptions.dosage")}
                   </th>
                   <th className="py-2.5 px-3 font-semibold text-slate-muted text-[11px]">
-                    Frequency
+                    {t("prescriptions.frequency")}
                   </th>
                   <th className="py-2.5 px-3 font-semibold text-slate-muted text-[11px]">
-                    Duration
+                    {t("prescriptions.duration")}
                   </th>
                   <th className="py-2.5 px-3 font-semibold text-slate-muted text-[11px]">
-                    Route
+                    {t("prescriptions.route")}
                   </th>
                 </tr>
               </thead>
@@ -185,14 +187,14 @@ export default function PrescriptionDetailPage() {
                       <td className="py-2.5 px-3">{m.frequency}</td>
                       <td className="py-2.5 px-3">{m.duration}</td>
                       <td className="py-2.5 px-3 capitalize text-slate-muted">
-                        {m.route || "Oral"}
+                        {t(`prescriptions.routes.${m.route || "oral"}`)}
                       </td>
                     </tr>
                     {m.instructions && (
                       <tr className="bg-paper/30 text-[11px] text-slate-muted">
                         <td />
                         <td colSpan={5} className="py-1 px-3 italic">
-                          Instructions: {m.instructions}
+                          {t("prescriptions.instructions")}: {m.instructions}
                         </td>
                       </tr>
                     )}
@@ -207,7 +209,7 @@ export default function PrescriptionDetailPage() {
         {rx.generalInstructions && (
           <div className="p-3.5 rounded-lg border border-border-subtle bg-paper/30 text-xs">
             <span className="font-semibold text-ink uppercase tracking-wider text-[10px] block mb-1">
-              General Patient Instructions:
+              {t("prescriptions.generalPatientInstructions")}:
             </span>
             <p className="text-slate-muted leading-relaxed">
               {rx.generalInstructions}
@@ -218,17 +220,16 @@ export default function PrescriptionDetailPage() {
         {/* Doctor Signature & Stamp Area */}
         <div className="pt-12 flex items-end justify-between text-xs">
           <div className="text-[10px] text-slate-light max-w-xs leading-relaxed">
-            * This prescription is valid for 30 days from date of issuance.
-            Take medications strictly as indicated by your physician.
+            {t("prescriptions.validityNotice")}
           </div>
 
           <div className="flex flex-col items-center">
             <div className="w-48 border-b border-ink/40 mb-1" />
             <span className="font-semibold text-ink text-[11px]">
-              {doctorUser ? `Dr. ${doctorUser.firstName} ${doctorUser.lastName}` : "Physician Signature"}
+              {doctorUser ? `Dr. ${doctorUser.firstName} ${doctorUser.lastName}` : t("prescriptions.physicianSignature")}
             </span>
             <span className="text-[10px] text-slate-muted">
-              Licensed Practitioner
+              {t("prescriptions.licensedPractitioner")}
             </span>
           </div>
         </div>

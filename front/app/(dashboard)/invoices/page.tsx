@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   useGetInvoicesQuery,
   useCancelInvoiceMutation,
@@ -21,8 +22,10 @@ import {
   type Column,
 } from "@/components/ui";
 import { extractApiError } from "@/services/api/baseQuery";
+import { selectUserRole } from "@/features/auth/authSelectors";
+import { useAppSelector } from "@/redux/hooks";
+import { hasPermission } from "@/lib/permissions";
 import {
-  LuReceipt,
   LuCreditCard,
   LuPrinter,
   LuBan,
@@ -32,6 +35,10 @@ import {
 } from "react-icons/lu";
 
 export default function InvoicesPage() {
+  const { t } = useTranslation();
+  const role = useAppSelector(selectUserRole);
+  const canManageBilling = hasPermission(role, "billing.manage");
+
   const [queryParams, setQueryParams] = useState<InvoiceQueryParams>({
     page: 1,
     limit: 10,
@@ -68,7 +75,7 @@ export default function InvoicesPage() {
     if (!paymentInvoice) return;
 
     if (paymentAmount <= 0) {
-      toast.error("Payment amount must be greater than 0.");
+      toast.error(t("invoices.errors.amountGreaterThanZero"));
       return;
     }
 
@@ -81,14 +88,14 @@ export default function InvoicesPage() {
         notes: paymentNotes.trim() || undefined,
       }).unwrap();
 
-      toast.success("Payment recorded successfully.");
+      toast.success(t("invoices.success.paymentRecorded"));
       setPaymentInvoice(null);
       if (viewInvoice && viewInvoice._id === paymentInvoice._id) {
         setViewInvoice(null);
       }
     } catch (err) {
       const extracted = extractApiError(err);
-      toast.error(extracted.message || "Failed to record payment.");
+      toast.error(extracted.message || t("invoices.errors.paymentFailed"));
     }
   };
 
@@ -97,21 +104,21 @@ export default function InvoicesPage() {
 
     try {
       await cancelInvoice(cancelInvoiceTarget._id).unwrap();
-      toast.success("Invoice cancelled successfully.");
+      toast.success(t("invoices.success.invoiceCancelled"));
       setCancelInvoiceTarget(null);
       if (viewInvoice && viewInvoice._id === cancelInvoiceTarget._id) {
         setViewInvoice(null);
       }
     } catch (err) {
       const extracted = extractApiError(err);
-      toast.error(extracted.message || "Failed to cancel invoice.");
+      toast.error(extracted.message || t("invoices.errors.cancelFailed"));
     }
   };
 
   const columns: Column<Invoice>[] = [
     {
       key: "invoiceNumber",
-      header: "Invoice #",
+      header: t("invoices.column.invoiceNumber"),
       render: (inv) => (
         <span className="font-mono text-xs font-bold text-ink">
           {inv.invoiceNumber || inv._id.slice(-6).toUpperCase()}
@@ -120,7 +127,7 @@ export default function InvoicesPage() {
     },
     {
       key: "issuedAt",
-      header: "Issued Date",
+      header: t("invoices.column.issuedDate"),
       render: (inv) => (
         <span className="text-xs text-slate-dark">
           {new Date(inv.issuedAt || inv.createdAt).toLocaleDateString()}
@@ -129,13 +136,13 @@ export default function InvoicesPage() {
     },
     {
       key: "patient",
-      header: "Patient",
+      header: t("invoices.column.patient"),
       render: (inv) => {
         const p = typeof inv.patient === "object" && inv.patient ? inv.patient : null;
         return (
           <div className="flex flex-col">
             <span className="font-semibold text-ink text-xs">
-              {p ? `${p.firstName} ${p.lastName}` : "Patient"}
+              {p ? `${p.firstName} ${p.lastName}` : t("invoices.column.patientDefault")}
             </span>
             {p?.phone && (
               <span className="text-[11px] text-slate-muted">{p.phone}</span>
@@ -146,20 +153,20 @@ export default function InvoicesPage() {
     },
     {
       key: "doctor",
-      header: "Physician",
+      header: t("invoices.column.physician"),
       render: (inv) => {
         const doc = typeof inv.doctor === "object" && inv.doctor ? inv.doctor : null;
         const u = doc && typeof doc.user === "object" && doc.user ? doc.user : null;
         return (
           <span className="text-xs text-slate-dark">
-            {u ? `Dr. ${u.lastName}` : "Physician"}
+            {u ? `Dr. ${u.lastName}` : t("invoices.column.physicianDefault")}
           </span>
         );
       },
     },
     {
       key: "total",
-      header: "Total",
+      header: t("invoices.column.total"),
       render: (inv) => (
         <span className="font-semibold text-ink text-xs">
           ${inv.total?.toFixed(2)}
@@ -168,7 +175,7 @@ export default function InvoicesPage() {
     },
     {
       key: "paidAmount",
-      header: "Paid",
+      header: t("invoices.column.paid"),
       render: (inv) => (
         <span className="text-status-success font-medium text-xs">
           ${inv.paidAmount?.toFixed(2)}
@@ -177,7 +184,7 @@ export default function InvoicesPage() {
     },
     {
       key: "remainingAmount",
-      header: "Balance Due",
+      header: t("invoices.column.balanceDue"),
       render: (inv) => (
         <span
           className={`font-semibold text-xs ${
@@ -190,7 +197,7 @@ export default function InvoicesPage() {
     },
     {
       key: "status",
-      header: "Status",
+      header: t("common.status"),
       render: (inv) => <StatusBadge status={inv.status} size="sm" />,
     },
     {
@@ -203,29 +210,29 @@ export default function InvoicesPage() {
             variant="ghost"
             size="sm"
             onClick={() => setViewInvoice(inv)}
-            title="View Invoice Details"
+            title={t("invoices.actions.viewDetails")}
           >
             <LuEye className="w-3.5 h-3.5" />
           </Button>
 
-          {inv.status !== "paid" && inv.status !== "cancelled" && (
+          {canManageBilling && inv.status !== "paid" && inv.status !== "cancelled" && (
             <Button
               variant="outline"
               size="sm"
               onClick={() => handleOpenPayment(inv)}
-              title="Record Payment"
+              title={t("invoices.actions.recordPayment")}
               className="text-xs px-2 py-1"
             >
-              Pay
+              {t("invoices.actions.pay")}
             </Button>
           )}
 
-          {inv.status !== "cancelled" && inv.paidAmount === 0 && (
+          {canManageBilling && inv.status !== "cancelled" && inv.paidAmount === 0 && (
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setCancelInvoiceTarget(inv)}
-              title="Cancel Invoice"
+              title={t("invoices.actions.cancelInvoice")}
               className="text-status-error hover:bg-status-error-bg"
             >
               <LuBan className="w-3.5 h-3.5" />
@@ -239,8 +246,8 @@ export default function InvoicesPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Invoices & Billing"
-        subtitle="Manage patient billing statements, payment balances, and financial records"
+        title={t("invoices.title")}
+        subtitle={t("invoices.subtitle")}
       />
 
       {/* Filter and Control Bar */}
@@ -256,20 +263,20 @@ export default function InvoicesPage() {
                   page: 1,
                 }))
               }
-              placeholder="All Statuses"
+              placeholder={t("invoices.allStatuses")}
               options={[
-                { value: "", label: "All Statuses" },
-                { value: "unpaid", label: "Unpaid" },
-                { value: "partially_paid", label: "Partially Paid" },
-                { value: "paid", label: "Paid" },
-                { value: "cancelled", label: "Cancelled" },
+                { value: "", label: t("invoices.allStatuses") },
+                { value: "unpaid", label: t("invoices.statusOptions.unpaid") },
+                { value: "partially_paid", label: t("invoices.statusOptions.partiallyPaid") },
+                { value: "paid", label: t("invoices.statusOptions.paid") },
+                { value: "cancelled", label: t("invoices.statusOptions.cancelled") },
               ]}
             />
           </div>
         </div>
 
         <div className="text-xs text-slate-muted">
-          Total Records: <strong className="text-ink">{data?.pagination?.total || 0}</strong>
+          {t("invoices.totalRecords")}: <strong className="text-ink">{data?.pagination?.total || 0}</strong>
         </div>
       </div>
 
@@ -279,8 +286,8 @@ export default function InvoicesPage() {
         isLoading={isLoading}
         isError={isError}
         onRetry={refetch}
-        emptyTitle="No invoices found"
-        emptyDescription="There are no billing invoices matching your selected filter."
+        emptyTitle={t("invoices.emptyTitle")}
+        emptyDescription={t("invoices.emptyDescription")}
         pagination={data?.pagination}
         onPageChange={(page) => setQueryParams((prev) => ({ ...prev, page }))}
       />
@@ -289,8 +296,8 @@ export default function InvoicesPage() {
       <Modal
         isOpen={Boolean(viewInvoice)}
         onClose={() => setViewInvoice(null)}
-        title={`Invoice ${viewInvoice?.invoiceNumber || viewInvoice?._id.slice(-6).toUpperCase()}`}
-        subtitle={`Issued on ${
+        title={`${t("invoices.modal.invoicePrefix")} ${viewInvoice?.invoiceNumber || viewInvoice?._id.slice(-6).toUpperCase()}`}
+        subtitle={`${t("invoices.modal.issuedOn")} ${
           viewInvoice
             ? new Date(viewInvoice.issuedAt || viewInvoice.createdAt).toLocaleDateString()
             : ""
@@ -303,12 +310,12 @@ export default function InvoicesPage() {
             <div className="grid grid-cols-2 gap-4 p-3.5 bg-paper rounded-lg border border-border-subtle text-xs">
               <div>
                 <span className="font-semibold text-slate-muted uppercase tracking-wider text-[10px]">
-                  Patient Details
+                  {t("invoices.modal.patientDetails")}
                 </span>
                 <p className="font-bold text-ink mt-0.5">
                   {typeof viewInvoice.patient === "object" && viewInvoice.patient
                     ? `${viewInvoice.patient.firstName} ${viewInvoice.patient.lastName}`
-                    : "Patient"}
+                    : t("invoices.modal.patientDefault")}
                 </p>
                 {typeof viewInvoice.patient === "object" && viewInvoice.patient?.phone && (
                   <p className="text-slate-muted">{viewInvoice.patient.phone}</p>
@@ -317,7 +324,7 @@ export default function InvoicesPage() {
 
               <div>
                 <span className="font-semibold text-slate-muted uppercase tracking-wider text-[10px]">
-                  Attending Physician
+                  {t("invoices.modal.attendingPhysician")}
                 </span>
                 <p className="font-bold text-ink mt-0.5">
                   {typeof viewInvoice.doctor === "object" &&
@@ -325,7 +332,7 @@ export default function InvoicesPage() {
                   typeof viewInvoice.doctor.user === "object" &&
                   viewInvoice.doctor.user
                     ? `Dr. ${viewInvoice.doctor.user.firstName} ${viewInvoice.doctor.user.lastName}`
-                    : "Physician"}
+                    : t("invoices.modal.physicianDefault")}
                 </p>
                 <div className="mt-1">
                   <StatusBadge status={viewInvoice.status} size="sm" />
@@ -336,16 +343,16 @@ export default function InvoicesPage() {
             {/* Line Items Table */}
             <div>
               <span className="font-semibold text-ink text-xs uppercase tracking-wider">
-                Services & Procedures
+                {t("invoices.modal.servicesAndProcedures")}
               </span>
               <div className="mt-2 border border-border-subtle rounded-md overflow-hidden">
                 <table className="w-full text-xs text-left">
                   <thead className="bg-paper border-b border-border-subtle text-slate-muted font-medium">
                     <tr>
-                      <th className="py-2 px-3">Description</th>
-                      <th className="py-2 px-2 text-right">Qty</th>
-                      <th className="py-2 px-3 text-right">Rate</th>
-                      <th className="py-2 px-3 text-right">Total</th>
+                      <th className="py-2 px-3">{t("invoices.modal.description")}</th>
+                      <th className="py-2 px-2 text-right">{t("invoices.modal.qty")}</th>
+                      <th className="py-2 px-3 text-right">{t("invoices.modal.rate")}</th>
+                      <th className="py-2 px-3 text-right">{t("invoices.modal.total")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border-subtle">
@@ -367,7 +374,7 @@ export default function InvoicesPage() {
                     ) : (
                       <tr>
                         <td colSpan={4} className="py-3 px-3 text-center text-slate-muted">
-                          Standard Clinical Consultation
+                          {t("invoices.modal.standardConsultation")}
                         </td>
                       </tr>
                     )}
@@ -379,33 +386,33 @@ export default function InvoicesPage() {
             {/* Financial Summary */}
             <div className="flex flex-col gap-1.5 self-end w-64 text-xs pt-2">
               <div className="flex justify-between text-slate-muted">
-                <span>Subtotal:</span>
+                <span>{t("invoices.modal.subtotal")}:</span>
                 <span className="font-medium text-ink">
                   ${(viewInvoice.subtotal || viewInvoice.total)?.toFixed(2)}
                 </span>
               </div>
               {viewInvoice.discount > 0 && (
                 <div className="flex justify-between text-status-success">
-                  <span>Discount:</span>
+                  <span>{t("invoices.modal.discount")}:</span>
                   <span>-${viewInvoice.discount.toFixed(2)}</span>
                 </div>
               )}
               {viewInvoice.tax > 0 && (
                 <div className="flex justify-between text-slate-muted">
-                  <span>Tax:</span>
+                  <span>{t("invoices.modal.tax")}:</span>
                   <span>+${viewInvoice.tax.toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between font-bold text-ink text-sm border-t border-border-subtle pt-2">
-                <span>Total Amount:</span>
+                <span>{t("invoices.modal.totalAmount")}:</span>
                 <span>${viewInvoice.total?.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-status-success font-medium">
-                <span>Amount Paid:</span>
+                <span>{t("invoices.modal.amountPaid")}:</span>
                 <span>${viewInvoice.paidAmount?.toFixed(2)}</span>
               </div>
               <div className="flex justify-between font-bold text-xs pt-1 border-t border-border-subtle">
-                <span className="text-slate-muted">Balance Due:</span>
+                <span className="text-slate-muted">{t("invoices.modal.balanceDue")}:</span>
                 <span
                   className={
                     viewInvoice.remainingAmount > 0
@@ -420,7 +427,7 @@ export default function InvoicesPage() {
 
             {viewInvoice.notes && (
               <div className="p-3 bg-paper rounded-md text-xs text-slate-muted">
-                <span className="font-semibold text-ink">Billing Notes: </span>
+                <span className="font-semibold text-ink">{t("invoices.modal.billingNotes")} </span>
                 {viewInvoice.notes}
               </div>
             )}
@@ -433,7 +440,7 @@ export default function InvoicesPage() {
                 onClick={() => window.print()}
                 leftIcon={<LuPrinter className="w-3.5 h-3.5" />}
               >
-                Print Invoice
+                {t("invoices.modal.printInvoice")}
               </Button>
 
               <div className="flex items-center gap-2">
@@ -446,7 +453,7 @@ export default function InvoicesPage() {
                     }}
                     leftIcon={<LuCreditCard className="w-3.5 h-3.5" />}
                   >
-                    Record Payment
+                    {t("invoices.modal.recordPayment")}
                   </Button>
                 )}
                 <Button
@@ -454,7 +461,7 @@ export default function InvoicesPage() {
                   size="sm"
                   onClick={() => setViewInvoice(null)}
                 >
-                  Close
+                  {t("common.close")}
                 </Button>
               </div>
             </div>
@@ -466,12 +473,12 @@ export default function InvoicesPage() {
       <Modal
         isOpen={Boolean(paymentInvoice)}
         onClose={() => setPaymentInvoice(null)}
-        title="Record Invoice Settlement"
-        subtitle={`Invoice #${paymentInvoice?.invoiceNumber || paymentInvoice?._id.slice(-6).toUpperCase()} • Remaining: $${paymentInvoice?.remainingAmount?.toFixed(2)}`}
+        title={t("invoices.payment.title")}
+        subtitle={`${t("invoices.payment.invoiceNumberPrefix")} ${paymentInvoice?.invoiceNumber || paymentInvoice?._id.slice(-6).toUpperCase()} • ${t("invoices.payment.remaining")} $${paymentInvoice?.remainingAmount?.toFixed(2)}`}
       >
         <form onSubmit={handleRecordPayment} className="flex flex-col gap-4">
           <Input
-            label="Payment Amount ($)"
+            label={t("invoices.payment.amountLabel")}
             type="number"
             step="0.01"
             min="0.01"
@@ -479,32 +486,32 @@ export default function InvoicesPage() {
             value={paymentAmount}
             onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
             required
-            helperText={`Maximum payable: $${paymentInvoice?.remainingAmount?.toFixed(2)}`}
+            helperText={`${t("invoices.payment.maxPayable")}: $${paymentInvoice?.remainingAmount?.toFixed(2)}`}
           />
 
           <Select
-            label="Payment Method"
+            label={t("invoices.payment.methodLabel")}
             value={paymentMethod}
             onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
             options={[
-              { value: "cash", label: "Cash" },
-              { value: "card", label: "Credit / Debit Card" },
-              { value: "bank_transfer", label: "Bank Transfer" },
-              { value: "online", label: "Online Gateway" },
-              { value: "insurance", label: "Medical Insurance" },
+              { value: "cash", label: t("invoices.payment.methods.cash") },
+              { value: "card", label: t("invoices.payment.methods.card") },
+              { value: "bank_transfer", label: t("invoices.payment.methods.bankTransfer") },
+              { value: "online", label: t("invoices.payment.methods.online") },
+              { value: "insurance", label: t("invoices.payment.methods.insurance") },
             ]}
           />
 
           <Input
-            label="Transaction Reference / Cheque #"
-            placeholder="e.g. TXN-984214 or Auth Code"
+            label={t("invoices.payment.referenceLabel")}
+            placeholder={t("invoices.payment.referencePlaceholder")}
             value={paymentRef}
             onChange={(e) => setPaymentRef(e.target.value)}
           />
 
           <Textarea
-            label="Payment Notes"
-            placeholder="Additional comments or payment receipt remarks..."
+            label={t("invoices.payment.notesLabel")}
+            placeholder={t("invoices.payment.notesPlaceholder")}
             value={paymentNotes}
             onChange={(e) => setPaymentNotes(e.target.value)}
             rows={2}
@@ -517,7 +524,7 @@ export default function InvoicesPage() {
               size="sm"
               onClick={() => setPaymentInvoice(null)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               type="submit"
@@ -526,7 +533,7 @@ export default function InvoicesPage() {
               isLoading={isRecordingPayment}
               leftIcon={<LuCircleCheck className="w-3.5 h-3.5" />}
             >
-              Confirm Payment
+              {t("invoices.payment.confirm")}
             </Button>
           </div>
         </form>
@@ -536,15 +543,17 @@ export default function InvoicesPage() {
       <Modal
         isOpen={Boolean(cancelInvoiceTarget)}
         onClose={() => setCancelInvoiceTarget(null)}
-        title="Cancel Invoice Confirmation"
+        title={t("invoices.cancel.title")}
       >
         <div className="flex flex-col gap-4">
           <div className="flex items-start gap-3 p-3 bg-status-warning-bg border border-status-warning/20 rounded-lg text-xs text-status-warning">
             <LuTriangleAlert className="w-5 h-5 shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-ink">Are you sure you want to cancel this invoice?</p>
+              <p className="font-semibold text-ink">{t("invoices.cancel.prompt")}</p>
               <p className="mt-1 text-slate-muted">
-                Invoice #{cancelInvoiceTarget?.invoiceNumber || cancelInvoiceTarget?._id.slice(-6).toUpperCase()} will be marked as cancelled and cannot be collected.
+                {t("invoices.cancel.warning", {
+                  invoiceNumber: cancelInvoiceTarget?.invoiceNumber || cancelInvoiceTarget?._id.slice(-6).toUpperCase(),
+                })}
               </p>
             </div>
           </div>
@@ -555,7 +564,7 @@ export default function InvoicesPage() {
               size="sm"
               onClick={() => setCancelInvoiceTarget(null)}
             >
-              Back
+              {t("invoices.cancel.back")}
             </Button>
             <Button
               variant="danger"
@@ -564,7 +573,7 @@ export default function InvoicesPage() {
               onClick={handleCancelInvoice}
               leftIcon={<LuBan className="w-3.5 h-3.5" />}
             >
-              Cancel Invoice
+              {t("invoices.cancel.action")}
             </Button>
           </div>
         </div>

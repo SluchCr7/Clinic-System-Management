@@ -43,7 +43,8 @@ const getInvoices = asyncHandler(async (req, res) => {
 
 const getInvoiceById = asyncHandler(async (req, res) => {
   const invoice = await invoiceService.getInvoiceById(
-    req.params.id
+    req.params.id,
+    req.user
   );
 
   if (!invoice) {

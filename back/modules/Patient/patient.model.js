@@ -123,4 +123,15 @@ PatientSchema.index({
   createdAt: -1,
 });
 
+PatientSchema.index({ phone: 1 }, { unique: true });
+PatientSchema.index(
+  { email: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      email: { $type: "string", $gt: "" },
+    },
+  }
+);
+
 module.exports = mongoose.model("Patient", PatientSchema);

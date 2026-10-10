@@ -1,4 +1,7 @@
+"use client";
+
 import React from "react";
+import { useTranslation } from "react-i18next";
 
 export interface BadgeProps {
   children: React.ReactNode;
@@ -64,10 +67,10 @@ export interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, size = "md", className = "" }: StatusBadgeProps) {
+  const { t } = useTranslation();
   const normalized = status?.toLowerCase().replace(/[_\s]/g, "-") || "";
 
   let variant: BadgeProps["variant"] = "neutral";
-  let label = status;
 
   switch (normalized) {
     // Active / Success states
@@ -109,7 +112,9 @@ export function StatusBadge({ status, size = "md", className = "" }: StatusBadge
   }
 
   // Format label nicely
-  label = status?.replace(/_/g, " ") || "";
+  const label = t(`common.statuses.${normalized}`, {
+    defaultValue: status?.replace(/_/g, " ") || "",
+  });
 
   return (
     <Badge variant={variant} size={size} dot className={className}>

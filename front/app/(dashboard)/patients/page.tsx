@@ -16,10 +16,15 @@ import {
   type Column,
 } from "@/components/ui";
 import { LuPlus, LuEye } from "react-icons/lu";
+import { selectUserRole } from "@/features/auth/authSelectors";
+import { useAppSelector } from "@/redux/hooks";
+import { hasPermission } from "@/lib/permissions";
 
 export default function PatientsPage() {
   const { t } = useTranslation();
   const router = useRouter();
+  const role = useAppSelector(selectUserRole);
+  const canCreatePatient = hasPermission(role, "patients.create");
 
   const [queryParams, setQueryParams] = useState<PatientQueryParams>({
     page: 1,
@@ -60,7 +65,7 @@ export default function PatientsPage() {
         const age = new Date().getFullYear() - birthYear;
         return (
           <span className="capitalize text-slate-dark">
-            {p.gender}, {t("patients.ageYears", { count: age })}
+            {t(`patients.genderOptions.${p.gender}`, { defaultValue: p.gender })}, {t("patients.ageYears", { count: age })}
           </span>
         );
       },
@@ -125,7 +130,7 @@ export default function PatientsPage() {
       <PageHeader
         title={t("patients.title")}
         subtitle={t("patients.subtitle")}
-        actions={
+        actions={canCreatePatient ? (
           <Link href="/patients/new">
             <Button
               variant="primary"
@@ -135,7 +140,7 @@ export default function PatientsPage() {
               {t("patients.register")}
             </Button>
           </Link>
-        }
+        ) : undefined}
       />
 
       {/* Filters Bar */}

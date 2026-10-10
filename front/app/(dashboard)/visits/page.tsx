@@ -11,10 +11,15 @@ import {
   Button,
   type Column,
 } from "@/components/ui";
-import { LuPlus, LuClipboardCheck } from "react-icons/lu";
+import { LuPlus } from "react-icons/lu";
+import { selectUserRole } from "@/features/auth/authSelectors";
+import { useAppSelector } from "@/redux/hooks";
+import { hasPermission } from "@/lib/permissions";
 
 export default function VisitsPage() {
   const { t } = useTranslation();
+  const role = useAppSelector(selectUserRole);
+  const canCreateVisit = hasPermission(role, "visits.create");
   const [queryParams, setQueryParams] = useState<VisitQueryParams>({
     page: 1,
     limit: 10,
@@ -102,7 +107,7 @@ export default function VisitsPage() {
       <PageHeader
         title={t("visits.title")}
         subtitle={t("visits.subtitle")}
-        actions={
+        actions={canCreateVisit ? (
           <Link href="/visits/new">
             <Button
               variant="primary"
@@ -112,7 +117,7 @@ export default function VisitsPage() {
               {t("visits.newConsultation")}
             </Button>
           </Link>
-        }
+        ) : undefined}
       />
 
       <DataTable

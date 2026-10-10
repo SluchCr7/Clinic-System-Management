@@ -193,6 +193,21 @@ const applyDoctorScope = async (
       : doctor._id;
 };
 
+const getDoctorScopeId = async (currentUser, Doctor) => {
+  if (currentUser?.role !== "doctor") {
+      return undefined;
+  }
+
+  const doctor = await Doctor.findOne({
+      user: currentUser._id,
+  })
+      .select("_id")
+      .lean()
+      .exec();
+
+  return doctor?._id ?? null;
+};
+
 module.exports = {
   objectId,
   createListQuerySchema,
@@ -200,4 +215,5 @@ module.exports = {
   getSort,
   applyCairoDateRange,
   applyDoctorScope,
+  getDoctorScopeId,
 };

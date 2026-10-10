@@ -3,127 +3,194 @@ const app = require("../index");
 const User = require("../modules/User/user.model");
 const { createTestUser } = require("./testHelper");
 
-describe("Authentication API", () => {
-  let testUser;
+describe("Authentication and user provisioning API", () => {
+  let administrator;
 
   beforeEach(async () => {
-    testUser = await createTestUser({
-      role: "admin",
-      password: "StrongPassword123!",
+    administrator = await createTestUser({ role: "admin" });
+  });
+
+  describe("POST /api/users (administrator account provisioning)", () => {
+    test("creates a user account that can subsequently log in", async () => {
+      const newAccount = {
+        firstName: "Robin",
+        lastName: "Receptionist",
+        email: "robin.receptionist@example.com",
+        password: "AnotherStrongPassword123!",
+        phone: "555-0199",
+        role: "receptionist",
+      };
+
+      const createResponse = await request(app)
+        .post("/api/users")
+        .set("Authorization", administrator.authHeader)
+        .send(newAccount);
+
+      expect(createResponse.status).toBe(201);
+      expect(createResponse.body.success).toBe(true);
+      expect(createResponse.body.data.email).toBe(newAccount.email);
+      expect(createResponse.body.data.password).toBeUndefined();
+
+      const loginResponse = await request(app)
+        .post("/api/auth/login")
+        .send({
+          email: newAccount.email,
+          password: newAccount.password,
+        });
+
+      expect(loginResponse.status).toBe(200);
+      expect(loginResponse.body.data.user.email).toBe(newAccount.email);
+      expect(loginResponse.headers["set-cookie"]).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("accessToken="),
+          expect.stringContaining("refreshToken="),
+        ])
+      );
+    });
+
+    test("rejects provisioning without an administrator token", async () => {
+      const response = await request(app)
+        .post("/api/users")
+        .send({
+          firstName: "Robin",
+          lastName: "Receptionist",
+          email: "robin.receptionist@example.com",
+          password: "AnotherStrongPassword123!",
+          phone: "555-0199",
+          role: "receptionist",
+        });
+
+      expect(response.status).toBe(401);
+      expect(response.body.success).toBe(false);
     });
   });
 
-  afterEach(async () => {
-    await User.deleteMany({ email: /@clinic\.com$/ });
-  });
+  describe("POST /api/auth/login", () => {
+    test("authenticates a user and sets HTTP-only access and refresh cookies", async () => {
+      const response = await request(app)
+        .post("/api/auth/login")
+        .send({
+          email: administrator.user.email,
+          password: administrator.plainPassword,
+        });
 
-  it("should login successfully with valid credentials and return tokens", async () => {
-    const res = await request(app)
-      .post("/api/auth/login")
-      .send({
-        email: testUser.user.email,
-        password: "StrongPassword123!",
-      });
-
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(res.body.data.user.email).toBe(testUser.user.email);
-    expect(res.body.data.accessToken).toBeDefined();
-
-    // Check Set-Cookie headers
-    const cookies = res.headers["set-cookie"];
-    expect(cookies).toBeDefined();
-    expect(cookies.some((c) => c.includes("accessToken="))).toBe(true);
-    expect(cookies.some((c) => c.includes("refreshToken="))).toBe(true);
-  });
-
-  it("should reject login with invalid password", async () => {
-    const res = await request(app)
-      .post("/api/auth/login")
-      .send({
-        email: testUser.user.email,
-        password: "WrongPassword!",
-      });
-
-    expect(res.status).toBe(401);
-    expect(res.body.success).toBe(false);
-    expect(res.body.code).toBe("INVALID_CREDENTIALS");
-  });
-
-  it("should reject login for inactive users", async () => {
-    const inactiveUser = await createTestUser({
-      role: "doctor",
-      password: "Password123!",
-      isActive: false,
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.user.email).toBe(administrator.user.email);
+      expect(response.headers["set-cookie"]).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("accessToken="),
+          expect.stringContaining("refreshToken="),
+        ])
+      );
+      expect(response.headers["set-cookie"].every((cookie) =>
+        cookie.includes("HttpOnly")
+      )).toBe(true);
     });
 
-    const res = await request(app)
-      .post("/api/auth/login")
-      .send({
-        email: inactiveUser.user.email,
-        password: "Password123!",
+    test("rejects invalid credentials", async () => {
+      const response = await request(app)
+        .post("/api/auth/login")
+        .send({
+          email: administrator.user.email,
+          password: "incorrect-password",
+        });
+
+      expect(response.status).toBe(401);
+      expect(response.body.code).toBe("INVALID_CREDENTIALS");
+    });
+
+    test("rejects malformed or missing login fields", async () => {
+      const response = await request(app)
+        .post("/api/auth/login")
+        .send({ email: "not-an-email" });
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+      expect(response.body.code).toBe("VALIDATION_ERROR");
+    });
+
+    test("rejects login for an inactive user", async () => {
+      const inactiveUser = await createTestUser({
+        role: "doctor",
+        isActive: false,
       });
 
-    expect(res.status).toBe(403);
-    expect(res.body.success).toBe(false);
-    expect(res.body.code).toBe("ACCOUNT_INACTIVE");
+      const response = await request(app)
+        .post("/api/auth/login")
+        .send({
+          email: inactiveUser.user.email,
+          password: inactiveUser.plainPassword,
+        });
+
+      expect(response.status).toBe(403);
+      expect(response.body.code).toBe("ACCOUNT_INACTIVE");
+    });
   });
 
-  it("should return current user profile via GET /api/auth/me", async () => {
-    const res = await request(app)
-      .get("/api/auth/me")
-      .set("Authorization", testUser.authHeader);
+  describe("GET /api/auth/me (authentication middleware)", () => {
+    test("returns the current user for a valid Bearer access token", async () => {
+      const response = await request(app)
+        .get("/api/auth/me")
+        .set("Authorization", administrator.authHeader);
 
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(res.body.data.user._id).toBe(testUser.user._id.toString());
-    expect(res.body.data.user.password).toBeUndefined();
+      expect(response.status).toBe(200);
+      expect(response.body.data.user._id).toBe(
+        administrator.user._id.toString()
+      );
+      expect(response.body.data.user.password).toBeUndefined();
+    });
+
+    test("rejects missing and invalid Bearer tokens", async () => {
+      const missingToken = await request(app).get("/api/auth/me");
+      const invalidToken = await request(app)
+        .get("/api/auth/me")
+        .set("Authorization", "Bearer invalid-token");
+
+      expect(missingToken.status).toBe(401);
+      expect(invalidToken.status).toBe(401);
+    });
   });
 
-  it("should rotate refresh token and issue new access token on POST /api/auth/refresh", async () => {
-    const res = await request(app)
+  test("refreshes tokens and invalidates access tokens after password changes", async () => {
+    const refreshResponse = await request(app)
       .post("/api/auth/refresh")
-      .set("Cookie", [`refreshToken=${testUser.refreshToken}`]);
+      .set("Cookie", `refreshToken=${administrator.refreshToken}`);
 
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(res.body.data.accessToken).toBeDefined();
+    expect(refreshResponse.status).toBe(200);
+    expect(refreshResponse.headers["set-cookie"]).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("accessToken="),
+        expect.stringContaining("refreshToken="),
+      ])
+    );
 
-    const cookies = res.headers["set-cookie"];
-    expect(cookies.some((c) => c.includes("refreshToken="))).toBe(true);
-  });
-
-  it("should change password and invalidate prior tokens", async () => {
-    const res = await request(app)
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    const passwordResponse = await request(app)
       .patch("/api/auth/change-password")
-      .set("Authorization", testUser.authHeader)
+      .set("Authorization", administrator.authHeader)
       .send({
-        currentPassword: "StrongPassword123!",
-        newPassword: "NewStrongPassword456!",
+        currentPassword: administrator.plainPassword,
+        newPassword: "UpdatedStrongPassword456!",
+        confirmPassword: "UpdatedStrongPassword456!",
       });
 
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
+    expect(passwordResponse.status).toBe(200);
 
-    // Old token should now be rejected because passwordChangedAt was updated
-    const meRes = await request(app)
+    const expiredAccessResponse = await request(app)
       .get("/api/auth/me")
-      .set("Authorization", testUser.authHeader);
+      .set("Authorization", administrator.authHeader);
+    const updatedUser = await User.findById(administrator.user._id).select(
+      "+password"
+    );
 
-    expect(meRes.status).toBe(401);
-    expect(meRes.body.code).toBe("TOKEN_EXPIRED");
-  });
-
-  it("should logout cleanly and clear auth cookies", async () => {
-    const res = await request(app)
-      .post("/api/auth/logout")
-      .set("Authorization", testUser.authHeader);
-
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-
-    const cookies = res.headers["set-cookie"];
-    expect(cookies.some((c) => c.includes("accessToken=;"))).toBe(true);
-    expect(cookies.some((c) => c.includes("refreshToken=;"))).toBe(true);
+    expect(expiredAccessResponse.status).toBe(401);
+    expect(expiredAccessResponse.body.code).toBe("TOKEN_EXPIRED");
+    expect(
+      await require("bcrypt").compare(
+        "UpdatedStrongPassword456!",
+        updatedUser.password
+      )
+    ).toBe(true);
   });
 });

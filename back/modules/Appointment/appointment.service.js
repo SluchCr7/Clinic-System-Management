@@ -9,6 +9,7 @@ const {
   getSort,
   applyCairoDateRange,
   applyDoctorScope,
+  getDoctorScopeId,
 } = require("../../utils/listQuery");
 
 const CLINIC_TIMEZONE = "Africa/Cairo";
@@ -275,8 +276,15 @@ const getAppointments = async (query = {}, currentUser = null) => {
   );
 };
 
-const getAppointmentById = async (id) => {
-  return await Appointment.findById(id)
+const getAppointmentById = async (id, currentUser = null) => {
+  const filter = { _id: id };
+  if (currentUser?.role === "doctor") {
+    const doctorId = await getDoctorScopeId(currentUser, Doctor);
+    if (!doctorId) return null;
+    filter.doctor = doctorId;
+  }
+
+  return await Appointment.findOne(filter)
     .populate("patient", "firstName lastName phone email dateOfBirth gender")
     .populate({
       path: "doctor",

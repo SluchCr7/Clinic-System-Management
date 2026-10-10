@@ -33,7 +33,8 @@ const getPerformedServices = asyncHandler(async (req, res) => {
 const getPerformedServiceById = asyncHandler(async (req, res) => {
   const performedService =
     await performedServiceService.getPerformedServiceById(
-      req.params.id
+      req.params.id,
+      req.user
     );
 
   if (!performedService) {

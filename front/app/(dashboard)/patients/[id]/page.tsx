@@ -11,6 +11,9 @@ import { useGetPrescriptionsQuery } from "@/services/api/prescriptionApi";
 import { useGetLabOrdersQuery } from "@/services/api/labOrderApi";
 import { useGetMedicalAttachmentsQuery } from "@/services/api/medicalAttachmentApi";
 import { useGetInvoicesQuery } from "@/services/api/invoiceApi";
+import { selectUserRole } from "@/features/auth/authSelectors";
+import { useAppSelector } from "@/redux/hooks";
+import { hasPermission } from "@/lib/permissions";
 import {
   PageHeader,
   Card,
@@ -31,16 +34,15 @@ import {
   LuTriangleAlert,
   LuShieldAlert,
   LuCalendar,
-  LuClipboardCheck,
-  LuFileText,
-  LuFlaskConical,
   LuPaperclip,
-  LuReceipt,
   LuPlus,
 } from "react-icons/lu";
 
 export default function PatientProfilePage() {
   const { t } = useTranslation();
+  const role = useAppSelector(selectUserRole);
+  const canBookAppointment = hasPermission(role, "appointments.create");
+  const canCreateVisit = hasPermission(role, "visits.create");
   const params = useParams();
   const patientId = params.id as string;
 
@@ -126,20 +128,24 @@ export default function PatientProfilePage() {
           </Link>
         }
         badge={<StatusBadge status={patient.isActive ? "active" : "inactive"} size="sm" />}
-        actions={
+        actions={canBookAppointment || canCreateVisit ? (
           <div className="flex items-center gap-2">
-            <Link href="/appointments">
-              <Button variant="secondary" size="sm" leftIcon={<LuCalendar className="w-3.5 h-3.5" />}>
-                {t("patientProfile.bookAppointment")}
-              </Button>
-            </Link>
-            <Link href="/visits/new">
-              <Button variant="primary" size="sm" leftIcon={<LuPlus className="w-3.5 h-3.5" />}>
-                {t("patientProfile.startConsultation")}
-              </Button>
-            </Link>
+            {canBookAppointment && (
+              <Link href="/appointments">
+                <Button variant="secondary" size="sm" leftIcon={<LuCalendar className="w-3.5 h-3.5" />}>
+                  {t("patientProfile.bookAppointment")}
+                </Button>
+              </Link>
+            )}
+            {canCreateVisit && (
+              <Link href="/visits/new">
+                <Button variant="primary" size="sm" leftIcon={<LuPlus className="w-3.5 h-3.5" />}>
+                  {t("patientProfile.startConsultation")}
+                </Button>
+              </Link>
+            )}
           </div>
-        }
+        ) : undefined}
       />
 
       {/* Medical Record Top Identity Banner */}
@@ -155,7 +161,7 @@ export default function PatientProfilePage() {
                 {patient.firstName} {patient.lastName}
               </p>
               <p className="text-xs text-slate-muted capitalize mt-0.5">
-                {patient.gender} • {t("patientProfile.ageYears", { count: age })}
+                {t(`patientProfile.genderOptions.${patient.gender}`, { defaultValue: patient.gender })} • {t("patientProfile.ageYears", { count: age })}
               </p>
               <p className="text-[11px] text-slate-light font-mono mt-0.5">
                 {t("patientProfile.dob")}: {new Date(patient.dateOfBirth).toLocaleDateString()}
@@ -176,7 +182,7 @@ export default function PatientProfilePage() {
             <div className="flex items-center gap-2 truncate">
               <LuMapPin className="w-3.5 h-3.5 text-slate-light shrink-0" />
               <span className="truncate">
-                {patient.address?.city || "Cairo"}, {patient.address?.country || "Egypt"}
+                {patient.address?.city || t("patientProfile.defaultCity")}, {patient.address?.country || t("patientProfile.defaultCountry")}
               </span>
             </div>
           </div>
@@ -439,7 +445,13 @@ export default function PatientProfilePage() {
             {
               key: "type",
               header: t("patientProfile.category"),
-              render: (f) => <span className="capitalize">{f.type.replace(/_/g, " ")}</span>,
+              render: (f) => (
+                <span className="capitalize">
+                  {t(`patientProfile.attachmentTypes.${f.type}`, {
+                    defaultValue: f.type.replace(/_/g, " "),
+                  })}
+                </span>
+              ),
             },
             {
               key: "date",

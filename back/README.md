@@ -90,6 +90,16 @@ cd back
 npm test
 ```
 
+The Jest suite starts a temporary single-node MongoDB replica set, creates a
+separate database per test file, clears collections around each test, and
+stops the server during global teardown. A replica set is used because invoice
+and payment services perform multi-document transactions. The first run may
+download the MongoDB binary required by `mongodb-memory-server`.
+
+Integration suites cover authentication and admin user provisioning,
+appointments and scheduling conflicts, patient records, invoice calculations,
+payment balance/status changes, and appointment reminder delivery.
+
 ## Appointment Reminders
 
 The reminder worker starts after MongoDB connects and checks for eligible

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useTranslation } from "react-i18next";
 import { useGetPrescriptionsQuery } from "@/services/api/prescriptionApi";
 import type { Prescription, PrescriptionQueryParams } from "@/types/prescription";
 import {
@@ -10,9 +11,10 @@ import {
   Button,
   type Column,
 } from "@/components/ui";
-import { LuPrinter, LuEye } from "react-icons/lu";
+import { LuPrinter } from "react-icons/lu";
 
 export default function PrescriptionsPage() {
+  const { t } = useTranslation();
   const [queryParams, setQueryParams] = useState<PrescriptionQueryParams>({
     page: 1,
     limit: 10,
@@ -25,7 +27,7 @@ export default function PrescriptionsPage() {
   const columns: Column<Prescription>[] = [
     {
       key: "date",
-      header: "Date Prescribed",
+      header: t("prescriptions.datePrescribed"),
       render: (rx) => (
         <span className="font-mono text-xs font-semibold text-ink">
           {new Date(rx.createdAt).toLocaleDateString()}
@@ -34,32 +36,32 @@ export default function PrescriptionsPage() {
     },
     {
       key: "patient",
-      header: "Patient",
+      header: t("prescriptions.patient"),
       render: (rx) => {
         const p = typeof rx.patient === "object" && rx.patient ? rx.patient : null;
         return (
           <span className="font-semibold text-ink text-xs">
-            {p ? `${p.firstName} ${p.lastName}` : "Patient"}
+            {p ? `${p.firstName} ${p.lastName}` : t("prescriptions.patient")}
           </span>
         );
       },
     },
     {
       key: "doctor",
-      header: "Prescribing Physician",
+      header: t("prescriptions.prescribingPhysician"),
       render: (rx) => {
         const doc = typeof rx.doctor === "object" && rx.doctor ? rx.doctor : null;
         const u = doc && typeof doc.user === "object" && doc.user ? doc.user : null;
         return (
           <span className="text-xs text-slate-dark">
-            {u ? `Dr. ${u.lastName}` : "Physician"}
+            {u ? `Dr. ${u.lastName}` : t("prescriptions.physician")}
           </span>
         );
       },
     },
     {
       key: "medications",
-      header: "Medications",
+      header: t("prescriptions.medications"),
       render: (rx) => (
         <div className="flex flex-col gap-0.5">
           {rx.medications.map((m, idx) => (
@@ -81,7 +83,7 @@ export default function PrescriptionsPage() {
             size="sm"
             leftIcon={<LuPrinter className="w-3.5 h-3.5" />}
           >
-            Print / View
+            {t("prescriptions.printView")}
           </Button>
         </Link>
       ),
@@ -91,8 +93,8 @@ export default function PrescriptionsPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Pharmaceutical Prescriptions"
-        subtitle="Manage and print patient pharmacy prescriptions"
+        title={t("prescriptions.title")}
+        subtitle={t("prescriptions.subtitle")}
       />
 
       <DataTable
@@ -101,8 +103,8 @@ export default function PrescriptionsPage() {
         isLoading={isLoading}
         isError={isError}
         onRetry={refetch}
-        emptyTitle="No prescriptions on record"
-        emptyDescription="No pharmacological prescriptions have been issued."
+        emptyTitle={t("prescriptions.emptyTitle")}
+        emptyDescription={t("prescriptions.emptyDescription")}
         pagination={data?.pagination}
         onPageChange={(page) => setQueryParams((prev) => ({ ...prev, page }))}
       />
