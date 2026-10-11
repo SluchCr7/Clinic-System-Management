@@ -34,7 +34,7 @@ router.post(
 router.get(
   "/",
   protect,
-  authorize("admin", "doctor", "receptionist"),
+  authorize("admin", "doctor"),
   validateQuery(labOrderListQuerySchema),
   labOrderController.getLabOrders
 );
@@ -46,7 +46,7 @@ router.get(
 router.get(
   "/:id",
   protect,
-  authorize("admin", "doctor", "receptionist"),
+  authorize("admin", "doctor"),
   validateId("id"),
   labOrderController.getLabOrderById
 );

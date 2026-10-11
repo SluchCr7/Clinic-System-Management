@@ -82,6 +82,11 @@ const errorHandler = (err, req, res, next) => {
     error = new AppError("Not allowed by CORS", 403, "CORS_FORBIDDEN");
   }
 
+  // Malformed JSON in Request Body
+  if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
+    error = new AppError("Malformed JSON in request body", 400, "INVALID_JSON");
+  }
+
   // Payload Too Large
   if (err.type === "entity.too.large") {
     error = new AppError("Request payload too large", 413, "PAYLOAD_TOO_LARGE");

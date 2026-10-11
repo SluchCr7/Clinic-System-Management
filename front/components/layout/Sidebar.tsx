@@ -98,7 +98,7 @@ export default function Sidebar({
           label: t("nav.visits"),
           href: "/visits",
           icon: <LuClipboardCheck className="w-4 h-4" />,
-          roles: ["admin", "doctor", "receptionist"],
+          roles: ["admin", "doctor"],
         },
         {
           label: t("nav.prescriptions"),
@@ -110,7 +110,7 @@ export default function Sidebar({
           label: t("nav.labOrders"),
           href: "/lab-orders",
           icon: <LuFlaskConical className="w-4 h-4" />,
-          roles: ["admin", "doctor", "receptionist"],
+          roles: ["admin", "doctor"],
         },
       ],
     },

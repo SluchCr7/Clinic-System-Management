@@ -225,11 +225,7 @@ const getVisitById = async (id, currentUser = null) => {
 
     const visitDoctorId = visit.doctor?._id || visit.doctor;
     if (!doctor || doctor._id.toString() !== visitDoctorId.toString()) {
-      throw new AppError(
-        "You are not authorized to access this visit",
-        403,
-        "FORBIDDEN"
-      );
+      return null;
     }
   }
 
@@ -252,11 +248,7 @@ const updateVisit = async (id, data, currentUser) => {
       .exec();
 
     if (!doctor || doctor._id.toString() !== visit.doctor.toString()) {
-      throw new AppError(
-        "You are not authorized to update this visit",
-        403,
-        "FORBIDDEN"
-      );
+      return null;
     }
   }
 
@@ -269,7 +261,22 @@ const updateVisit = async (id, data, currentUser) => {
     followUpDate: visit.followUpDate,
   };
 
-  Object.assign(visit, data);
+  const allowedFields = [
+    "chiefComplaint",
+    "symptoms",
+    "vitals",
+    "examination",
+    "diagnosis",
+    "doctorNotes",
+    "followUpDate",
+  ];
+
+  for (const field of allowedFields) {
+    if (data[field] !== undefined) {
+      visit[field] = data[field];
+    }
+  }
+
   visit.updatedBy = currentUser._id;
 
   await visit.save();

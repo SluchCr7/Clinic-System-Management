@@ -185,9 +185,27 @@ const updatePatient = async (id, data, user) => {
     isActive: patient.isActive,
   };
 
-  Object.assign(patient, data, {
-    updatedBy: user?._id || patient.updatedBy,
-  });
+  const allowedFields = [
+    "firstName",
+    "lastName",
+    "dateOfBirth",
+    "gender",
+    "phone",
+    "email",
+    "bloodType",
+    "allergies",
+    "chronicDiseases",
+    "address",
+    "emergencyContact",
+  ];
+
+  for (const field of allowedFields) {
+    if (data[field] !== undefined) {
+      patient[field] = data[field];
+    }
+  }
+
+  patient.updatedBy = user?._id || patient.updatedBy;
 
   await patient.save();
 

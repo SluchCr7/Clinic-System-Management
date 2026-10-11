@@ -1,7 +1,13 @@
 import React from "react";
 import { TableRowSkeleton } from "./Skeleton";
 import { EmptyState, ErrorState } from "./EmptyState";
-import { LuChevronLeft, LuChevronRight, LuArrowUpDown } from "react-icons/lu";
+import {
+  LuChevronLeft,
+  LuChevronRight,
+  LuArrowUpDown,
+  LuArrowUp,
+  LuArrowDown,
+} from "react-icons/lu";
 import type { Pagination as PaginationType } from "@/types/api";
 
 export interface Column<T> {
@@ -86,11 +92,15 @@ export function DataTable<T extends { _id?: string; id?: string }>({
                         className="inline-flex items-center gap-1 hover:text-ink transition-colors focus:outline-none"
                       >
                         <span>{col.header}</span>
-                        <LuArrowUpDown
-                          className={`w-3 h-3 ${
-                            isSorted ? "text-teal-primary" : "text-slate-light"
-                          }`}
-                        />
+                        {isSorted ? (
+                          sortOrder === "asc" ? (
+                            <LuArrowUp className="w-3 h-3 text-teal-primary" />
+                          ) : (
+                            <LuArrowDown className="w-3 h-3 text-teal-primary" />
+                          )
+                        ) : (
+                          <LuArrowUpDown className="w-3 h-3 text-slate-light" />
+                        )}
                       </button>
                     ) : (
                       col.header

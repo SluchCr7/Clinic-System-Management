@@ -15,7 +15,7 @@ const generateInvoiceNumber = async (session) => {
       },
     },
     {
-      new: true,
+      returnDocument: "after",
       upsert: true,
       session,
     }

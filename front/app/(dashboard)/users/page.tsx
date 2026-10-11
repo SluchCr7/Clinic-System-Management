@@ -29,11 +29,9 @@ import {
 import { extractApiError } from "@/services/api/baseQuery";
 import {
   LuPlus,
-  LuShieldCheck,
   LuPencil,
   LuTrash2,
   LuCircleCheck,
-  LuUser,
 } from "react-icons/lu";
 
 export default function UsersPage() {

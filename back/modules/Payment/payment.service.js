@@ -192,7 +192,7 @@ const createPayment = async (data, currentUser) => {
           },
         },
         {
-          new: true,
+          returnDocument: "after",
           session,
         }
       );

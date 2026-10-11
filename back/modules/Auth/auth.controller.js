@@ -1,6 +1,13 @@
 const asyncHandler = require("express-async-handler");
-
 const authService = require("./auth.service");
+
+const getCookieOptions = (maxAge = null) => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  path: "/",
+  ...(maxAge ? { maxAge } : {}),
+});
 
 // Login
 const login = asyncHandler(async (req, res) => {
@@ -12,25 +19,15 @@ const login = asyncHandler(async (req, res) => {
       userAgent: req.get("user-agent"),
     });
 
-  // Access Token
-  res.cookie("accessToken", accessToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production"
-      ? "none"
-      : "lax",
-    maxAge: 15 * 60 * 1000,
-  });
+  // Access Token Cookie
+  res.cookie("accessToken", accessToken, getCookieOptions(15 * 60 * 1000));
 
-  // Refresh Token
-  res.cookie("refreshToken", refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production"
-      ? "none"
-      : "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
+  // Refresh Token Cookie
+  res.cookie(
+    "refreshToken",
+    refreshToken,
+    getCookieOptions(7 * 24 * 60 * 60 * 1000)
+  );
 
   res.status(200).json({
     success: true,
@@ -58,16 +55,17 @@ const getMe = asyncHandler(async (req, res) => {
   });
 });
 
-const cookieOptions = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite:
-    process.env.NODE_ENV === "production" ? "none" : "lax",
-};
-
 const logout = asyncHandler(async (req, res) => {
-  res.clearCookie("accessToken", cookieOptions);
-  res.clearCookie("refreshToken", cookieOptions);
+  const refreshToken = req.cookies?.refreshToken;
+
+  await authService.logout(refreshToken, req.user || null, {
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent"),
+  });
+
+  const clearOptions = getCookieOptions();
+  res.clearCookie("accessToken", clearOptions);
+  res.clearCookie("refreshToken", clearOptions);
 
   res.status(200).json({
     success: true,
@@ -83,25 +81,12 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     userAgent: req.get("user-agent"),
   });
 
-  res.cookie("accessToken", tokens.accessToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite:
-      process.env.NODE_ENV === "production"
-        ? "none"
-        : "lax",
-    maxAge: 15 * 60 * 1000,
-  });
-
-  res.cookie("refreshToken", tokens.refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite:
-      process.env.NODE_ENV === "production"
-        ? "none"
-        : "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
+  res.cookie("accessToken", tokens.accessToken, getCookieOptions(15 * 60 * 1000));
+  res.cookie(
+    "refreshToken",
+    tokens.refreshToken,
+    getCookieOptions(7 * 24 * 60 * 60 * 1000)
+  );
 
   res.status(200).json({
     success: true,
@@ -119,6 +104,11 @@ const changePassword = asyncHandler(async (req, res) => {
     req.user
   );
 
+  // Clear existing cookies so user is prompted to re-authenticate with new credentials
+  const clearOptions = getCookieOptions();
+  res.clearCookie("accessToken", clearOptions);
+  res.clearCookie("refreshToken", clearOptions);
+
   res.status(200).json({
     success: true,
     message: "Password Updated Successfully",
@@ -126,9 +116,9 @@ const changePassword = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
-    login,
-    getMe,
-    logout,
-    refreshAccessToken,
-    changePassword
+  login,
+  getMe,
+  logout,
+  refreshAccessToken,
+  changePassword,
 };

@@ -24,7 +24,7 @@ router.post(
 router.get(
   "/",
   protect,
-  authorize("admin", "doctor", "receptionist"),
+  authorize("admin", "doctor"),
   validateQuery(visitListQuerySchema),
   visitController.getVisits
 );
@@ -33,7 +33,7 @@ router.get(
 router.get(
   "/:id",
   protect,
-  authorize("admin", "doctor", "receptionist"),
+  authorize("admin", "doctor"),
   validateId("id", "visit ID"),
   visitController.getVisitById
 );

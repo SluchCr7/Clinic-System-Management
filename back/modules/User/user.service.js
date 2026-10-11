@@ -124,6 +124,15 @@ const updateUser = async (id, data, currentUser = null) => {
     isActive: user.isActive,
   };
 
+  const isDeactivatedOrRoleChanged =
+    (data.isActive !== undefined && !data.isActive) ||
+    (data.role && data.role !== user.role);
+
+  if (isDeactivatedOrRoleChanged) {
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+    user.activeRefreshTokens = [];
+  }
+
   Object.assign(user, data);
 
   if (currentUser?._id) {
@@ -183,6 +192,8 @@ const deactivateUser = async (id, currentUser = null) => {
   const previousIsActive = user.isActive;
 
   user.isActive = false;
+  user.tokenVersion = (user.tokenVersion || 0) + 1;
+  user.activeRefreshTokens = [];
 
   if (currentUser?._id) {
     user.updatedBy = currentUser._id;

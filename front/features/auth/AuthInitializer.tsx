@@ -33,27 +33,13 @@ export default function AuthInitializer({ children }: AuthInitializerProps) {
     }
   }, [isInitialized, isLoading, isSuccess, isError, data, dispatch]);
     useEffect(() => {
-      console.log("🔵 Socket effect", {
-        isInitialized,
-        currentUser,
-      });
-
-      if (!isInitialized) {
-        console.log("⏳ Auth not initialized");
+      if (!isInitialized || !currentUser) {
         return;
       }
-
-      if (!currentUser) {
-        console.log("❌ No current user");
-        return;
-      }
-
-      console.log("🟢 Connecting socket...");
 
       socket.connect();
 
       return () => {
-        console.log("🔴 Disconnecting socket...");
         socket.disconnect();
       };
     }, [isInitialized, currentUser]);

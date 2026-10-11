@@ -1,8 +1,12 @@
+const crypto = require("crypto");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const User = require("../User/user.model");
 const { AppError } = require("../../middlewares/errorHandler");
-const { generateRefreshToken, generateAccessToken } = require("../../middlewares/generateToken");
+const {
+  generateRefreshToken,
+  generateAccessToken,
+} = require("../../middlewares/generateToken");
 const auditLogService = require("../AuditLog/auditLog.service");
 
 const login = async (email, password, requestInfo = {}) => {
@@ -44,11 +48,13 @@ const login = async (email, password, requestInfo = {}) => {
     );
   }
 
-  const accessToken = generateAccessToken(user);
-  const refreshToken = generateRefreshToken(user);
-
+  const tokenId = crypto.randomUUID();
+  user.activeRefreshTokens = [{ tokenId, createdAt: new Date() }];
   user.lastLogin = new Date();
   await user.save();
+
+  const accessToken = generateAccessToken(user);
+  const refreshToken = generateRefreshToken(user, tokenId);
 
   await auditLogService.logActivity({
     actor: user,
@@ -110,6 +116,14 @@ const refreshAccessToken = async (refreshToken, requestInfo = {}) => {
     );
   }
 
+  if (decoded.type && decoded.type !== "refresh") {
+    throw new AppError(
+      "Invalid refresh token",
+      401,
+      "INVALID_REFRESH_TOKEN"
+    );
+  }
+
   const user = await User.findById(decoded.id);
 
   if (!user) {
@@ -143,8 +157,70 @@ const refreshAccessToken = async (refreshToken, requestInfo = {}) => {
     }
   }
 
+  if (
+    decoded.tokenVersion !== undefined &&
+    user.tokenVersion !== undefined &&
+    decoded.tokenVersion < user.tokenVersion
+  ) {
+    throw new AppError(
+      "Refresh token has been revoked",
+      401,
+      "REFRESH_TOKEN_EXPIRED"
+    );
+  }
+
+  // Refresh Token Replay Detection
+  if (decoded.tokenId && Array.isArray(user.activeRefreshTokens) && user.activeRefreshTokens.length > 0) {
+    const tokenIndex = user.activeRefreshTokens.findIndex(
+      (t) => t.tokenId === decoded.tokenId
+    );
+
+    if (tokenIndex === -1) {
+      // Replay detected! An old/already used refresh token was presented.
+      user.activeRefreshTokens = [];
+      user.tokenVersion = (user.tokenVersion || 0) + 1;
+      await user.save();
+
+      await auditLogService.logActivity({
+        actor: user,
+        action: "REFRESH_TOKEN_REPLAY_DETECTED",
+        resource: "User",
+        resourceId: user._id,
+        details: { email: user.email, tokenId: decoded.tokenId },
+        ipAddress: requestInfo.ipAddress || null,
+        userAgent: requestInfo.userAgent || null,
+      });
+
+      throw new AppError(
+        "Suspicious token reuse detected. All sessions have been terminated",
+        401,
+        "INVALID_REFRESH_TOKEN"
+      );
+    }
+
+    // Remove the consumed token
+    user.activeRefreshTokens.splice(tokenIndex, 1);
+  }
+
+  // Issue new rotated token
+  const newTokenId = crypto.randomUUID();
+  if (!Array.isArray(user.activeRefreshTokens)) {
+    user.activeRefreshTokens = [];
+  }
+  user.activeRefreshTokens.push({
+    tokenId: newTokenId,
+    createdAt: new Date(),
+  });
+
+  // Limit stored active sessions to at most 10
+  if (user.activeRefreshTokens.length > 10) {
+    user.activeRefreshTokens = user.activeRefreshTokens.slice(-10);
+  }
+
+  await user.save();
+
   const newAccessToken = generateAccessToken(user);
-  const newRefreshToken = generateRefreshToken(user);
+  const newRefreshToken = generateRefreshToken(user, newTokenId);
 
   await auditLogService.logActivity({
     actor: user,
@@ -160,6 +236,43 @@ const refreshAccessToken = async (refreshToken, requestInfo = {}) => {
     accessToken: newAccessToken,
     refreshToken: newRefreshToken,
   };
+};
+
+const logout = async (refreshToken, currentUser = null, requestInfo = {}) => {
+  let user = currentUser;
+
+  if (refreshToken) {
+    try {
+      const decoded = jwt.decode(refreshToken);
+      if (decoded?.id) {
+        const foundUser = await User.findById(decoded.id);
+        if (foundUser) {
+          user = foundUser;
+          foundUser.tokenVersion = (foundUser.tokenVersion || 0) + 1;
+          foundUser.activeRefreshTokens = [];
+          await foundUser.save();
+        }
+      }
+    } catch (e) {
+      // Ignore malformed token on logout
+    }
+  } else if (user) {
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+    user.activeRefreshTokens = [];
+    await user.save();
+  }
+
+  if (user?._id) {
+    await auditLogService.logActivity({
+      actor: user,
+      action: "LOGOUT_SUCCESS",
+      resource: "User",
+      resourceId: user._id,
+      details: { email: user.email },
+      ipAddress: requestInfo.ipAddress || null,
+      userAgent: requestInfo.userAgent || null,
+    });
+  }
 };
 
 const changePassword = async (
@@ -200,6 +313,8 @@ const changePassword = async (
 
   user.password = await bcrypt.hash(newPassword, 12);
   user.passwordChangedAt = new Date();
+  user.tokenVersion = (user.tokenVersion || 0) + 1;
+  user.activeRefreshTokens = [];
 
   await user.save();
 
@@ -223,5 +338,6 @@ module.exports = {
   login,
   getMe,
   refreshAccessToken,
+  logout,
   changePassword,
 };

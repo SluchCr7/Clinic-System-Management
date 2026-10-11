@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 
 const generateAccessToken = (user) => {
   return jwt.sign(
@@ -6,6 +7,7 @@ const generateAccessToken = (user) => {
       id: user._id,
       role: user.role,
       type: "access",
+      tokenVersion: user.tokenVersion || 0,
     },
     process.env.JWT_ACCESS_SECRET,
     {
@@ -15,12 +17,14 @@ const generateAccessToken = (user) => {
   );
 };
 
-const generateRefreshToken = (user) => {
+const generateRefreshToken = (user, tokenId = null) => {
   return jwt.sign(
     {
       id: user._id,
       role: user.role,
       type: "refresh",
+      tokenId: tokenId || crypto.randomUUID(),
+      tokenVersion: user.tokenVersion || 0,
     },
     process.env.JWT_REFRESH_SECRET,
     {

@@ -15,8 +15,10 @@ const { AppError } = require("./utils/appError");
 const { errorHandler } = require("./middlewares/errorHandler");
 const http = require("http");
 const { Server } = require("socket.io");
-const socketAuth = require("./middlewares/socketAuth")
+const socketAuth = require("./middlewares/socketAuth");
 const { startReminderJob, stopReminderJob } = require("./utils/reminder");
+const requestId = require("./middlewares/requestId");
+const sanitize = require("./middlewares/sanitize");
 // Validate essential environment variables
 validateEnv();
 
@@ -107,13 +109,15 @@ const authLimiter = rateLimit({
   },
 });
 
+app.use(requestId);
+
 // -------------------------
 // Body Parsers & Sanitizers
 // -------------------------
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(cookieParser());
-// app.use(mongoSanitize());
+app.use(sanitize);
 app.use(hpp());
 
 // Apply rate limiter to general API

@@ -252,7 +252,21 @@ const updateSchedule = async (id, data, currentUser) => {
     );
   }
 
-  Object.assign(schedule, data);
+  const allowedFields = [
+    "dayOfWeek",
+    "startTime",
+    "endTime",
+    "breakStart",
+    "breakEnd",
+    "isActive",
+  ];
+
+  for (const field of allowedFields) {
+    if (data[field] !== undefined) {
+      schedule[field] = data[field];
+    }
+  }
+
   schedule.updatedBy = currentUser._id;
 
   await schedule.save();

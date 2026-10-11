@@ -60,20 +60,48 @@ const UserSchema = new mongoose.Schema(
       default: null,
     },
 
-    profilePhoto: {
-        url: {
-            type: String,
-            default: "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"
+    tokenVersion: {
+      type: Number,
+      default: 0,
+    },
+
+    activeRefreshTokens: [
+      {
+        tokenId: {
+          type: String,
+          required: true,
         },
-        publicId: {
-            type: String,
-            default: null
-        }
-    },  
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+
+    profilePhoto: {
+      url: {
+        type: String,
+        default:
+          "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png",
+      },
+      publicId: {
+        type: String,
+        default: null,
+      },
+    },
   },
   {
     timestamps: true,
   }
 );
+
+UserSchema.set("toJSON", {
+  transform: function (doc, ret) {
+    delete ret.password;
+    delete ret.activeRefreshTokens;
+    delete ret.__v;
+    return ret;
+  },
+});
 
 module.exports = mongoose.model("User", UserSchema);

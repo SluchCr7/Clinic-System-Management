@@ -14,9 +14,7 @@ import {
   type Column,
 } from "@/components/ui";
 import {
-  LuScrollText,
   LuEye,
-  LuShieldAlert,
   LuTerminal,
 } from "react-icons/lu";
 

@@ -140,7 +140,20 @@ const updateDoctor = async (id, data, currentUser) => {
     isActive: doctor.isActive,
   };
 
-  Object.assign(doctor, data);
+  const allowedFields = [
+    "specialization",
+    "licenseNumber",
+    "consultationFee",
+    "bio",
+    "yearsOfExperience",
+  ];
+
+  for (const field of allowedFields) {
+    if (data[field] !== undefined) {
+      doctor[field] = data[field];
+    }
+  }
+
   doctor.updatedBy = currentUser._id;
 
   await doctor.save();

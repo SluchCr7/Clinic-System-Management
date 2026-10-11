@@ -365,7 +365,21 @@ const updateAppointment = async (id, data, currentUser) => {
     });
   }
 
-  Object.assign(appointment, data);
+  const allowedFields = [
+    "appointmentDate",
+    "duration",
+    "status",
+    "reason",
+    "notes",
+    "cancellationReason",
+  ];
+
+  for (const field of allowedFields) {
+    if (data[field] !== undefined) {
+      appointment[field] = data[field];
+    }
+  }
+
   if (isRescheduled) {
     appointment.reminderSent = false;
   }
