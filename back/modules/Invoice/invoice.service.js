@@ -310,6 +310,22 @@ const createInvoice = async (data, currentUser) => {
     // -----------------------------------------
 
     await session.abortTransaction();
+    if (error.code === 11000) {
+      if (error.keyPattern?.visit || (error.keyValue && error.keyValue.visit)) {
+        throw new AppError(
+          "An invoice already exists for this visit",
+          409,
+          "INVOICE_ALREADY_EXISTS"
+        );
+      }
+      if (error.keyPattern?.invoiceNumber || (error.keyValue && error.keyValue.invoiceNumber)) {
+        throw new AppError(
+          "Invoice number already exists",
+          409,
+          "DUPLICATE_INVOICE_NUMBER"
+        );
+      }
+    }
     throw error;
   } finally {
     session.endSession();

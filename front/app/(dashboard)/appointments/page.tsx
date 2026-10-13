@@ -104,17 +104,29 @@ export default function AppointmentsPage() {
   // Cancellation Dialog State
   const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
 
+  const formatClinicDateTimeForInput = (date: Date) => {
+    const formatter = new Intl.DateTimeFormat("sv-SE", {
+      timeZone: "Africa/Cairo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+
+    return formatter.format(date).replace(" ", "T");
+  };
+
   const handleOpenBookModal = () => {
-    // Set default appointment date to tomorrow at 10:00
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(10, 0, 0, 0);
-    const isoDateString = tomorrow.toISOString().slice(0, 16);
 
     setBookingForm({
       patient: patientsData?.data?.[0]?._id || "",
       doctor: doctorsData?.data?.[0]?._id || "",
-      appointmentDate: isoDateString,
+      appointmentDate: formatClinicDateTimeForInput(tomorrow),
       duration: 30,
       reason: "",
       notes: "",
@@ -136,7 +148,7 @@ export default function AppointmentsPage() {
       const payload = {
         patient: bookingForm.patient,
         doctor: bookingForm.doctor,
-        appointmentDate: new Date(bookingForm.appointmentDate).toISOString(),
+        appointmentDate: bookingForm.appointmentDate,
         duration: Number(bookingForm.duration) || 30,
         reason: bookingForm.reason.trim() || undefined,
         notes: bookingForm.notes.trim() || undefined,

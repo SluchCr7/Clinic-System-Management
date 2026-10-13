@@ -16,13 +16,14 @@ const {
 describe("Doctor resource ownership", () => {
   let admin;
   let doctorUser;
+  let doctor;
   let otherDoctor;
   let patient;
 
   beforeEach(async () => {
     admin = await createTestUser({ role: "admin" });
     patient = await createTestPatient(admin.user);
-    ({ doctorUser } = await createTestDoctor(admin.user));
+    ({ doctor, doctorUser } = await createTestDoctor(admin.user));
     ({ doctor: otherDoctor } = await createTestDoctor(admin.user));
   });
 
@@ -145,5 +146,47 @@ describe("Doctor resource ownership", () => {
       .set("Authorization", doctorUser.authHeader);
 
     expect(response.status).toBe(404);
+  });
+
+  test("allows doctors to create schedules for their own profile without a doctor ID", async () => {
+    const response = await request(app)
+      .post("/api/schedules")
+      .set("Authorization", doctorUser.authHeader)
+      .send({
+        dayOfWeek: 1,
+        startTime: "09:00",
+        endTime: "17:00",
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.data.doctor).toBe(doctor._id.toString());
+  });
+
+  test("prevents doctors from creating or changing another doctor's schedule", async () => {
+    const createResponse = await request(app)
+      .post("/api/schedules")
+      .set("Authorization", doctorUser.authHeader)
+      .send({
+        doctor: otherDoctor._id.toString(),
+        dayOfWeek: 2,
+        startTime: "09:00",
+        endTime: "17:00",
+      });
+    const schedule = await Schedule.create({
+      doctor: otherDoctor._id,
+      dayOfWeek: 3,
+      startTime: "09:00",
+      endTime: "17:00",
+      createdBy: admin.user._id,
+    });
+    const updateResponse = await request(app)
+      .patch(`/api/schedules/${schedule._id}`)
+      .set("Authorization", doctorUser.authHeader)
+      .send({ startTime: "10:00" });
+
+    expect(createResponse.status).toBe(403);
+    expect(createResponse.body.code).toBe("FORBIDDEN");
+    expect(updateResponse.status).toBe(404);
+    expect((await Schedule.findById(schedule._id)).startTime).toBe("09:00");
   });
 });

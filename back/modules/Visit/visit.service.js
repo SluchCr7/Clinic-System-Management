@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Visit = require("./visit.model");
 const Appointment = require("../Appointment/appointment.model");
 const Patient = require("../Patient/patient.model");
@@ -113,45 +114,71 @@ const createVisit = async (data, currentUser) => {
   await validatePatient(patient);
   await validateDoctor(doctor);
 
-  const appointmentData = await validateAppointment(appointment, patient, doctor);
+  const session = await mongoose.startSession();
+  try {
+    session.startTransaction();
 
-  const existingVisit = await Visit.findOne({ appointment });
+    const appointmentData = await validateAppointment(appointment, patient, doctor);
 
-  if (existingVisit) {
-    throw new AppError(
-      "A visit already exists for this appointment",
-      409,
-      "VISIT_ALREADY_EXISTS"
+    const existingVisit = await Visit.findOne({ appointment }).session(session);
+
+    if (existingVisit) {
+      throw new AppError(
+        "A visit already exists for this appointment",
+        409,
+        "VISIT_ALREADY_EXISTS"
+      );
+    }
+
+    const [visit] = await Visit.create(
+      [
+        {
+          ...data,
+          createdBy: currentUser._id,
+        },
+      ],
+      { session }
     );
+
+    appointmentData.status = "completed";
+    appointmentData.updatedBy = currentUser._id;
+    await appointmentData.save({ session });
+
+    if (currentUser?._id) {
+      await auditLogService.logActivity({
+        actor: currentUser,
+        action: "VISIT_CREATED",
+        resource: "Visit",
+        resourceId: visit._id,
+        details: {
+          appointment: visit.appointment,
+          patient: visit.patient,
+          doctor: visit.doctor,
+          chiefComplaint: visit.chiefComplaint,
+          diagnosis: visit.diagnosis,
+          followUpDate: visit.followUpDate,
+        },
+        session,
+      });
+    }
+
+    await session.commitTransaction();
+    return visit;
+  } catch (error) {
+    await session.abortTransaction();
+    if (error.code === 11000) {
+      if (error.keyPattern?.appointment || (error.keyValue && error.keyValue.appointment)) {
+        throw new AppError(
+          "A visit already exists for this appointment",
+          409,
+          "VISIT_ALREADY_EXISTS"
+        );
+      }
+    }
+    throw error;
+  } finally {
+    session.endSession();
   }
-
-  const visit = await Visit.create({
-    ...data,
-    createdBy: currentUser._id,
-  });
-
-  appointmentData.status = "completed";
-  appointmentData.updatedBy = currentUser._id;
-  await appointmentData.save();
-
-  if (currentUser?._id) {
-    await auditLogService.logActivity({
-      actor: currentUser,
-      action: "VISIT_CREATED",
-      resource: "Visit",
-      resourceId: visit._id,
-      details: {
-        appointment: visit.appointment,
-        patient: visit.patient,
-        doctor: visit.doctor,
-        chiefComplaint: visit.chiefComplaint,
-        diagnosis: visit.diagnosis,
-        followUpDate: visit.followUpDate,
-      },
-    });
-  }
-
-  return visit;
 };
 
 const getVisits = async (query = {}, currentUser = null) => {

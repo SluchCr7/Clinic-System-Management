@@ -1,6 +1,7 @@
 const request = require("supertest");
 const app = require("../index");
 const Appointment = require("../modules/Appointment/appointment.model");
+const Schedule = require("../modules/Schedule/schedule.model");
 const AuditLog = require("../modules/AuditLog/auditLog.model");
 const {
   createTestUser,
@@ -70,6 +71,47 @@ describe("Appointments API", () => {
       receptionist.user._id.toString()
     );
     expect(auditLog).not.toBeNull();
+  });
+
+  test("accepts a booked slot near midnight when the clinic date must stay on the same weekday", async () => {
+    const clinicDate = new Date("2026-11-10T12:00:00+02:00");
+    await Schedule.deleteMany({ doctor: doctor._id });
+    await createTestSchedule(doctor, receptionist.user, clinicDate);
+
+    const response = await request(app)
+      .post("/api/appointments")
+      .set("Authorization", receptionist.authHeader)
+      .send({
+        patient: patient._id.toString(),
+        doctor: doctor._id.toString(),
+        appointmentDate: "2026-11-10T23:30",
+        duration: 30,
+        reason: "Late evening checkup",
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.doctor).toBe(doctor._id.toString());
+  });
+
+  test("rejects a doctor who is not scheduled for the selected clinic day", async () => {
+    const clinicDate = new Date("2026-11-10T12:00:00+02:00");
+    await Schedule.deleteMany({ doctor: doctor._id });
+    await createTestSchedule(doctor, receptionist.user, new Date("2026-11-11T12:00:00+02:00"));
+
+    const response = await request(app)
+      .post("/api/appointments")
+      .set("Authorization", receptionist.authHeader)
+      .send({
+        patient: patient._id.toString(),
+        doctor: doctor._id.toString(),
+        appointmentDate: "2026-11-10T23:30",
+        duration: 30,
+        reason: "Outside working day",
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("DOCTOR_NOT_AVAILABLE");
   });
 
   test("rejects overlapping appointments for the same doctor", async () => {

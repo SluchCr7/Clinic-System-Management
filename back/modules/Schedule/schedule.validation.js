@@ -9,8 +9,7 @@ const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const createScheduleSchema = Joi.object({
   doctor: Joi.string()
     .hex()
-    .length(24)
-    .required(),
+    .length(24),
 
   dayOfWeek: Joi.number()
     .integer()

@@ -88,12 +88,45 @@ const validateDoctor = async (doctorId) => {
 };
 
 const createSchedule = async (data, currentUser) => {
-  await validateDoctor(data.doctor);
+  if (currentUser?.role !== "doctor" && !data.doctor) {
+    throw new AppError(
+      "Doctor is required to create a schedule",
+      400,
+      "DOCTOR_REQUIRED"
+    );
+  }
+
+  const doctorId =
+    currentUser?.role === "doctor"
+      ? await getDoctorScopeId(currentUser, Doctor)
+      : data.doctor;
+
+  if (!doctorId) {
+    throw new AppError(
+      "A doctor profile is required to create a schedule",
+      404,
+      "DOCTOR_PROFILE_NOT_FOUND"
+    );
+  }
+
+  if (
+    currentUser?.role === "doctor" &&
+    data.doctor &&
+    data.doctor.toString() !== doctorId.toString()
+  ) {
+    throw new AppError(
+      "Doctors can only create schedules for their own profile",
+      403,
+      "FORBIDDEN"
+    );
+  }
+
+  await validateDoctor(doctorId);
 
   validateScheduleTimes(data);
 
   const existingSchedule = await Schedule.findOne({
-    doctor: data.doctor,
+    doctor: doctorId,
     dayOfWeek: data.dayOfWeek,
   });
 
@@ -107,6 +140,7 @@ const createSchedule = async (data, currentUser) => {
 
   const schedule = await Schedule.create({
     ...data,
+    doctor: doctorId,
     createdBy: currentUser._id,
   });
 
@@ -191,7 +225,14 @@ const getScheduleById = async (id, currentUser = null) => {
 };
 
 const updateSchedule = async (id, data, currentUser) => {
-  const schedule = await Schedule.findById(id);
+  const filter = { _id: id };
+  if (currentUser?.role === "doctor") {
+    const doctorId = await getDoctorScopeId(currentUser, Doctor);
+    if (!doctorId) return null;
+    filter.doctor = doctorId;
+  }
+
+  const schedule = await Schedule.findOne(filter);
 
   if (!schedule) {
     return null;
@@ -298,7 +339,14 @@ const updateSchedule = async (id, data, currentUser) => {
 };
 
 const deactivateSchedule = async (id, currentUser) => {
-  const schedule = await Schedule.findById(id);
+  const filter = { _id: id };
+  if (currentUser?.role === "doctor") {
+    const doctorId = await getDoctorScopeId(currentUser, Doctor);
+    if (!doctorId) return null;
+    filter.doctor = doctorId;
+  }
+
+  const schedule = await Schedule.findOne(filter);
 
   if (!schedule) {
     return null;

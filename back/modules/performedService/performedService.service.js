@@ -3,6 +3,7 @@ const Visit = require("../Visit/visit.model");
 const Patient = require("../Patient/patient.model");
 const Doctor = require("../Doctor/doctor.model");
 const MedicalService = require("../medicalService/medicalService.model");
+const Invoice = require("../Invoice/invoice.model");
 const { AppError } = require("../../middlewares/errorHandler");
 const auditLogService = require("../AuditLog/auditLog.service");
 const { paginateQuery } = require("../../utils/pagination");
@@ -145,12 +146,21 @@ const createPerformedService = async (data, currentUser) => {
     }
   }
 
-  const [patientData, doctorData, visitData, medicalService] = await Promise.all([
+  const [patientData, doctorData, visitData, medicalService, existingInvoice] = await Promise.all([
     validatePatient(patient),
     validateDoctor(doctor),
     validateVisit(visit, patient, doctor),
     validateMedicalService(service),
+    Invoice.findOne({ visit, status: { $ne: "cancelled" } }),
   ]);
+
+  if (existingInvoice) {
+    throw new AppError(
+      "Cannot add performed services to an already invoiced visit",
+      400,
+      "VISIT_ALREADY_INVOICED"
+    );
+  }
 
   void patientData;
   void doctorData;
@@ -296,6 +306,19 @@ const updatePerformedService = async (id, data, currentUser) => {
 
   if (!performedService) {
     return null;
+  }
+
+  const existingInvoice = await Invoice.findOne({
+    visit: performedService.visit,
+    status: { $ne: "cancelled" },
+  });
+
+  if (existingInvoice) {
+    throw new AppError(
+      "Cannot modify billable services after an invoice has been generated",
+      400,
+      "SERVICE_ALREADY_INVOICED"
+    );
   }
 
   const previousValues = {

@@ -15,7 +15,7 @@ export interface Schedule {
 }
 
 export interface CreateScheduleRequest {
-  doctor: string;
+  doctor?: string;
   dayOfWeek: number;
   startTime: string;
   endTime: string;

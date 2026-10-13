@@ -28,6 +28,7 @@ import {
   toast,
 } from "@/components/ui";
 import { extractApiError } from "@/services/api/baseQuery";
+import DoctorScheduleSettings from "@/components/settings/DoctorScheduleSettings";
 import {
   LuUser,
   LuShield,
@@ -42,6 +43,7 @@ import {
   LuCheck,
   LuSparkles,
   LuBell,
+  LuCalendarClock,
 } from "react-icons/lu";
 
 export default function SettingsPage() {
@@ -52,7 +54,13 @@ export default function SettingsPage() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get("tab");
-      if (tabParam && ["profile", "security", "clinic", "appearance"].includes(tabParam)) {
+      if (
+        tabParam &&
+        ["profile", "security", "clinic", "appearance"].includes(tabParam)
+      ) {
+        return tabParam;
+      }
+      if (tabParam === "schedule" && currentUser?.role === "doctor") {
         return tabParam;
       }
     }
@@ -137,7 +145,7 @@ export default function SettingsPage() {
     if (!file) return;
 
     const formData = new FormData();
-    formData.append("photo", file);
+    formData.append("profilePhoto", file);
 
     try {
       await updateProfilePhoto(formData).unwrap();
@@ -206,6 +214,15 @@ export default function SettingsPage() {
     { id: "security", label: t("settings.securityTab", "Security"), icon: <LuShield className="w-4 h-4" /> },
     { id: "appearance", label: t("settings.appearanceTab", "Appearance"), icon: <LuPalette className="w-4 h-4" /> },
     { id: "clinic", label: t("settings.clinicTab", "Clinic"), icon: <LuBuilding2 className="w-4 h-4" /> },
+    ...(currentUser?.role === "doctor"
+      ? [
+          {
+            id: "schedule",
+            label: t("settings.scheduleTab", "My schedule"),
+            icon: <LuCalendarClock className="w-4 h-4" />,
+          },
+        ]
+      : []),
   ];
 
   const themeCards: Array<{
@@ -263,6 +280,10 @@ export default function SettingsPage() {
       />
 
       <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+
+      {activeTab === "schedule" && currentUser?.role === "doctor" && (
+        <DoctorScheduleSettings />
+      )}
 
       {/* Tab: Appearance & Theme */}
       {activeTab === "appearance" && (
