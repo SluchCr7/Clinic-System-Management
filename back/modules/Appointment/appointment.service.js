@@ -317,16 +317,51 @@ const updateAppointment = async (id, data, currentUser) => {
   const newDuration = data.duration || appointment.duration;
   const newStatus = data.status || appointment.status;
 
-  if (
-    ["completed", "cancelled"].includes(appointment.status) &&
-    data.status &&
-    data.status !== appointment.status
-  ) {
-    throw new AppError(
-      `Cannot change status of a ${appointment.status} appointment`,
-      400,
-      "INVALID_STATUS_TRANSITION"
-    );
+  if (currentUser?.role === "doctor") {
+    const doctorId = await getDoctorScopeId(currentUser, Doctor);
+    if (!doctorId || appointment.doctor.toString() !== doctorId.toString()) {
+      throw new AppError(
+        "You are not authorized to update another doctor's appointment",
+        403,
+        "FORBIDDEN"
+      );
+    }
+  }
+
+  const allowedTransitions = {
+    scheduled: ["confirmed", "checked_in", "cancelled", "no-show"],
+    confirmed: ["checked_in", "in_progress", "cancelled", "no-show"],
+    checked_in: ["in_progress", "cancelled", "no-show"],
+    in_progress: ["completed", "cancelled"],
+    completed: [],
+    cancelled: [],
+    "no-show": [],
+  };
+
+  const roleAllowedTransitions = {
+    admin: ["confirmed", "checked_in", "in_progress", "completed", "cancelled", "no-show"],
+    receptionist: ["confirmed", "checked_in", "cancelled", "no-show"],
+    doctor: ["in_progress", "completed", "cancelled"],
+  };
+
+  if (data.status && data.status !== appointment.status) {
+    const validNextStates = allowedTransitions[appointment.status] || [];
+    if (!validNextStates.includes(data.status)) {
+      throw new AppError(
+        `Cannot transition appointment from '${appointment.status}' to '${data.status}'`,
+        400,
+        "INVALID_STATUS_TRANSITION"
+      );
+    }
+
+    const roleAllowed = roleAllowedTransitions[currentUser?.role] || [];
+    if (!roleAllowed.includes(data.status)) {
+      throw new AppError(
+        `Role '${currentUser?.role}' is not authorized to transition appointment to '${data.status}'`,
+        403,
+        "FORBIDDEN"
+      );
+    }
   }
 
   if (newStatus === "cancelled" && !data.cancellationReason && !appointment.cancellationReason) {
@@ -338,11 +373,15 @@ const updateAppointment = async (id, data, currentUser) => {
   }
 
   const isRescheduled =
-    data.appointmentDate &&
+    Boolean(data.appointmentDate) &&
     new Date(data.appointmentDate).getTime() !==
       new Date(previousValues.appointmentDate).getTime();
 
-  if (data.appointmentDate || data.duration) {
+  const isDurationChanged =
+    data.duration !== undefined &&
+    data.duration !== previousValues.duration;
+
+  if (isRescheduled || isDurationChanged) {
     const appointmentDate = new Date(newDate);
 
     if (appointmentDate <= new Date()) {

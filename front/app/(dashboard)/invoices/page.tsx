@@ -4,9 +4,15 @@ import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useGetInvoicesQuery,
+  useCreateInvoiceMutation,
   useCancelInvoiceMutation,
 } from "@/services/api/invoiceApi";
-import { useCreatePaymentMutation } from "@/services/api/paymentApi";
+import {
+  useGetPaymentsQuery,
+  useCreatePaymentMutation,
+} from "@/services/api/paymentApi";
+import { useGetVisitsQuery } from "@/services/api/visitApi";
+import { useGetPerformedServicesQuery } from "@/services/api/performedServiceApi";
 import type { Invoice, InvoiceQueryParams, InvoiceStatus } from "@/types/invoice";
 import type { PaymentMethod } from "@/types/payment";
 import {
@@ -17,6 +23,7 @@ import {
   Input,
   Textarea,
   StatusBadge,
+  Badge,
   Modal,
   toast,
   type Column,
@@ -32,6 +39,12 @@ import {
   LuCircleCheck,
   LuTriangleAlert,
   LuEye,
+  LuPlus,
+  LuHistory,
+  LuBanknote,
+  LuBuilding2,
+  LuGlobe,
+  LuShield,
 } from "react-icons/lu";
 
 export default function InvoicesPage() {
@@ -48,6 +61,7 @@ export default function InvoicesPage() {
   });
 
   const { data, isLoading, isError, refetch } = useGetInvoicesQuery(queryParams);
+  const [createInvoice, { isLoading: isCreatingInvoice }] = useCreateInvoiceMutation();
   const [cancelInvoice, { isLoading: isCancelling }] = useCancelInvoiceMutation();
   const [createPayment, { isLoading: isRecordingPayment }] = useCreatePaymentMutation();
 
@@ -55,12 +69,87 @@ export default function InvoicesPage() {
   const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
   const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null);
   const [cancelInvoiceTarget, setCancelInvoiceTarget] = useState<Invoice | null>(null);
+  const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false);
+
+  // Create Invoice Form State
+  const [selectedVisitId, setSelectedVisitId] = useState<string>("");
+  const [invoiceDiscount, setInvoiceDiscount] = useState<number>(0);
+  const [invoiceTax, setInvoiceTax] = useState<number>(0);
+  const [invoiceNotes, setInvoiceNotes] = useState<string>("");
 
   // Payment Form State
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [paymentRef, setPaymentRef] = useState<string>("");
   const [paymentNotes, setPaymentNotes] = useState<string>("");
+
+  // Fetch Payment History for the currently viewed invoice
+  const { data: invoicePaymentsData } = useGetPaymentsQuery(
+    viewInvoice?._id ? { invoice: viewInvoice._id, limit: 100 } : undefined,
+    { skip: !viewInvoice?._id }
+  );
+
+  // Fetch Visits eligible for invoicing
+  const { data: eligibleVisitsData } = useGetVisitsQuery(
+    isCreateInvoiceOpen ? { limit: 50 } : undefined,
+    { skip: !isCreateInvoiceOpen }
+  );
+
+  // Fetch Performed Services for selected visit in Create Invoice modal
+  const { data: visitServicesData } = useGetPerformedServicesQuery(
+    selectedVisitId ? { visit: selectedVisitId, limit: 100 } : undefined,
+    { skip: !selectedVisitId }
+  );
+
+  const selectedVisitServices = visitServicesData?.data || [];
+  const selectedVisitSubtotal = selectedVisitServices.reduce(
+    (acc, s) => acc + (s.price * s.quantity - s.discount),
+    0
+  );
+  const selectedVisitCalculatedTotal = Math.max(
+    0,
+    selectedVisitSubtotal - invoiceDiscount + invoiceTax
+  );
+
+  const handleOpenCreateInvoice = () => {
+    setSelectedVisitId("");
+    setInvoiceDiscount(0);
+    setInvoiceTax(0);
+    setInvoiceNotes("");
+    setIsCreateInvoiceOpen(true);
+  };
+
+  const handleCreateInvoiceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedVisitId) {
+      toast.error(t("invoices.create.selectVisit"));
+      return;
+    }
+    if (selectedVisitServices.length === 0) {
+      toast.error(t("invoices.create.noServicesForVisit"));
+      return;
+    }
+    if (invoiceDiscount > selectedVisitSubtotal) {
+      toast.error(t("invoices.modal.discount") + " cannot exceed subtotal.");
+      return;
+    }
+
+    try {
+      await createInvoice({
+        visit: selectedVisitId,
+        discount: Number(invoiceDiscount) || 0,
+        tax: Number(invoiceTax) || 0,
+        notes: invoiceNotes.trim() || undefined,
+      }).unwrap();
+
+      toast.success(t("invoices.create.success"));
+      setIsCreateInvoiceOpen(false);
+      setSelectedVisitId("");
+    } catch (err) {
+      const extracted = extractApiError(err);
+      toast.error(extracted.message || t("invoices.create.error"));
+    }
+  };
 
   const handleOpenPayment = (inv: Invoice) => {
     setPaymentInvoice(inv);
@@ -248,6 +337,18 @@ export default function InvoicesPage() {
       <PageHeader
         title={t("invoices.title")}
         subtitle={t("invoices.subtitle")}
+        actions={
+          canManageBilling ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleOpenCreateInvoice}
+              leftIcon={<LuPlus className="w-4 h-4" />}
+            >
+              {t("invoices.actions.createInvoice")}
+            </Button>
+          ) : undefined
+        }
       />
 
       {/* Filter and Control Bar */}
@@ -359,12 +460,19 @@ export default function InvoicesPage() {
                     {viewInvoice.items?.length > 0 ? (
                       viewInvoice.items.map((item, idx) => (
                         <tr key={idx}>
-                          <td className="py-2 px-3 font-medium text-ink">{item.name}</td>
+                          <td className="py-2 px-3 font-medium text-ink">
+                            {item.serviceName || (item as unknown as { name?: string }).name}
+                            {item.serviceCode && (
+                              <span className="text-[10px] text-slate-muted font-mono ml-1.5">
+                                ({item.serviceCode})
+                              </span>
+                            )}
+                          </td>
                           <td className="py-2 px-2 text-right text-slate-dark">
                             {item.quantity}
                           </td>
                           <td className="py-2 px-3 text-right text-slate-dark">
-                            ${item.price?.toFixed(2)}
+                            ${(item.unitPrice ?? (item as unknown as { price?: number }).price)?.toFixed(2)}
                           </td>
                           <td className="py-2 px-3 text-right font-semibold text-ink">
                             ${item.total?.toFixed(2)}
@@ -432,6 +540,52 @@ export default function InvoicesPage() {
               </div>
             )}
 
+            {/* Payments History Section */}
+            <div className="border-t border-border-subtle pt-3">
+              <div className="flex items-center gap-2 mb-2">
+                <LuHistory className="w-4 h-4 text-teal-primary" />
+                <span className="font-semibold text-ink text-xs uppercase tracking-wider">
+                  {t("invoices.paymentsHistory.title")}
+                </span>
+              </div>
+              {invoicePaymentsData?.data && invoicePaymentsData.data.length > 0 ? (
+                <div className="border border-border-subtle rounded-md overflow-hidden">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-paper border-b border-border-subtle text-slate-muted font-medium">
+                      <tr>
+                        <th className="py-2 px-3">{t("invoices.paymentsHistory.date")}</th>
+                        <th className="py-2 px-3">{t("invoices.paymentsHistory.method")}</th>
+                        <th className="py-2 px-3">{t("invoices.paymentsHistory.reference")}</th>
+                        <th className="py-2 px-3 text-right">{t("invoices.paymentsHistory.amount")}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border-subtle">
+                      {invoicePaymentsData.data.map((p) => (
+                        <tr key={p._id}>
+                          <td className="py-2 px-3 text-slate-dark font-mono text-[11px]">
+                            {new Date(p.paidAt || p.createdAt).toLocaleString()}
+                          </td>
+                          <td className="py-2 px-3 capitalize font-medium text-ink">
+                            {p.method.replace("_", " ")}
+                          </td>
+                          <td className="py-2 px-3 font-mono text-slate-muted text-[11px]">
+                            {p.transactionReference || "-"}
+                          </td>
+                          <td className="py-2 px-3 text-right font-semibold text-status-success font-mono">
+                            +${p.amount?.toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-muted italic p-2 bg-paper rounded border border-border-subtle">
+                  {t("invoices.paymentsHistory.noPayments")}
+                </p>
+              )}
+            </div>
+
             {/* Modal Actions */}
             <div className="flex items-center justify-between pt-4 border-t border-border-subtle">
               <Button
@@ -467,6 +621,149 @@ export default function InvoicesPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Create Invoice Modal */}
+      <Modal
+        isOpen={isCreateInvoiceOpen}
+        onClose={() => setIsCreateInvoiceOpen(false)}
+        title={t("invoices.create.title")}
+        subtitle={t("invoices.create.subtitle")}
+        size="lg"
+      >
+        <form onSubmit={handleCreateInvoiceSubmit} className="flex flex-col gap-4 text-xs">
+          <div>
+            <label className="text-[11px] font-semibold text-slate-dark block mb-1">
+              {t("invoices.create.selectVisit")} *
+            </label>
+            <Select
+              value={selectedVisitId}
+              onChange={(e) => setSelectedVisitId(e.target.value)}
+              placeholder={t("invoices.create.visitPlaceholder")}
+              options={
+                eligibleVisitsData?.data?.map((v) => {
+                  const pat = typeof v.patient === "object" && v.patient ? v.patient : null;
+                  const doc = typeof v.doctor === "object" && v.doctor ? v.doctor : null;
+                  const docUser = doc && typeof doc.user === "object" && doc.user ? doc.user : null;
+                  const patientName = pat ? `${pat.firstName} ${pat.lastName}` : "Patient";
+                  const docName = docUser ? `Dr. ${docUser.lastName}` : "Doctor";
+                  return {
+                    value: v._id,
+                    label: `${patientName} (${docName}) — ${new Date(v.createdAt).toLocaleDateString()}`,
+                  };
+                }) || []
+              }
+            />
+          </div>
+
+          {/* Performed Services in Selected Visit */}
+          {selectedVisitId && (
+            <div className="flex flex-col gap-2">
+              <span className="font-semibold text-ink text-xs uppercase tracking-wider">
+                {t("invoices.create.performedServices")}
+              </span>
+              {selectedVisitServices.length > 0 ? (
+                <div className="border border-border-subtle rounded-md overflow-hidden">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-paper border-b border-border-subtle text-slate-muted font-medium">
+                      <tr>
+                        <th className="py-2 px-3">{t("invoices.modal.description")}</th>
+                        <th className="py-2 px-2 text-right">{t("invoices.modal.qty")}</th>
+                        <th className="py-2 px-3 text-right">{t("invoices.modal.rate")}</th>
+                        <th className="py-2 px-3 text-right">{t("invoices.modal.total")}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border-subtle">
+                      {selectedVisitServices.map((s) => (
+                        <tr key={s._id}>
+                          <td className="py-2 px-3 font-medium text-ink">
+                            {s.serviceName}
+                            {s.serviceCode && (
+                              <span className="text-[10px] text-slate-muted font-mono ml-1.5">
+                                ({s.serviceCode})
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 px-2 text-right text-slate-dark">{s.quantity}</td>
+                          <td className="py-2 px-3 text-right text-slate-dark">${s.price.toFixed(2)}</td>
+                          <td className="py-2 px-3 text-right font-semibold text-ink">
+                            ${(s.price * s.quantity - s.discount).toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-xs text-status-warning p-2.5 bg-status-warning-bg rounded-md border border-status-warning/20">
+                  {t("invoices.create.noServicesForVisit")}
+                </p>
+              )}
+
+              {/* Financial Inputs */}
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <Input
+                  label={t("invoices.create.discountLabel")}
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={selectedVisitSubtotal}
+                  value={invoiceDiscount}
+                  onChange={(e) => setInvoiceDiscount(parseFloat(e.target.value) || 0)}
+                />
+                <Input
+                  label={t("invoices.create.taxLabel")}
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={invoiceTax}
+                  onChange={(e) => setInvoiceTax(parseFloat(e.target.value) || 0)}
+                />
+              </div>
+
+              {/* Preview Totals */}
+              <div className="flex flex-col gap-1 p-3 bg-paper rounded-lg border border-border-subtle text-xs">
+                <div className="flex justify-between text-slate-muted">
+                  <span>{t("invoices.create.subtotal")}:</span>
+                  <span className="font-semibold text-ink font-mono">${selectedVisitSubtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-ink text-sm pt-1 border-t border-border-subtle">
+                  <span>{t("invoices.create.totalPreview")}:</span>
+                  <span className="text-teal-primary font-mono">${selectedVisitCalculatedTotal.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <Textarea
+            label={t("invoices.create.notesLabel")}
+            placeholder={t("invoices.create.notesPlaceholder")}
+            value={invoiceNotes}
+            onChange={(e) => setInvoiceNotes(e.target.value)}
+            rows={2}
+          />
+
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border-subtle">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsCreateInvoiceOpen(false)}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              isLoading={isCreatingInvoice}
+              disabled={!selectedVisitId || selectedVisitServices.length === 0}
+              leftIcon={<LuCircleCheck className="w-3.5 h-3.5" />}
+            >
+              {t("invoices.create.confirm")}
+            </Button>
+          </div>
+        </form>
       </Modal>
 
       {/* Record Payment Modal */}

@@ -12,6 +12,16 @@ const resources = {
   ar: { translation: ar },
 };
 
+const missingKeyFallback = (key: string) => {
+  const leafKey = key.split(".").pop() || "unavailable";
+  const label = leafKey
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim();
+
+  return label.length > 32 ? `${label.slice(0, 29).trimEnd()}...` : label;
+};
+
 if (!i18n.isInitialized) {
   i18n
     .use(LanguageDetector)
@@ -19,9 +29,16 @@ if (!i18n.isInitialized) {
     .init({
       resources,
       lng: 'ar',
-      fallbackLng: 'ar',
+      fallbackLng: 'en',
       supportedLngs: ['ar', 'en'],
       debug: false,
+      parseMissingKeyHandler: (key) => {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn(`[i18n] Missing translation key: "${key}"`);
+        }
+
+        return missingKeyFallback(key);
+      },
       interpolation: {
         escapeValue: false,
       },

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import {
   useGetAppointmentsQuery,
   useCreateAppointmentMutation,
+  useUpdateAppointmentMutation,
   useCancelAppointmentMutation,
 } from "@/services/api/appointmentApi";
 import { useGetPatientsQuery } from "@/services/api/patientApi";
@@ -30,6 +31,7 @@ import {
 import { extractApiError } from "@/services/api/baseQuery";
 import { selectUserRole } from "@/features/auth/authSelectors";
 import { useAppSelector } from "@/redux/hooks";
+import { useRouter } from "next/navigation";
 import { hasPermission } from "@/lib/permissions";
 import {
   LuPlus,
@@ -37,6 +39,10 @@ import {
   LuList,
   LuClock,
   LuCircleX,
+  LuCheck,
+  LuUserCheck,
+  LuStethoscope,
+  LuUserX,
 } from "react-icons/lu";
 
 export default function AppointmentsPage() {
@@ -63,8 +69,25 @@ export default function AppointmentsPage() {
 
   const [createAppointment, { isLoading: isCreating }] =
     useCreateAppointmentMutation();
+  const [updateAppointment, { isLoading: isUpdating }] =
+    useUpdateAppointmentMutation();
   const [cancelAppointment, { isLoading: isCancelling }] =
     useCancelAppointmentMutation();
+
+  const router = useRouter();
+
+  const handleStatusTransition = async (id: string, newStatus: AppointmentStatus) => {
+    try {
+      await updateAppointment({
+        id,
+        data: { status: newStatus },
+      }).unwrap();
+      toast.success(t("appointments.success.statusUpdated"));
+    } catch (err) {
+      const extracted = extractApiError(err);
+      toast.error(extracted.message || t("appointments.errors.updateStatusFailed"));
+    }
+  };
 
   // Booking Modal State
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
@@ -147,6 +170,7 @@ export default function AppointmentsPage() {
     {
       key: "appointmentDate",
       header: t("appointments.dateTime"),
+      className: "w-[120px] min-w-[120px] overflow-hidden whitespace-nowrap",
       render: (apt) => {
         const d = new Date(apt.appointmentDate);
         return (
@@ -169,6 +193,7 @@ export default function AppointmentsPage() {
     {
       key: "patient",
       header: t("appointments.patient"),
+      className: "w-[190px] min-w-[190px] overflow-hidden whitespace-nowrap",
       render: (apt) => {
         const p = typeof apt.patient === "object" && apt.patient ? apt.patient : null;
         return (
@@ -176,11 +201,11 @@ export default function AppointmentsPage() {
             <div className="w-7 h-7 rounded-full bg-mint text-teal-dark font-semibold text-xs flex items-center justify-center shrink-0">
               {p ? p.firstName[0] : "P"}
             </div>
-            <div>
-              <p className="font-semibold text-ink leading-tight">
+            <div className="min-w-0 overflow-hidden">
+              <p className="truncate font-semibold text-ink leading-tight">
                 {p ? `${p.firstName} ${p.lastName}` : t("appointments.patient")}
               </p>
-              <p className="text-[11px] text-slate-muted font-mono">{p?.phone || ""}</p>
+              <p className="truncate text-[11px] text-slate-muted font-mono">{p?.phone || ""}</p>
             </div>
           </div>
         );
@@ -189,15 +214,16 @@ export default function AppointmentsPage() {
     {
       key: "doctor",
       header: t("appointments.physician"),
+      className: "w-[145px] min-w-[145px] overflow-hidden whitespace-nowrap",
       render: (apt) => {
         const doc = typeof apt.doctor === "object" && apt.doctor ? apt.doctor : null;
         const u = doc && typeof doc.user === "object" && doc.user ? doc.user : null;
         return (
-          <div>
-            <p className="font-medium text-ink leading-tight">
+          <div className="min-w-0 overflow-hidden">
+            <p className="truncate font-medium text-ink leading-tight">
               {u ? `Dr. ${u.lastName}` : t("common.doctor")}
             </p>
-            <p className="text-[11px] text-teal-primary font-medium">
+            <p className="truncate text-[11px] text-teal-primary font-medium">
               {doc?.specialization || t("appointments.general")}
             </p>
           </div>
@@ -207,8 +233,9 @@ export default function AppointmentsPage() {
     {
       key: "reason",
       header: t("appointments.reasonNotes"),
+      className: "w-[180px] min-w-[180px] overflow-hidden whitespace-nowrap",
       render: (apt) => (
-        <span className="text-slate-muted line-clamp-1 max-w-xs">
+        <span className="block max-w-full truncate text-slate-muted">
           {apt.reason || apt.notes || t("appointments.routineConsultation")}
         </span>
       ),
@@ -216,34 +243,98 @@ export default function AppointmentsPage() {
     {
       key: "duration",
       header: t("appointments.duration"),
+      className: "w-[72px] min-w-[72px] overflow-hidden whitespace-nowrap",
       render: (apt) => t("appointments.durationMinutes", { count: apt.duration }),
     },
     {
       key: "status",
       header: t("appointments.status"),
+      className: "w-[105px] min-w-[105px] overflow-hidden whitespace-nowrap",
       render: (apt) => <StatusBadge status={apt.status} size="sm" />,
     },
     {
       key: "actions",
       header: "",
       align: "right",
-      render: (apt) =>
-        canEditAppointment &&
-        apt.status !== "cancelled" &&
-        apt.status !== "completed" ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              setCancelTargetId(apt._id);
-            }}
-            className="text-slate-muted hover:text-status-error"
-            title={t("appointments.cancelAppointment")}
-          >
-            <LuCircleX className="w-4 h-4" />
-          </Button>
-        ) : null,
+      className: "w-[260px] min-w-[260px] overflow-hidden whitespace-nowrap",
+      render: (apt) => {
+        if (!canEditAppointment || apt.status === "cancelled" || apt.status === "completed") {
+          return null;
+        }
+
+        return (
+          <div className="flex max-w-full min-w-0 items-center justify-end gap-1 overflow-hidden whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+            {/* Scheduled -> Confirm */}
+            {apt.status === "scheduled" && (role === "admin" || role === "receptionist") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleStatusTransition(apt._id, "confirmed")}
+                disabled={isUpdating}
+                className="max-w-[88px] min-w-0 gap-1 overflow-hidden px-2 text-teal-primary hover:text-teal-dark hover:bg-mint/40"
+                title={t("appointments.actions.confirm")}
+              >
+                <LuCheck className="w-4 h-4 shrink-0" />
+                <span className="block min-w-0 truncate text-xs">{t("appointments.actions.confirm")}</span>
+              </Button>
+            )}
+
+            {/* Confirmed / Scheduled -> Check In */}
+            {(apt.status === "scheduled" || apt.status === "confirmed") && (role === "admin" || role === "receptionist") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleStatusTransition(apt._id, "checked_in")}
+                disabled={isUpdating}
+                className="max-w-[88px] min-w-0 gap-1 overflow-hidden px-2 text-status-info hover:bg-status-info-bg/40"
+                title={t("appointments.actions.checkIn")}
+              >
+                <LuUserCheck className="w-4 h-4 shrink-0" />
+                <span className="block min-w-0 truncate text-xs">{t("appointments.actions.checkIn")}</span>
+              </Button>
+            )}
+
+            {/* Checked In / In Progress -> Start Visit / Consultation (Doctor or Admin) */}
+            {(apt.status === "checked_in" || apt.status === "confirmed" || apt.status === "in_progress") && (role === "admin" || role === "doctor") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push(`/visits/new?appointmentId=${apt._id}`)}
+                className="max-w-[88px] min-w-0 gap-1 overflow-hidden px-2 text-teal-dark font-semibold bg-mint/50 hover:bg-mint"
+                title={t("appointments.actions.startVisit")}
+              >
+                <LuStethoscope className="w-4 h-4 shrink-0" />
+                <span className="block min-w-0 truncate text-xs">{t("appointments.actions.startVisit")}</span>
+              </Button>
+            )}
+
+            {/* Mark No Show */}
+            {(apt.status === "scheduled" || apt.status === "confirmed") && (role === "admin" || role === "receptionist") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleStatusTransition(apt._id, "no-show")}
+                disabled={isUpdating}
+                className="text-slate-muted hover:text-status-warning"
+                title={t("appointments.actions.markNoShow")}
+              >
+                <LuUserX className="w-4 h-4" />
+              </Button>
+            )}
+
+            {/* Cancel appointment */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setCancelTargetId(apt._id)}
+              className="text-slate-muted hover:text-status-error"
+              title={t("appointments.cancelAppointment")}
+            >
+              <LuCircleX className="w-4 h-4" />
+            </Button>
+          </div>
+        );
+      },
     },
   ];
 
@@ -328,6 +419,8 @@ export default function AppointmentsPage() {
                 { value: "", label: t("appointments.allStatuses") },
                 { value: "scheduled", label: t("appointments.statusOptions.scheduled") },
                 { value: "confirmed", label: t("appointments.statusOptions.confirmed") },
+                { value: "checked_in", label: t("appointments.statusOptions.checkedIn") },
+                { value: "in_progress", label: t("appointments.statusOptions.inProgress") },
                 { value: "completed", label: t("appointments.statusOptions.completed") },
                 { value: "cancelled", label: t("appointments.statusOptions.cancelled") },
                 { value: "no-show", label: t("appointments.statusOptions.noShow") },
@@ -342,6 +435,7 @@ export default function AppointmentsPage() {
         <DataTable
           columns={columns}
           data={data?.data}
+          tableClassName="table-fixed min-w-[1072px]"
           isLoading={isLoading}
           isError={isError}
           onRetry={refetch}
@@ -510,7 +604,7 @@ export default function AppointmentsPage() {
               variant="secondary"
               size="sm"
               onClick={() => setIsBookModalOpen(false)}
-            >
+             >
               {t("common.cancel")}
             </Button>
             <Button

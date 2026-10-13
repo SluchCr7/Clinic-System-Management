@@ -31,12 +31,16 @@ export interface DashboardOverview {
   appointments: {
     scheduled: number;
     confirmed: number;
+    checkedIn?: number;
+    inProgress?: number;
     completed: number;
     cancelled: number;
     noShow: number;
     today: {
       scheduled: number;
       confirmed: number;
+      checkedIn?: number;
+      inProgress?: number;
       completed: number;
       cancelled: number;
       noShow: number;

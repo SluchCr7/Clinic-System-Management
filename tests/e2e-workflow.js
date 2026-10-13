@@ -69,21 +69,13 @@ async function runE2EWorkflow() {
   const patientId = patient._id;
   console.log(`✓ Patient registered successfully. ID: ${patientId}, Name: ${patient.firstName} ${patient.lastName}\n`);
 
-  // Generate unique slot on Monday between 09:00 and 12:30 Cairo time
-  // e.g. 08:30 UTC = 11:30 Cairo time
-  const randomMinutes = Math.floor(Math.random() * 6) * 30; // 0, 30, 60, 90, 120, 150 min
-  const baseUtcMs = new Date('2026-10-19T06:30:00.000Z').getTime() + randomMinutes * 60000;
-  const mondayDate = new Date(baseUtcMs);
-  const startHourCairo = 9 + Math.floor(randomMinutes / 60) + 1; // 10:xx
-  const startMin = (randomMinutes % 60).toString().padStart(2, '0');
+  // Monday 2026-10-26 at 11:00 Cairo time (08:00 UTC) - outside break (break is 13:00-14:00)
+  const mondayDate = new Date('2026-10-26T08:00:00.000Z');
   const appointmentPayload = {
     patient: patientId,
     doctor: doctorId,
     appointmentDate: mondayDate.toISOString(),
-    slot: {
-      startTime: `${startHourCairo}:${startMin}`,
-      endTime: `${startHourCairo}:${startMin === '00' ? '30' : '00'}`,
-    },
+    duration: 30,
     type: 'consultation',
     reason: 'Routine checkup & diagnostic consultation',
   };

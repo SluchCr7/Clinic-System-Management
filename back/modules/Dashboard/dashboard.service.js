@@ -284,6 +284,16 @@ const getDashboardOverview = async () => {
         "confirmed"
       ),
 
+      checkedIn: getStatusCount(
+        appointmentStats,
+        "checked_in"
+      ),
+
+      inProgress: getStatusCount(
+        appointmentStats,
+        "in_progress"
+      ),
+
       completed: getStatusCount(
         appointmentStats,
         "completed"
@@ -308,6 +318,16 @@ const getDashboardOverview = async () => {
         confirmed: getStatusCount(
           todayAppointmentStats,
           "confirmed"
+        ),
+
+        checkedIn: getStatusCount(
+          todayAppointmentStats,
+          "checked_in"
+        ),
+
+        inProgress: getStatusCount(
+          todayAppointmentStats,
+          "in_progress"
         ),
 
         completed: getStatusCount(
@@ -560,6 +580,16 @@ const getAppointmentsReport = async ({
               $cond: [{ $eq: ["$_id.status", "confirmed"] }, "$count", 0],
             },
           },
+          checkedIn: {
+            $sum: {
+              $cond: [{ $eq: ["$_id.status", "checked_in"] }, "$count", 0],
+            },
+          },
+          inProgress: {
+            $sum: {
+              $cond: [{ $eq: ["$_id.status", "in_progress"] }, "$count", 0],
+            },
+          },
           completed: {
             $sum: {
               $cond: [{ $eq: ["$_id.status", "completed"] }, "$count", 0],
@@ -597,6 +627,8 @@ const getAppointmentsReport = async ({
     byStatus: {
       scheduled: getStatusCount(statusStats, "scheduled"),
       confirmed: getStatusCount(statusStats, "confirmed"),
+      checkedIn: getStatusCount(statusStats, "checked_in"),
+      inProgress: getStatusCount(statusStats, "in_progress"),
       completed: getStatusCount(statusStats, "completed"),
       cancelled: getStatusCount(statusStats, "cancelled"),
       noShow: getStatusCount(statusStats, "no-show"),
@@ -606,6 +638,8 @@ const getAppointmentsReport = async ({
       total: item.total,
       scheduled: item.scheduled,
       confirmed: item.confirmed,
+      checkedIn: item.checkedIn,
+      inProgress: item.inProgress,
       completed: item.completed,
       cancelled: item.cancelled,
       noShow: item.noShow,

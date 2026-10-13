@@ -5,6 +5,8 @@ import { Doctor } from "./doctor";
 export type AppointmentStatus =
   | "scheduled"
   | "confirmed"
+  | "checked_in"
+  | "in_progress"
   | "completed"
   | "cancelled"
   | "no-show";

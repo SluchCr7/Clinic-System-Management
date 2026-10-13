@@ -31,6 +31,8 @@ const AppointmentSchema = new mongoose.Schema(
       enum: [
         "scheduled",
         "confirmed",
+        "checked_in",
+        "in_progress",
         "completed",
         "cancelled",
         "no-show",

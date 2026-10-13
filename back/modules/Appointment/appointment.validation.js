@@ -59,6 +59,8 @@ const updateAppointmentSchema = Joi.object({
     .valid(
       "scheduled",
       "confirmed",
+      "checked_in",
+      "in_progress",
       "completed",
       "cancelled",
       "no-show"
@@ -85,6 +87,8 @@ const appointmentListQuerySchema = createListQuerySchema({
     status: Joi.string().valid(
       "scheduled",
       "confirmed",
+      "checked_in",
+      "in_progress",
       "completed",
       "cancelled",
       "no-show"

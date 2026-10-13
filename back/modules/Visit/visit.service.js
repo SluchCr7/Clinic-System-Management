@@ -81,7 +81,7 @@ const validateAppointment = async (appointmentId, patientId, doctorId) => {
     );
   }
 
-  if (!["scheduled", "confirmed"].includes(appointment.status)) {
+  if (!["scheduled", "confirmed", "checked_in"].includes(appointment.status)) {
     throw new AppError(
       "Appointment cannot be used to create a visit",
       400,

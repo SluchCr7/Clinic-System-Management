@@ -11,7 +11,7 @@ import {
   Button,
   type Column,
 } from "@/components/ui";
-import { LuPlus } from "react-icons/lu";
+import { LuPlus, LuExternalLink } from "react-icons/lu";
 import { selectUserRole } from "@/features/auth/authSelectors";
 import { useAppSelector } from "@/redux/hooks";
 import { hasPermission } from "@/lib/permissions";
@@ -99,6 +99,22 @@ export default function VisitsPage() {
           </span>
         );
       },
+    },
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      render: (v) => (
+        <Link href={`/visits/${v._id}`}>
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={<LuExternalLink className="w-3.5 h-3.5" />}
+          >
+            Workspace
+          </Button>
+        </Link>
+      ),
     },
   ];
 

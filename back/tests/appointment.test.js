@@ -95,16 +95,16 @@ describe("Appointments API", () => {
     expect(response.body.code).toBe("VALIDATION_ERROR");
   });
 
-  test("allows scheduled appointments to be completed and records the update", async () => {
+  test("allows scheduled appointments to be confirmed and records the update", async () => {
     const appointment = await createSavedAppointment();
 
     const response = await request(app)
       .patch(`/api/appointments/${appointment._id}`)
       .set("Authorization", receptionist.authHeader)
-      .send({ status: "completed" });
+      .send({ status: "confirmed" });
 
     expect(response.status).toBe(200);
-    expect(response.body.data.status).toBe("completed");
+    expect(response.body.data.status).toBe("confirmed");
 
     const [savedAppointment, auditLog] = await Promise.all([
       Appointment.findById(appointment._id),
@@ -201,5 +201,79 @@ describe("Appointments API", () => {
 
     expect(ownResponse.status).toBe(200);
     expect(otherResponse.status).toBe(404);
+  });
+
+  test("enforces strict appointment lifecycle: scheduled -> confirmed -> checked_in", async () => {
+    const appointment = await createSavedAppointment();
+
+    // Confirm
+    const confirmRes = await request(app)
+      .patch(`/api/appointments/${appointment._id}`)
+      .set("Authorization", receptionist.authHeader)
+      .send({ status: "confirmed" });
+    expect(confirmRes.status).toBe(200);
+    expect(confirmRes.body.data.status).toBe("confirmed");
+
+    // Check in
+    const checkInRes = await request(app)
+      .patch(`/api/appointments/${appointment._id}`)
+      .set("Authorization", receptionist.authHeader)
+      .send({ status: "checked_in" });
+    expect(checkInRes.status).toBe(200);
+    expect(checkInRes.body.data.status).toBe("checked_in");
+
+    // Reverting checked_in to scheduled is rejected
+    const revertRes = await request(app)
+      .patch(`/api/appointments/${appointment._id}`)
+      .set("Authorization", receptionist.authHeader)
+      .send({ status: "scheduled" });
+    expect(revertRes.status).toBe(400);
+    expect(revertRes.body.code).toBe("INVALID_STATUS_TRANSITION");
+  });
+
+  test("rejects unauthorized status transitions based on user role", async () => {
+    const appointment = await createSavedAppointment();
+
+    // Doctor cannot confirm appointments (receptionist/admin duty)
+    const docConfirmRes = await request(app)
+      .patch(`/api/appointments/${appointment._id}`)
+      .set("Authorization", doctorUser.authHeader)
+      .send({ status: "confirmed" });
+    expect(docConfirmRes.status).toBe(403);
+    expect(docConfirmRes.body.code).toBe("FORBIDDEN");
+
+    // Doctor can transition confirmed -> in_progress, but receptionist cannot complete clinical encounters
+    await request(app)
+      .patch(`/api/appointments/${appointment._id}`)
+      .set("Authorization", receptionist.authHeader)
+      .send({ status: "confirmed" });
+
+    await request(app)
+      .patch(`/api/appointments/${appointment._id}`)
+      .set("Authorization", doctorUser.authHeader)
+      .send({ status: "in_progress" });
+
+    // Receptionist cannot complete an in_progress clinical encounter
+    const recCompleteRes = await request(app)
+      .patch(`/api/appointments/${appointment._id}`)
+      .set("Authorization", receptionist.authHeader)
+      .send({ status: "completed" });
+    expect(recCompleteRes.status).toBe(403);
+    expect(recCompleteRes.body.code).toBe("FORBIDDEN");
+  });
+
+  test("prevents doctor from modifying another doctor's appointment", async () => {
+    const otherDoctor = await createTestDoctor(receptionist.user);
+    const appointment = await createSavedAppointment({
+      doctor: otherDoctor.doctor._id,
+    });
+
+    const docUpdateRes = await request(app)
+      .patch(`/api/appointments/${appointment._id}`)
+      .set("Authorization", doctorUser.authHeader)
+      .send({ notes: "Unauthorized edit" });
+
+    expect(docUpdateRes.status).toBe(403);
+    expect(docUpdateRes.body.code).toBe("FORBIDDEN");
   });
 });

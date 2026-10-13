@@ -10,9 +10,10 @@ export type InvoiceStatus =
   | "cancelled";
 
 export interface InvoiceItem {
-  service: string;
-  name: string;
-  price: number;
+  performedService: string;
+  serviceName: string;
+  serviceCode: string;
+  unitPrice: number;
   quantity: number;
   discount: number;
   total: number;

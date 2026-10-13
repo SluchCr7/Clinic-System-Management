@@ -38,7 +38,7 @@ router.get(
 router.patch(
     "/:id",
     protect,
-    authorize("admin", "receptionist"),
+    authorize("admin", "doctor", "receptionist"),
     validateId("id", "appointment ID"),
     validate(updateAppointmentSchema),
     appointmentController.updateAppointment

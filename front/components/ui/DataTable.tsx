@@ -36,6 +36,7 @@ export interface DataTableProps<T> {
   onSort?: (key: string) => void;
   onRowClick?: (row: T) => void;
   className?: string;
+  tableClassName?: string;
 }
 
 export function DataTable<T extends { _id?: string; id?: string }>({
@@ -55,6 +56,7 @@ export function DataTable<T extends { _id?: string; id?: string }>({
   onSort,
   onRowClick,
   className = "",
+  tableClassName = "",
 }: DataTableProps<T>) {
   if (isError) {
     return <ErrorState onRetry={onRetry} className={className} />;
@@ -65,7 +67,9 @@ export function DataTable<T extends { _id?: string; id?: string }>({
       className={`bg-surface rounded-lg border border-border-subtle shadow-subtle overflow-hidden flex flex-col ${className}`}
     >
       <div className="w-full overflow-x-auto">
-        <table className="w-full text-start text-xs text-ink border-collapse min-w-[600px]">
+        <table
+          className={`w-full text-start text-xs text-ink border-collapse min-w-[600px] ${tableClassName}`}
+        >
           <thead>
             <tr className="bg-paper/75 border-b border-border-subtle">
               {columns.map((col) => {

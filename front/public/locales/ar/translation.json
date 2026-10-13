@@ -315,6 +315,81 @@
       "submissionFailed": "فشل تسجيل الاستشارة.",
       "operationFailed": "تعذر تنفيذ العملية."
     },
+    "workspace": {
+      "title": "مساحة عمل الزيارة السريرية",
+      "subtitle": "السجل الطبي الشامل، الفحوصات التشخيصية، والفوترة الطبية",
+      "backToVisits": "دليل الزيارات",
+      "tabs": {
+        "overview": "نظرة عامة والملاحظات",
+        "prescriptions": "الوصفات الطبية",
+        "labOrders": "طلبات المختبر",
+        "services": "الخدمات المنفذة",
+        "attachments": "الملفات والتقارير",
+        "billing": "الفاتورة والدفع"
+      },
+      "clinicalEncounter": "اللقاء السريري",
+      "encounterDate": "تاريخ الزيارة",
+      "patientDetails": "بيانات المريض",
+      "consultingDoctor": "الطبيب الاستشاري",
+      "examinationFindings": "نتائج الفحص السريري",
+      "diagnosticEvaluation": "التشخيص والتقييم الطبي",
+      "doctorNotes": "ملاحظات الطبيب السريرية",
+      "prescriptionsTitle": "الأدوية الموصوفة",
+      "prescriptionsSubtitle": "الوصفات الطبية الصادرة خلال هذه الزيارة السريرية",
+      "issuePrescription": "إصدار وصفة طبية",
+      "noPrescriptions": "لم يتم إصدار وصفات طبية لهذه الزيارة حتى الآن.",
+      "addMedication": "إضافة دواء",
+      "drugName": "اسم الدواء",
+      "dosage": "الجرعة",
+      "frequency": "التكرار",
+      "duration": "المدة",
+      "route": "طريقة التناول",
+      "instructions": "التعليمات",
+      "generalInstructions": "تعليمات عامة للمريض",
+      "prescriptionSuccess": "تم إصدار الوصفة الطبية بنجاح.",
+      "labOrdersTitle": "الفحوصات المخبرية التشخيصية",
+      "labOrdersSubtitle": "طلبات التحاليل التشخيصية والعينات الطبية",
+      "orderLabTest": "طلب فحص مخبري",
+      "noLabOrders": "لم يتم طلب فحوصات مخبرية لهذه الزيارة.",
+      "testName": "اسم الفحص",
+      "testCode": "رمز الفحص",
+      "priority": "الأولوية",
+      "reason": "السبب السريري / المبرر الطبي",
+      "labOrderSuccess": "تم إنشاء طلب الفحص المخبري بنجاح.",
+      "servicesTitle": "الإجراءات الطبية والخدمات المنفذة",
+      "servicesSubtitle": "الإجراءات والخدمات السريرية التي تم تنفيذها خلال هذه الزيارة",
+      "recordService": "تسجيل خدمة منفذة",
+      "noServices": "لم يتم تسجيل أي خدمات أو إجراءات سريرية لهذه الزيارة حتى الآن.",
+      "serviceCatalog": "بند الخدمة من الدليل الطبي",
+      "selectService": "اختر خدمة...",
+      "quantity": "الكمية",
+      "discount": "الخصم ($)",
+      "notes": "ملاحظات الإجراء",
+      "serviceSuccess": "تم تسجيل الخدمة المنفذة بنجاح.",
+      "attachmentsTitle": "المستندات الطبية والصور التشخيصية",
+      "attachmentsSubtitle": "الأشعة والتقارير المخبرية والمرفقات التشخيصية",
+      "uploadDocument": "رفع مستند",
+      "noAttachments": "لا توجد مستندات طبية مرفقة بهذه الزيارة.",
+      "documentTitle": "عنوان المستند",
+      "documentCategory": "تصنيف المستند",
+      "selectFile": "اختر ملف المستند",
+      "uploadSuccess": "تم رفع المرفق الطبي بنجاح.",
+      "billingTitle": "المحاسبة المالية والفاتورة",
+      "billingSubtitle": "إصدار فاتورة من الخدمات المنفذة وسداد الرصيد",
+      "generateInvoice": "إصدار فاتورة",
+      "invoiceGenerated": "تم إصدار الفاتورة بنجاح.",
+      "noInvoice": "لم يتم إصدار فاتورة لهذه الزيارة بعد.",
+      "servicesRequiredForInvoice": "يجب تسجيل خدمة منفذة واحدة على الأقل لإصدار الفاتورة.",
+      "invoiceSummary": "ملخص الفاتورة",
+      "invoiceNumber": "رقم الفاتورة",
+      "subtotal": "المجموع الفرعي",
+      "tax": "الضريبة",
+      "total": "المبلغ الإجمالي",
+      "paid": "المبلغ المدفوع",
+      "remaining": "الرصيد المتبقي",
+      "recordPayment": "تسجيل دفعة",
+      "printInvoice": "طباعة الفاتورة"
+    },
     "table": {
       "date": "التاريخ",
       "consultingPhysician": "الطبيب المعالج",
@@ -584,7 +659,34 @@
       "viewDetails": "عرض تفاصيل الفاتورة",
       "recordPayment": "تسجيل الدفع",
       "cancelInvoice": "إلغاء الفاتورة",
-      "pay": "دفع"
+      "pay": "دفع",
+      "createInvoice": "إنشاء فاتورة"
+    },
+    "create": {
+      "title": "إنشاء فاتورة جديدة",
+      "subtitle": "حدد زيارة مكتملة تحتوي على خدمات سريرية تم تنفيذها لإنشاء الفاتورة",
+      "selectVisit": "اختيار الزيارة السريرية",
+      "visitPlaceholder": "اختر زيارة بانتظار الفوترة...",
+      "noEligibleVisits": "لا توجد زيارات حالياً بانتظار إنشاء فاتورة.",
+      "performedServices": "الخدمات المنفذة القابلة للفوترة",
+      "noServicesForVisit": "الزيارة المحددة لا تحتوي على أي خدمات مسجلة قابلة للفوترة.",
+      "discountLabel": "الخصم ($)",
+      "taxLabel": "الضريبة ($)",
+      "notesLabel": "ملاحظات الفوترة",
+      "notesPlaceholder": "ملاحظات اختيارية على الفاتورة...",
+      "subtotal": "المجموع الفرعي",
+      "totalPreview": "الإجمالي المحسوب",
+      "confirm": "إصدار الفاتورة",
+      "success": "تم إنشاء الفاتورة بنجاح.",
+      "error": "فشل في إنشاء الفاتورة."
+    },
+    "paymentsHistory": {
+      "title": "سجل المدفوعات",
+      "noPayments": "لم يتم تسجيل أي دفعات بعد لهذه الفاتورة.",
+      "date": "تاريخ الدفع",
+      "method": "طريقة الدفع",
+      "reference": "المرجع / رمز التفويض",
+      "amount": "المبلغ"
     },
     "modal": {
       "invoicePrefix": "الفاتورة",
@@ -851,6 +953,8 @@
     "statusOptions": {
       "scheduled": "مجدول",
       "confirmed": "مؤكد",
+      "checkedIn": "تم تسجيل الوصول",
+      "inProgress": "قيد التنفيذ",
       "completed": "مكتمل",
       "cancelled": "ملغي",
       "noShow": "تغيب"
@@ -880,14 +984,22 @@
       "message": "هل أنت متأكد أنك تريد إلغاء هذه الاستشارة المجدولة؟ سيصبح هذا الموعد متاحًا مرة أخرى.",
       "confirm": "نعم، إلغاء"
     },
+    "actions": {
+      "confirm": "تأكيد",
+      "checkIn": "تسجيل الوصول",
+      "startVisit": "بدء الزيارة",
+      "markNoShow": "تسجيل عدم الحضور"
+    },
     "success": {
       "booked": "تم حجز الموعد بنجاح.",
-      "cancelled": "تم إلغاء الموعد بنجاح."
+      "cancelled": "تم إلغاء الموعد بنجاح.",
+      "statusUpdated": "تم تحديث حالة الموعد بنجاح."
     },
     "errors": {
       "missingBookingInfo": "يرجى اختيار المريض والطبيب وتاريخ الاستشارة.",
       "bookingFailed": "فشل في حجز الموعد.",
-      "cancelFailed": "فشل في إلغاء الموعد."
+      "cancelFailed": "فشل في إلغاء الموعد.",
+      "updateStatusFailed": "فشل في تحديث حالة الموعد."
     }
   },
   "users": {

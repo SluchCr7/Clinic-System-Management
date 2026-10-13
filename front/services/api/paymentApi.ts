@@ -44,9 +44,10 @@ export const paymentApi = baseApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: [
+      invalidatesTags: (_result, _error, body) => [
         { type: "Payment", id: "LIST" },
         { type: "Invoice", id: "LIST" },
+        { type: "Invoice", id: body.invoice },
         { type: "Dashboard", id: "OVERVIEW" },
       ],
     }),

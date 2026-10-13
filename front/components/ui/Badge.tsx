@@ -83,6 +83,8 @@ export function StatusBadge({ status, size = "md", className = "" }: StatusBadge
 
     // Upcoming / In-progress / Teal states
     case "scheduled":
+    case "checked-in":
+    case "in-progress":
     case "sample-collected":
     case "processing":
       variant = "teal";

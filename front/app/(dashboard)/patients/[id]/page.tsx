@@ -348,6 +348,18 @@ export default function PatientProfilePage() {
               render: (v) =>
                 v.followUpDate ? new Date(v.followUpDate).toLocaleDateString() : t("patientProfile.none"),
             },
+            {
+              key: "actions",
+              header: "",
+              align: "right",
+              render: (v) => (
+                <Link href={`/visits/${v._id}`}>
+                  <Button variant="ghost" size="sm">
+                    Workspace
+                  </Button>
+                </Link>
+              ),
+            },
           ]}
           data={visitsData?.data}
           isLoading={isVisitsLoading}

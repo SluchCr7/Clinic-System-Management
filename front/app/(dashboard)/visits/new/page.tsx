@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useCreateVisitMutation } from "@/services/api/visitApi";
 import { useGetAppointmentsQuery } from "@/services/api/appointmentApi";
@@ -23,15 +23,32 @@ import { LuArrowLeft, LuSave } from "react-icons/lu";
 
 export default function NewVisitPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const appointmentIdFromUrl = searchParams.get("appointmentId");
   const { t } = useTranslation();
   const [createVisit, { isLoading }] = useCreateVisitMutation();
 
-  const { data: appointmentsData } = useGetAppointmentsQuery({
-    limit: 50,
-    status: "confirmed",
+  const { data: appointmentsData, isLoading: isLoadingAppointments } = useGetAppointmentsQuery({
+    limit: 100,
   });
 
-  const [selectedAppointmentId, setSelectedAppointmentId] = useState("");
+  // Filter appointments eligible to start a visit: checked_in, confirmed, or scheduled
+  const eligibleAppointments =
+    appointmentsData?.data?.filter((a) =>
+      ["checked_in", "confirmed", "scheduled"].includes(a.status)
+    ) || [];
+
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState(
+    appointmentIdFromUrl || ""
+  );
+
+  useEffect(() => {
+    if (appointmentIdFromUrl) {
+      setSelectedAppointmentId(appointmentIdFromUrl);
+    } else if (eligibleAppointments.length > 0 && !selectedAppointmentId) {
+      setSelectedAppointmentId(eligibleAppointments[0]._id);
+    }
+  }, [appointmentIdFromUrl, eligibleAppointments.length]);
   const [chiefComplaint, setChiefComplaint] = useState("");
   const [symptoms, setSymptoms] = useState("");
   const [examination, setExamination] = useState("");
@@ -158,23 +175,32 @@ export default function NewVisitPage() {
           subtitle={t("visits.consultation.appointmentContextSubtitle")}
         />
         <CardContent>
-          <Select
-            label={t("visits.consultation.linkedAppointment")}
-            required
-            value={selectedAppointmentId}
-            onChange={(e) => setSelectedAppointmentId(e.target.value)}
-            options={
-              appointmentsData?.data?.map((a) => {
-                const p = typeof a.patient === "object" && a.patient ? a.patient : null;
-                const dateStr = new Date(a.appointmentDate).toLocaleString();
-                return {
-                  value: a._id,
-                  label: `${dateStr} — ${p ? `${p.firstName} ${p.lastName}` : "Patient"} (${a.reason || "Visit"})`,
-                };
-              }) || []
-            }
-            placeholder={t("visits.consultation.appointmentPlaceholder")}
-          />
+          {eligibleAppointments.length === 0 && !isLoadingAppointments ? (
+            <div className="p-3 rounded-md bg-paper border border-border-subtle text-xs text-slate-muted">
+              {t("visits.consultation.noEligibleAppointments", {
+                defaultValue: "No eligible checked-in or confirmed appointments found to begin a consultation.",
+              })}
+            </div>
+          ) : (
+            <Select
+              label={t("visits.consultation.linkedAppointment")}
+              required
+              value={selectedAppointmentId}
+              onChange={(e) => setSelectedAppointmentId(e.target.value)}
+              options={
+                eligibleAppointments.map((a) => {
+                  const p = typeof a.patient === "object" && a.patient ? a.patient : null;
+                  const dateStr = new Date(a.appointmentDate).toLocaleString();
+                  const statusLabel = a.status.replace("_", " ").toUpperCase();
+                  return {
+                    value: a._id,
+                    label: `[${statusLabel}] ${dateStr} — ${p ? `${p.firstName} ${p.lastName}` : "Patient"} (${a.reason || "Visit"})`,
+                  };
+                })
+              }
+              placeholder={t("visits.consultation.appointmentPlaceholder")}
+            />
+          )}
         </CardContent>
       </Card>
 
