@@ -47,7 +47,8 @@ import {
 } from "react-icons/lu";
 
 export default function AppointmentsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isRtl = i18n.dir() === "rtl";
   const role = useAppSelector(selectUserRole);
   const canCreateAppointment = hasPermission(role, "appointments.create");
   const canEditAppointment = hasPermission(role, "appointments.edit");
@@ -201,7 +202,7 @@ export default function AppointmentsPage() {
         return (
           <div className="flex flex-col">
             <span className="font-semibold text-ink text-xs">
-              {d.toLocaleDateString("en-US", {
+              {d.toLocaleDateString(isRtl ? "ar-EG" : "en-US", {
                 weekday: "short",
                 month: "short",
                 day: "numeric",
@@ -209,7 +210,7 @@ export default function AppointmentsPage() {
             </span>
             <span className="text-[11px] text-slate-muted font-mono flex items-center gap-1">
               <LuClock className="w-3 h-3 text-slate-light" />
-              {d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+              {d.toLocaleTimeString(isRtl ? "ar-EG" : "en-US", { hour: "numeric", minute: "2-digit" })}
             </span>
           </div>
         );
@@ -305,14 +306,18 @@ export default function AppointmentsPage() {
             </Button>
 
             {isOpen && (
-              <div className="absolute right-0 top-full mt-1 w-48 bg-surface border border-border-subtle rounded-lg shadow-lg py-1.5 z-50 flex flex-col">
+              <div 
+                className={`absolute top-full mt-1 w-48 bg-surface border border-border-subtle rounded-lg shadow-lg py-1.5 z-50 flex flex-col ${
+                  isRtl ? "left-0" : "right-0"
+                }`}
+              >
                 {/* Scheduled -> Confirm */}
                 {apt.status === "scheduled" && (role === "admin" || role === "receptionist") && (
                   <button
                     type="button"
                     onClick={() => handleStatusTransition(apt._id, "confirmed")}
                     disabled={isUpdating}
-                    className="flex items-center gap-2 px-3 py-2 text-xs text-ink hover:bg-mint/40 text-right transition-colors"
+                    className="flex items-center gap-2 px-3 py-2 text-xs text-ink hover:bg-mint/40 text-start transition-colors"
                   >
                     <LuCheck className="w-4 h-4 text-teal-primary shrink-0" />
                     <span>{t("appointments.actions.confirm")}</span>
@@ -325,7 +330,7 @@ export default function AppointmentsPage() {
                     type="button"
                     onClick={() => handleStatusTransition(apt._id, "checked_in")}
                     disabled={isUpdating}
-                    className="flex items-center gap-2 px-3 py-2 text-xs text-ink hover:bg-status-info-bg/40 text-right transition-colors"
+                    className="flex items-center gap-2 px-3 py-2 text-xs text-ink hover:bg-status-info-bg/40 text-start transition-colors"
                   >
                     <LuUserCheck className="w-4 h-4 text-status-info shrink-0" />
                     <span>{t("appointments.actions.checkIn")}</span>
@@ -340,7 +345,7 @@ export default function AppointmentsPage() {
                       setActiveMenuId(null);
                       router.push(`/visits/new?appointmentId=${apt._id}`);
                     }}
-                    className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-teal-dark hover:bg-mint/50 text-right transition-colors"
+                    className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-teal-dark hover:bg-mint/50 text-start transition-colors"
                   >
                     <LuStethoscope className="w-4 h-4 text-teal-primary shrink-0" />
                     <span>{t("appointments.actions.startVisit")}</span>
@@ -353,7 +358,7 @@ export default function AppointmentsPage() {
                     type="button"
                     onClick={() => handleStatusTransition(apt._id, "no-show")}
                     disabled={isUpdating}
-                    className="flex items-center gap-2 px-3 py-2 text-xs text-ink hover:bg-status-warning-bg/40 text-right transition-colors"
+                    className="flex items-center gap-2 px-3 py-2 text-xs text-ink hover:bg-status-warning-bg/40 text-start transition-colors"
                   >
                     <LuUserX className="w-4 h-4 text-status-warning shrink-0" />
                     <span>{t("appointments.actions.markNoShow")}</span>
@@ -369,7 +374,7 @@ export default function AppointmentsPage() {
                     setActiveMenuId(null);
                     setCancelTargetId(apt._id);
                   }}
-                  className="flex items-center gap-2 px-3 py-2 text-xs text-status-error hover:bg-status-error-bg/40 text-right transition-colors"
+                  className="flex items-center gap-2 px-3 py-2 text-xs text-status-error hover:bg-status-error-bg/40 text-start transition-colors"
                 >
                   <LuCircleX className="w-4 h-4 shrink-0" />
                   <span>{t("appointments.cancelAppointment")}</span>
@@ -383,12 +388,12 @@ export default function AppointmentsPage() {
   ];
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4 sm:gap-5 w-full max-w-full overflow-x-hidden p-2 sm:p-4 md:p-6">
       <PageHeader
         title={t("appointments.title")}
         subtitle={t("appointments.subtitle")}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center p-0.5 bg-paper border border-border-subtle rounded-md">
               <button
                 type="button"
@@ -432,7 +437,7 @@ export default function AppointmentsPage() {
 
       {/* Filter Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-surface p-3 rounded-lg border border-border-subtle">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
           <Input
             type="date"
             value={queryParams.date || ""}
@@ -443,12 +448,12 @@ export default function AppointmentsPage() {
                 page: 1,
               }))
             }
-            className="max-w-xs"
+            className="w-full sm:max-w-xs"
           />
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <div className="w-36">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <div className="w-full sm:w-36">
             <Select
               value={queryParams.status || ""}
               onChange={(e) =>
@@ -476,23 +481,25 @@ export default function AppointmentsPage() {
 
       {/* Main View */}
       {viewMode === "list" ? (
-        <DataTable
-          columns={columns}
-          data={data?.data}
-          tableClassName="table-fixed min-w-[892px]"
-          isLoading={isLoading}
-          isError={isError}
-          onRetry={refetch}
-          emptyTitle={t("appointments.emptyTitle")}
-          emptyDescription={t("appointments.emptyDescription")}
-          emptyActionLabel={t("appointments.book")}
-          onEmptyAction={handleOpenBookModal}
-          pagination={data?.pagination}
-          onPageChange={(page) => setQueryParams((prev) => ({ ...prev, page }))}
-        />
+        <div className="w-full overflow-x-auto">
+          <DataTable
+            columns={columns}
+            data={data?.data}
+            tableClassName="table-fixed min-w-[892px]"
+            isLoading={isLoading}
+            isError={isError}
+            onRetry={refetch}
+            emptyTitle={t("appointments.emptyTitle")}
+            emptyDescription={t("appointments.emptyDescription")}
+            emptyActionLabel={t("appointments.book")}
+            onEmptyAction={handleOpenBookModal}
+            pagination={data?.pagination}
+            onPageChange={(page) => setQueryParams((prev) => ({ ...prev, page }))}
+          />
+        </div>
       ) : (
         /* Agenda Cards View */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {isLoading ? (
             <div className="col-span-full py-12 text-center text-xs text-slate-muted">
               {t("appointments.loadingAgenda")}
@@ -516,27 +523,27 @@ export default function AppointmentsPage() {
                   <div>
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <span className="text-xs font-bold text-teal-dark bg-mint px-2 py-0.5 rounded-sm">
-                        {d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                        {d.toLocaleTimeString(isRtl ? "ar-EG" : "en-US", { hour: "numeric", minute: "2-digit" })}
                       </span>
                       <StatusBadge status={apt.status} size="sm" />
                     </div>
 
-                    <h4 className="text-sm font-semibold text-ink">
+                    <h4 className="text-sm font-semibold text-ink truncate">
                       {p ? `${p.firstName} ${p.lastName}` : t("common.patient")}
                     </h4>
-                    <p className="text-xs text-slate-muted mt-0.5">
+                    <p className="text-xs text-slate-muted mt-0.5 truncate">
                       {t("appointments.physician")}: {u ? `Dr. ${u.lastName}` : t("common.doctor")}
                     </p>
 
                     {apt.reason && (
-                      <p className="text-xs text-slate-muted bg-paper p-2 rounded-md mt-2 leading-relaxed">
+                      <p className="text-xs text-slate-muted bg-paper p-2 rounded-md mt-2 leading-relaxed truncate">
                         &ldquo;{apt.reason}&rdquo;
                       </p>
                     )}
                   </div>
 
                   <div className="pt-2 border-t border-border-subtle/80 flex items-center justify-between text-xs text-slate-muted">
-                    <span>{d.toLocaleDateString()}</span>
+                    <span>{d.toLocaleDateString(isRtl ? "ar-EG" : "en-US")}</span>
                     <span>{t("appointments.durationMinutes", { count: apt.duration })}</span>
                   </div>
                 </div>
