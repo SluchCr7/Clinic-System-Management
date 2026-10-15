@@ -16,6 +16,10 @@ const protect = asyncHandler(async (req, res, next) => {
   }
 
   if (!token) {
+    if (req.cookies?.refreshToken) {
+      throw new AppError("Access token expired", 401, "TOKEN_EXPIRED");
+    }
+
     throw new AppError("Authentication required", 401, "UNAUTHORIZED");
   }
 

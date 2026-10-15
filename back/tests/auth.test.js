@@ -149,7 +149,47 @@ describe("Authentication and user provisioning API", () => {
         .set("Authorization", "Bearer invalid-token");
 
       expect(missingToken.status).toBe(401);
+      expect(missingToken.body.code).toBe("UNAUTHORIZED");
       expect(invalidToken.status).toBe(401);
+    });
+
+    test("refreshes an expired access-cookie session and retries the request", async () => {
+      const expiredAccessResponse = await request(app)
+        .get("/api/auth/me")
+        .set("Cookie", `refreshToken=${administrator.refreshToken}`);
+
+      expect(expiredAccessResponse.status).toBe(401);
+      expect(expiredAccessResponse.body.code).toBe("TOKEN_EXPIRED");
+
+      const refreshResponse = await request(app)
+        .post("/api/auth/refresh")
+        .set("Cookie", `refreshToken=${administrator.refreshToken}`);
+
+      expect(refreshResponse.status).toBe(200);
+      expect(refreshResponse.body.success).toBe(true);
+      expect(refreshResponse.headers["set-cookie"]).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("accessToken="),
+          expect.stringContaining("refreshToken="),
+        ])
+      );
+      expect(
+        refreshResponse.headers["set-cookie"].every((cookie) =>
+          cookie.includes("HttpOnly")
+        )
+      ).toBe(true);
+
+      const replacementCookies = refreshResponse.headers["set-cookie"].map(
+        (cookie) => cookie.split(";")[0]
+      );
+      const retriedResponse = await request(app)
+        .get("/api/auth/me")
+        .set("Cookie", replacementCookies.join("; "));
+
+      expect(retriedResponse.status).toBe(200);
+      expect(retriedResponse.body.data.user._id).toBe(
+        administrator.user._id.toString()
+      );
     });
   });
 
