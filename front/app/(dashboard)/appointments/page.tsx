@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useGetAppointmentsQuery,
@@ -43,6 +43,7 @@ import {
   LuUserCheck,
   LuStethoscope,
   LuUserX,
+  LuEllipsisVertical,
 } from "react-icons/lu";
 
 export default function AppointmentsPage() {
@@ -51,6 +52,10 @@ export default function AppointmentsPage() {
   const canCreateAppointment = hasPermission(role, "appointments.create");
   const canEditAppointment = hasPermission(role, "appointments.edit");
   const [viewMode, setViewMode] = useState<"list" | "agenda">("list");
+  
+  // State for active dropdown menu in table rows
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+
   const [queryParams, setQueryParams] = useState<AppointmentQueryParams>({
     page: 1,
     limit: 10,
@@ -76,7 +81,15 @@ export default function AppointmentsPage() {
 
   const router = useRouter();
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => setActiveMenuId(null);
+    window.addEventListener("click", handleClickOutside);
+    return () => window.removeEventListener("click", handleClickOutside);
+  }, []);
+
   const handleStatusTransition = async (id: string, newStatus: AppointmentStatus) => {
+    setActiveMenuId(null);
     try {
       await updateAppointment({
         id,
@@ -268,82 +281,101 @@ export default function AppointmentsPage() {
       key: "actions",
       header: "",
       align: "right",
-      className: "w-[260px] min-w-[260px] overflow-hidden whitespace-nowrap",
+      className: "w-[80px] min-w-[80px] overflow-visible whitespace-nowrap relative",
       render: (apt) => {
         if (!canEditAppointment || apt.status === "cancelled" || apt.status === "completed") {
           return null;
         }
 
+        const isOpen = activeMenuId === apt._id;
+
         return (
-          <div className="flex max-w-full min-w-0 items-center justify-end gap-1 overflow-hidden whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-            {/* Scheduled -> Confirm */}
-            {apt.status === "scheduled" && (role === "admin" || role === "receptionist") && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleStatusTransition(apt._id, "confirmed")}
-                disabled={isUpdating}
-                className="max-w-[88px] min-w-0 gap-1 overflow-hidden px-2 text-teal-primary hover:text-teal-dark hover:bg-mint/40"
-                title={t("appointments.actions.confirm")}
-              >
-                <LuCheck className="w-4 h-4 shrink-0" />
-                <span className="block min-w-0 truncate text-xs">{t("appointments.actions.confirm")}</span>
-              </Button>
-            )}
-
-            {/* Confirmed / Scheduled -> Check In */}
-            {(apt.status === "scheduled" || apt.status === "confirmed") && (role === "admin" || role === "receptionist") && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleStatusTransition(apt._id, "checked_in")}
-                disabled={isUpdating}
-                className="max-w-[88px] min-w-0 gap-1 overflow-hidden px-2 text-status-info hover:bg-status-info-bg/40"
-                title={t("appointments.actions.checkIn")}
-              >
-                <LuUserCheck className="w-4 h-4 shrink-0" />
-                <span className="block min-w-0 truncate text-xs">{t("appointments.actions.checkIn")}</span>
-              </Button>
-            )}
-
-            {/* Checked In / In Progress -> Start Visit / Consultation (Doctor or Admin) */}
-            {(apt.status === "checked_in" || apt.status === "confirmed" || apt.status === "in_progress") && (role === "admin" || role === "doctor") && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.push(`/visits/new?appointmentId=${apt._id}`)}
-                className="max-w-[88px] min-w-0 gap-1 overflow-hidden px-2 text-teal-dark font-semibold bg-mint/50 hover:bg-mint"
-                title={t("appointments.actions.startVisit")}
-              >
-                <LuStethoscope className="w-4 h-4 shrink-0" />
-                <span className="block min-w-0 truncate text-xs">{t("appointments.actions.startVisit")}</span>
-              </Button>
-            )}
-
-            {/* Mark No Show */}
-            {(apt.status === "scheduled" || apt.status === "confirmed") && (role === "admin" || role === "receptionist") && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleStatusTransition(apt._id, "no-show")}
-                disabled={isUpdating}
-                className="text-slate-muted hover:text-status-warning"
-                title={t("appointments.actions.markNoShow")}
-              >
-                <LuUserX className="w-4 h-4" />
-              </Button>
-            )}
-
-            {/* Cancel appointment */}
+          <div className="relative flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setCancelTargetId(apt._id)}
-              className="text-slate-muted hover:text-status-error"
-              title={t("appointments.cancelAppointment")}
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveMenuId(isOpen ? null : apt._id);
+              }}
+              className="p-1.5 text-slate-muted hover:text-ink hover:bg-surface border border-transparent hover:border-border-subtle rounded-md"
+              title={t("common.actions")}
             >
-              <LuCircleX className="w-4 h-4" />
+              <LuEllipsisVertical className="w-4 h-4" />
             </Button>
+
+            {isOpen && (
+              <div className="absolute right-0 top-full mt-1 w-48 bg-surface border border-border-subtle rounded-lg shadow-lg py-1.5 z-50 flex flex-col">
+                {/* Scheduled -> Confirm */}
+                {apt.status === "scheduled" && (role === "admin" || role === "receptionist") && (
+                  <button
+                    type="button"
+                    onClick={() => handleStatusTransition(apt._id, "confirmed")}
+                    disabled={isUpdating}
+                    className="flex items-center gap-2 px-3 py-2 text-xs text-ink hover:bg-mint/40 text-right transition-colors"
+                  >
+                    <LuCheck className="w-4 h-4 text-teal-primary shrink-0" />
+                    <span>{t("appointments.actions.confirm")}</span>
+                  </button>
+                )}
+
+                {/* Confirmed / Scheduled -> Check In */}
+                {(apt.status === "scheduled" || apt.status === "confirmed") && (role === "admin" || role === "receptionist") && (
+                  <button
+                    type="button"
+                    onClick={() => handleStatusTransition(apt._id, "checked_in")}
+                    disabled={isUpdating}
+                    className="flex items-center gap-2 px-3 py-2 text-xs text-ink hover:bg-status-info-bg/40 text-right transition-colors"
+                  >
+                    <LuUserCheck className="w-4 h-4 text-status-info shrink-0" />
+                    <span>{t("appointments.actions.checkIn")}</span>
+                  </button>
+                )}
+
+                {/* Checked In / In Progress -> Start Visit */}
+                {(apt.status === "checked_in" || apt.status === "confirmed" || apt.status === "in_progress") && (role === "admin" || role === "doctor") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveMenuId(null);
+                      router.push(`/visits/new?appointmentId=${apt._id}`);
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-teal-dark hover:bg-mint/50 text-right transition-colors"
+                  >
+                    <LuStethoscope className="w-4 h-4 text-teal-primary shrink-0" />
+                    <span>{t("appointments.actions.startVisit")}</span>
+                  </button>
+                )}
+
+                {/* Mark No Show */}
+                {(apt.status === "scheduled" || apt.status === "confirmed") && (role === "admin" || role === "receptionist") && (
+                  <button
+                    type="button"
+                    onClick={() => handleStatusTransition(apt._id, "no-show")}
+                    disabled={isUpdating}
+                    className="flex items-center gap-2 px-3 py-2 text-xs text-ink hover:bg-status-warning-bg/40 text-right transition-colors"
+                  >
+                    <LuUserX className="w-4 h-4 text-status-warning shrink-0" />
+                    <span>{t("appointments.actions.markNoShow")}</span>
+                  </button>
+                )}
+
+                <div className="my-1 border-t border-border-subtle" />
+
+                {/* Cancel appointment */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveMenuId(null);
+                    setCancelTargetId(apt._id);
+                  }}
+                  className="flex items-center gap-2 px-3 py-2 text-xs text-status-error hover:bg-status-error-bg/40 text-right transition-colors"
+                >
+                  <LuCircleX className="w-4 h-4 shrink-0" />
+                  <span>{t("appointments.cancelAppointment")}</span>
+                </button>
+              </div>
+            )}
           </div>
         );
       },
@@ -447,7 +479,7 @@ export default function AppointmentsPage() {
         <DataTable
           columns={columns}
           data={data?.data}
-          tableClassName="table-fixed min-w-[1072px]"
+          tableClassName="table-fixed min-w-[892px]"
           isLoading={isLoading}
           isError={isError}
           onRetry={refetch}
@@ -616,7 +648,7 @@ export default function AppointmentsPage() {
               variant="secondary"
               size="sm"
               onClick={() => setIsBookModalOpen(false)}
-             >
+            >
               {t("common.cancel")}
             </Button>
             <Button
