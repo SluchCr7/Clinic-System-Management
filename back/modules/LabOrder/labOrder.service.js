@@ -3,6 +3,7 @@ const LabOrder = require("./labOrder.model");
 const Visit = require("../Visit/visit.model");
 const Patient = require("../Patient/patient.model");
 const Doctor = require("../Doctor/doctor.model");
+const auditLogService = require("../AuditLog/auditLog.service");
 
 const { AppError } = require("../../middlewares/errorHandler");
 
@@ -458,6 +459,7 @@ const updateLabOrder = async (
     const allowedTransitions = {
       ordered: [
         "sample_collected",
+        "completed",
         "cancelled",
       ],
 

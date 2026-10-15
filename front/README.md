@@ -76,6 +76,15 @@ Then open:
 - Styling is based on a modern clinical design system with light/dark support.
 - Most data is served through the backend API located in `back/`.
 
+## Browser E2E Scripts
+
+The scripts in `tests/` use existing test accounts supplied through
+`E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD`, `E2E_DOCTOR_EMAIL`,
+`E2E_DOCTOR_PASSWORD`, `E2E_RECEPTIONIST_EMAIL`, and
+`E2E_RECEPTIONIST_PASSWORD`. Set `E2E_FRONTEND_URL` and `E2E_API_URL` when the
+local service URLs differ from their defaults. Do not commit account
+credentials.
+
 ## Related Project Documentation
 
 - [../README.md](../README.md) – project overview and full-stack setup

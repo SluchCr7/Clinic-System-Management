@@ -137,15 +137,16 @@ app.get("/", (req, res) => {
 
 app.get("/health", (req, res) => {
   const dbState = mongoose.connection.readyState;
+  const isDatabaseReady = dbState === 1;
   const dbStatusMap = {
     0: "disconnected",
     1: "connected",
     2: "connecting",
     3: "disconnecting",
   };
-  res.status(200).json({
-    success: true,
-    status: "ok",
+  res.status(isDatabaseReady ? 200 : 503).json({
+    success: isDatabaseReady,
+    status: isDatabaseReady ? "ok" : "unavailable",
     database: dbStatusMap[dbState] || "unknown",
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
@@ -190,31 +191,52 @@ app.use(errorHandler);
 let server;
 
 if (process.env.NODE_ENV !== "test") {
-  connectDB().then(() => startReminderJob());
   const PORT = process.env.PORT || 5000;
-  server = httpServer.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
-  });
+  let isShuttingDown = false;
+
+  const closeResources = async () => {
+    await stopReminderJob();
+    try {
+      await mongoose.connection.close(false);
+      console.log("MongoDB connection closed.");
+    } catch (err) {
+      console.error("Error closing MongoDB connection:", err);
+    }
+    process.exit(0);
+  };
 
   const gracefulShutdown = (signal) => {
     console.log(`${signal} received. Shutting down gracefully...`);
+    isShuttingDown = true;
     if (server) {
       server.close(async () => {
         console.log("HTTP server closed.");
-        await stopReminderJob();
-        try {
-          await mongoose.connection.close(false);
-          console.log("MongoDB connection closed.");
-        } catch (err) {
-          console.error("Error closing MongoDB connection:", err);
-        }
-        process.exit(0);
+        await closeResources();
       });
+    } else {
+      closeResources();
     }
   };
 
   process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
   process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+  const startServer = async () => {
+    try {
+      await connectDB();
+      if (isShuttingDown) return;
+      startReminderJob();
+      server = httpServer.listen(PORT, () => {
+        console.log(`Server listening on port ${PORT}`);
+      });
+    } catch (error) {
+      if (isShuttingDown) return;
+      console.error("Failed to start the server:", error);
+      process.exit(1);
+    }
+  };
+
+  startServer();
 }
 
 module.exports = app;

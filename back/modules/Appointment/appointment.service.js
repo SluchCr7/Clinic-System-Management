@@ -607,6 +607,7 @@ const Appointment = require("./appointment.model");
 const Patient = require("../Patient/patient.model");
 const Doctor = require("../Doctor/doctor.model");
 const Schedule = require("../Schedule/schedule.model");
+const Visit = require("../Visit/visit.model");
 const { AppError } = require("../../middlewares/errorHandler");
 const auditLogService = require("../AuditLog/auditLog.service");
 const { paginateQuery } = require("../../utils/pagination");
@@ -639,12 +640,13 @@ const getClinicOffsetMinutes = (date = new Date()) => {
   });
 
   const parts = formatter.formatToParts(date);
-  const tzName = parts.find(({ type }) => type === "timeZoneName")?.value || "GMT+2";
+  const tzName =
+    parts.find(({ type }) => type === "timeZoneName")?.value || "GMT+2";
   const match = tzName.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/);
 
   if (!match) {
     return 120;
-  }
+    }
 
   const sign = match[1] === "-" ? -1 : 1;
   const hours = Number(match[2] || 0);
@@ -656,11 +658,11 @@ const getClinicOffsetMinutes = (date = new Date()) => {
 const normalizeClinicDate = (date) => {
   if (date instanceof Date) {
     return date;
-  }
+    }
 
   if (typeof date !== "string") {
     return new Date(date);
-  }
+    }
 
   const value = date.trim();
 
@@ -669,7 +671,23 @@ const normalizeClinicDate = (date) => {
   }
 
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?$/.test(value)) {
-    return new Date(value + "Z");
+    const [datePart, timePart] = value.split("T");
+    const [year, month, day] = datePart.split("-").map(Number);
+    const [hour, minute, second = 0, millisecond = 0] = timePart
+      .split(":")
+      .map((part) => Number(part.split(".")[0] || 0));
+    const utcTimestamp = Date.UTC(
+      year,
+      month - 1,
+      day,
+      hour,
+      minute,
+      second,
+      millisecond
+    );
+    const offsetMinutes = getClinicOffsetMinutes(new Date(utcTimestamp));
+
+    return new Date(utcTimestamp - offsetMinutes * 60 * 1000);
   }
 
   return new Date(value);
@@ -694,10 +712,18 @@ const getClinicDateParts = (date) => {
 };
 
 const getDayOfWeek = (date) => {
-  const normDate = normalizeClinicDate(date);
-  const cairoDate = new Date(normDate.toLocaleString("en-US", { timeZone: CLINIC_TIMEZONE }));
-  
-  return cairoDate.getDay();
+  const { weekday } = getClinicDateParts(date);
+  const days = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  };
+
+  return days[weekday] ?? 0;
 };
 
 const getTimeInMinutes = (date) => {
@@ -708,8 +734,8 @@ const getTimeInMinutes = (date) => {
 
 const toClinicDate = (date) => normalizeClinicDate(date);
 
-const validatePatient = async (patientId) => {
-  const patient = await Patient.findById(patientId);
+const validatePatient = async (patientId, session = null) => {
+  const patient = await Patient.findById(patientId).session(session);
 
   if (!patient) {
     throw new AppError(
@@ -730,8 +756,8 @@ const validatePatient = async (patientId) => {
   return patient;
 };
 
-const validateDoctor = async (doctorId) => {
-  const doctor = await Doctor.findById(doctorId);
+const validateDoctor = async (doctorId, session = null) => {
+  const doctor = await Doctor.findById(doctorId).session(session);
 
   if (!doctor) {
     throw new AppError(
@@ -752,20 +778,14 @@ const validateDoctor = async (doctorId) => {
   return doctor;
 };
 
-const getDoctorSchedule = async (doctorId, appointmentDate) => {
+const getDoctorSchedule = async (doctorId, appointmentDate, session = null) => {
   const dayOfWeek = getDayOfWeek(appointmentDate);
-  
-  // اطبع القيم دي عشان نشوفها في التيرمنال عندك
-  console.log("Appointment Date Received:", appointmentDate);
-  console.log("Calculated dayOfWeek:", dayOfWeek);
 
   const schedule = await Schedule.findOne({
     doctor: doctorId,
     dayOfWeek,
     isActive: true,
-  });
-
-  console.log("Found Schedule:", schedule); // هل بيطلع null ولا بيلاقي جدول؟
+  }).session(session);
 
   if (!schedule) {
     throw new AppError(
@@ -783,8 +803,23 @@ const validateAppointmentTime = (appointmentDate, duration, schedule) => {
   const appointmentEndMinutes = appointmentMinutes + duration;
   const scheduleStart = timeToMinutes(schedule.startTime);
   const scheduleEnd = timeToMinutes(schedule.endTime);
+  const isNearMidnight = scheduleEnd >= 23 * 60 + 30;
+  const crossesIntoNextDay = appointmentEndMinutes > scheduleEnd;
+  const withinAllowedMidnightWindow =
+    isNearMidnight && appointmentEndMinutes <= 24 * 60 && appointmentMinutes >= scheduleStart;
 
-  if (appointmentMinutes < scheduleStart || appointmentEndMinutes > scheduleEnd) {
+  if (
+    appointmentMinutes < scheduleStart ||
+    (!withinAllowedMidnightWindow && crossesIntoNextDay)
+  ) {
+    throw new AppError(
+      "Appointment is outside doctor's working hours",
+      400,
+      "APPOINTMENT_OUTSIDE_WORKING_HOURS"
+    );
+  }
+
+  if (appointmentEndMinutes > 24 * 60 && appointmentMinutes >= scheduleStart) {
     throw new AppError(
       "Appointment is outside doctor's working hours",
       400,
@@ -849,12 +884,100 @@ const validateNoConflict = async ({
   }
 };
 
+const validateFollowUpDoesNotDuplicate = async ({
+  originatingVisit,
+  doctorId,
+  patientId,
+  excludeAppointmentId = null,
+  session = null,
+}) => {
+  if (!originatingVisit) {
+    return;
+  }
+
+  const query = {
+    originatingVisit,
+    patient: patientId,
+    doctor: doctorId,
+    status: { $nin: ["cancelled", "no-show"] },
+  };
+
+  if (excludeAppointmentId) {
+    query._id = { $ne: excludeAppointmentId };
+  }
+
+  const existingFollowUp = await Appointment.findOne(query).session(session);
+
+  if (existingFollowUp) {
+    throw new AppError(
+      "A follow-up appointment for this visit already exists",
+      409,
+      "FOLLOW_UP_ALREADY_EXISTS"
+    );
+  }
+};
+
+const validateFollowUpReferences = async ({
+  originatingVisit,
+  followUpOf,
+  doctorId,
+  patientId,
+  excludeAppointmentId = null,
+  session = null,
+}) => {
+  if (originatingVisit) {
+    const visit = await Visit.findById(originatingVisit).session(session);
+
+    if (!visit) {
+      throw new AppError("Visit not found", 404, "VISIT_NOT_FOUND");
+    }
+
+    if (
+      visit.patient.toString() !== patientId.toString() ||
+      visit.doctor.toString() !== doctorId.toString()
+    ) {
+      throw new AppError(
+        "Follow-up visit must belong to the selected patient and doctor",
+        400,
+        "FOLLOW_UP_VISIT_MISMATCH"
+      );
+    }
+  }
+
+  if (followUpOf) {
+    const parentAppointment = await Appointment.findById(followUpOf).session(session);
+
+    if (!parentAppointment) {
+      throw new AppError(
+        "Follow-up appointment source not found",
+        404,
+        "FOLLOW_UP_APPOINTMENT_NOT_FOUND"
+      );
+    }
+
+    if (
+      parentAppointment._id.toString() === excludeAppointmentId?.toString() ||
+      parentAppointment.patient.toString() !== patientId.toString() ||
+      parentAppointment.doctor.toString() !== doctorId.toString()
+    ) {
+      throw new AppError(
+        "Follow-up appointment source must belong to the selected patient and doctor",
+        400,
+        "FOLLOW_UP_APPOINTMENT_MISMATCH"
+      );
+    }
+  }
+};
+
 const createAppointment = async (data, currentUser) => {
-  const { patient, doctor, appointmentDate, duration } = data;
-
-  await validatePatient(patient);
-  await validateDoctor(doctor);
-
+  const {
+    patient,
+    doctor,
+    appointmentDate,
+    duration,
+    originatingVisit,
+    followUpOf,
+  } = data;
   const appointment = toClinicDate(appointmentDate);
 
   if (appointment <= new Date()) {
@@ -865,18 +988,33 @@ const createAppointment = async (data, currentUser) => {
     );
   }
 
-  const schedule = await getDoctorSchedule(doctor, appointmentDate);
+  return withAppointmentTransaction(async (session) => {
+    await lockDoctorAppointmentBookings(doctor, session);
+    await validatePatient(patient, session);
+    await validateDoctor(doctor, session);
 
-  validateAppointmentTime(appointmentDate, duration, schedule);
+    const schedule = await getDoctorSchedule(doctor, appointmentDate, session);
+    validateAppointmentTime(appointmentDate, duration, schedule);
 
-  const session = await mongoose.startSession();
-  try {
-    session.startTransaction();
+    await validateFollowUpReferences({
+      originatingVisit,
+      followUpOf,
+      doctorId: doctor,
+      patientId: patient,
+      session,
+    });
 
     await validateNoConflict({
       doctorId: doctor,
       appointmentDate,
       duration,
+      session,
+    });
+
+    await validateFollowUpDoesNotDuplicate({
+      originatingVisit,
+      doctorId: doctor,
+      patientId: patient,
       session,
     });
 
@@ -890,7 +1028,7 @@ const createAppointment = async (data, currentUser) => {
       { session }
     );
 
-    if (currentUser?._id) {
+      if (currentUser?._id) {
       await auditLogService.logActivity({
         actor: currentUser,
         action: "APPOINTMENT_CREATED",
@@ -908,14 +1046,8 @@ const createAppointment = async (data, currentUser) => {
       });
     }
 
-    await session.commitTransaction();
     return newAppointment;
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
+  });
 };
 
 const getAppointments = async (query = {}, currentUser = null) => {
@@ -973,161 +1105,235 @@ const getAppointmentById = async (id, currentUser = null) => {
     });
 };
 
+const lockDoctorAppointmentBookings = async (doctorId, session) => {
+  const result = await Doctor.updateOne(
+    { _id: doctorId },
+    { $inc: { appointmentBookingVersion: 1 } },
+    { session }
+  );
+
+  if (result.matchedCount === 0) {
+    throw new AppError("Doctor not found", 404, "DOCTOR_NOT_FOUND");
+  }
+};
+
+const withAppointmentTransaction = async (callback) => {
+  const session = await mongoose.startSession();
+
+  try {
+    let result;
+    await session.withTransaction(async () => {
+      result = await callback(session);
+    });
+    return result;
+  } finally {
+    await session.endSession();
+  }
+};
+
 const updateAppointment = async (id, data, currentUser) => {
-  const appointment = await Appointment.findById(id);
+  return withAppointmentTransaction(async (session) => {
+    const appointment = await Appointment.findById(id).session(session);
 
-  if (!appointment) {
-    return null;
-  }
-
-  const previousValues = {
-    patient: appointment.patient,
-    doctor: appointment.doctor,
-    appointmentDate: appointment.appointmentDate,
-    duration: appointment.duration,
-    status: appointment.status,
-    reason: appointment.reason,
-    notes: appointment.notes,
-  };
-
-  const newDate = data.appointmentDate || appointment.appointmentDate;
-  const newDuration = data.duration || appointment.duration;
-  const newStatus = data.status || appointment.status;
-
-  if (currentUser?.role === "doctor") {
-    const doctorId = await getDoctorScopeId(currentUser, Doctor);
-    if (!doctorId || appointment.doctor.toString() !== doctorId.toString()) {
-      throw new AppError(
-        "You are not authorized to update another doctor's appointment",
-        403,
-        "FORBIDDEN"
-      );
+    if (!appointment) {
+      return null;
     }
-  }
 
-  const allowedTransitions = {
-    scheduled: ["confirmed", "checked_in", "cancelled", "no-show"],
-    confirmed: ["checked_in", "in_progress", "cancelled", "no-show"],
-    checked_in: ["in_progress", "cancelled", "no-show"],
-    in_progress: ["completed", "cancelled"],
-    completed: [],
-    cancelled: [],
-    "no-show": [],
-  };
+    const previousValues = {
+      patient: appointment.patient,
+      doctor: appointment.doctor,
+      appointmentDate: appointment.appointmentDate,
+      duration: appointment.duration,
+      status: appointment.status,
+      reason: appointment.reason,
+      notes: appointment.notes,
+    };
 
-  const roleAllowedTransitions = {
-    admin: ["confirmed", "checked_in", "in_progress", "completed", "cancelled", "no-show"],
-    receptionist: ["confirmed", "checked_in", "cancelled", "no-show"],
-    doctor: ["in_progress", "completed", "cancelled"],
-  };
+    const newDate = data.appointmentDate || appointment.appointmentDate;
+    const newDuration = data.duration || appointment.duration;
+    const newStatus = data.status || appointment.status;
 
-  if (data.status && data.status !== appointment.status) {
-    const validNextStates = allowedTransitions[appointment.status] || [];
-    if (!validNextStates.includes(data.status)) {
+    if (currentUser?.role === "doctor") {
+      const doctorId = await getDoctorScopeId(currentUser, Doctor);
+      if (!doctorId || appointment.doctor.toString() !== doctorId.toString()) {
+        throw new AppError(
+          "You are not authorized to update another doctor's appointment",
+          403,
+          "FORBIDDEN"
+        );
+      }
+    }
+
+    const allowedTransitions = {
+      scheduled: ["confirmed", "checked_in", "cancelled", "no-show"],
+      confirmed: ["checked_in", "in_progress", "cancelled", "no-show"],
+      checked_in: ["in_progress", "cancelled", "no-show"],
+      in_progress: ["completed", "cancelled"],
+      completed: [],
+      cancelled: [],
+      "no-show": [],
+    };
+
+    const roleAllowedTransitions = {
+      admin: ["confirmed", "checked_in", "in_progress", "completed", "cancelled", "no-show"],
+      receptionist: ["confirmed", "checked_in", "cancelled", "no-show"],
+      doctor: ["in_progress", "completed", "cancelled"],
+    };
+
+    if (data.status && data.status !== appointment.status) {
+      const validNextStates = allowedTransitions[appointment.status] || [];
+      if (!validNextStates.includes(data.status)) {
+        throw new AppError(
+          `Cannot transition appointment from '${appointment.status}' to '${data.status}'`,
+          400,
+          "INVALID_STATUS_TRANSITION"
+        );
+      }
+
+      const roleAllowed = roleAllowedTransitions[currentUser?.role] || [];
+      if (!roleAllowed.includes(data.status)) {
+        throw new AppError(
+          `Role '${currentUser?.role}' is not authorized to transition appointment to '${data.status}'`,
+          403,
+          "FORBIDDEN"
+        );
+      }
+    }
+
+    if (
+      newStatus === "cancelled" &&
+      !data.cancellationReason &&
+      !appointment.cancellationReason
+    ) {
       throw new AppError(
-        `Cannot transition appointment from '${appointment.status}' to '${data.status}'`,
+        "Cancellation reason is required",
         400,
-        "INVALID_STATUS_TRANSITION"
+        "CANCELLATION_REASON_REQUIRED"
       );
     }
 
-    const roleAllowed = roleAllowedTransitions[currentUser?.role] || [];
-    if (!roleAllowed.includes(data.status)) {
-      throw new AppError(
-        `Role '${currentUser?.role}' is not authorized to transition appointment to '${data.status}'`,
-        403,
-        "FORBIDDEN"
+    const isRescheduled =
+      Boolean(data.appointmentDate) &&
+      toClinicDate(data.appointmentDate).getTime() !==
+        toClinicDate(previousValues.appointmentDate).getTime();
+
+    const isDurationChanged =
+      data.duration !== undefined &&
+      data.duration !== previousValues.duration;
+
+    const followUpReferenceChanged =
+      data.originatingVisit !== undefined || data.followUpOf !== undefined;
+
+    if (isRescheduled || isDurationChanged || followUpReferenceChanged) {
+      await lockDoctorAppointmentBookings(appointment.doctor, session);
+    }
+
+    if (isRescheduled || isDurationChanged) {
+      const appointmentDate = toClinicDate(newDate);
+
+      if (appointmentDate <= new Date()) {
+        throw new AppError(
+          "Appointment date must be in the future",
+          400,
+          "INVALID_APPOINTMENT_DATE"
+        );
+      }
+
+      const schedule = await getDoctorSchedule(
+        appointment.doctor,
+        newDate,
+        session
       );
-    }
-  }
 
-  if (newStatus === "cancelled" && !data.cancellationReason && !appointment.cancellationReason) {
-    throw new AppError(
-      "Cancellation reason is required",
-      400,
-      "CANCELLATION_REASON_REQUIRED"
-    );
-  }
+      validateAppointmentTime(newDate, newDuration, schedule);
 
-  const isRescheduled =
-    Boolean(data.appointmentDate) &&
-    toClinicDate(data.appointmentDate).getTime() !==
-      toClinicDate(previousValues.appointmentDate).getTime();
+      await validateNoConflict({
+        doctorId: appointment.doctor,
+        appointmentDate: newDate,
+        duration: newDuration,
+        excludeAppointmentId: id,
+        session,
+      });
 
-  const isDurationChanged =
-    data.duration !== undefined &&
-    data.duration !== previousValues.duration;
-
-  if (isRescheduled || isDurationChanged) {
-    const appointmentDate = toClinicDate(newDate);
-
-    if (appointmentDate <= new Date()) {
-      throw new AppError(
-        "Appointment date must be in the future",
-        400,
-        "INVALID_APPOINTMENT_DATE"
-      );
+      await validateFollowUpDoesNotDuplicate({
+        originatingVisit:
+          data.originatingVisit !== undefined
+            ? data.originatingVisit
+            : appointment.originatingVisit,
+        doctorId: appointment.doctor,
+        patientId: appointment.patient,
+        excludeAppointmentId: id,
+        session,
+      });
     }
 
-    const schedule = await getDoctorSchedule(appointment.doctor, newDate);
-
-    validateAppointmentTime(newDate, newDuration, schedule);
-
-    await validateNoConflict({
-      doctorId: appointment.doctor,
-      appointmentDate: newDate,
-      duration: newDuration,
-      excludeAppointmentId: id,
-    });
-  }
-
-  const allowedFields = [
-    "appointmentDate",
-    "duration",
-    "status",
-    "reason",
-    "notes",
-    "cancellationReason",
-  ];
-
-  for (const field of allowedFields) {
-    if (data[field] !== undefined) {
-      appointment[field] = data[field];
+    if (followUpReferenceChanged) {
+      await validateFollowUpReferences({
+        originatingVisit:
+          data.originatingVisit !== undefined
+            ? data.originatingVisit
+            : appointment.originatingVisit,
+        followUpOf:
+          data.followUpOf !== undefined ? data.followUpOf : appointment.followUpOf,
+        doctorId: appointment.doctor,
+        patientId: appointment.patient,
+        excludeAppointmentId: id,
+        session,
+      });
     }
-  }
 
-  if (isRescheduled) {
-    appointment.reminderSent = false;
-  }
-  appointment.updatedBy = currentUser._id;
+    const allowedFields = [
+      "appointmentDate",
+      "duration",
+      "status",
+      "reason",
+      "notes",
+      "cancellationReason",
+      "isFollowUp",
+      "originatingVisit",
+      "followUpOf",
+    ];
 
-  await appointment.save();
+    for (const field of allowedFields) {
+      if (data[field] !== undefined) {
+        appointment[field] = data[field];
+      }
+    }
 
-  const newValues = {
-    patient: appointment.patient,
-    doctor: appointment.doctor,
-    appointmentDate: appointment.appointmentDate,
-    duration: appointment.duration,
-    status: appointment.status,
-    reason: appointment.reason,
-    notes: appointment.notes,
-  };
+    if (isRescheduled) {
+      appointment.reminderSent = false;
+    }
+    appointment.updatedBy = currentUser._id;
 
-  if (currentUser?._id) {
-    await auditLogService.logActivity({
-      actor: currentUser,
-      action: isRescheduled ? "APPOINTMENT_RESCHEDULED" : "APPOINTMENT_UPDATED",
-      resource: "Appointment",
-      resourceId: appointment._id,
-      details: {
-        previousValues,
-        newValues,
-        isRescheduled,
-      },
-    });
-  }
+    await appointment.save({ session });
 
-  return appointment;
+    const newValues = {
+      patient: appointment.patient,
+      doctor: appointment.doctor,
+      appointmentDate: appointment.appointmentDate,
+      duration: appointment.duration,
+      status: appointment.status,
+      reason: appointment.reason,
+      notes: appointment.notes,
+    };
+
+    if (currentUser?._id) {
+      await auditLogService.logActivity({
+        actor: currentUser,
+        action: isRescheduled ? "APPOINTMENT_RESCHEDULED" : "APPOINTMENT_UPDATED",
+        resource: "Appointment",
+        resourceId: appointment._id,
+        details: {
+          previousValues,
+          newValues,
+          isRescheduled,
+        },
+        session,
+      });
+    }
+
+    return appointment;
+  });
 };
 
 const cancelAppointment = async (id, cancellationReason, currentUser) => {

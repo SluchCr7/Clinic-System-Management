@@ -37,6 +37,19 @@ const getInvoices = asyncHandler(async (req, res) => {
   });
 });
 
+const getEligibleVisits = asyncHandler(async (req, res) => {
+  const { data: visits, pagination } =
+    await invoiceService.getEligibleVisits(
+      req.validatedQuery
+    );
+
+  res.status(200).json({
+    success: true,
+    data: visits,
+    pagination,
+  });
+});
+
 // ---------------------------------------------
 // Get Invoice By ID
 // ---------------------------------------------
@@ -115,6 +128,7 @@ const cancelInvoice = asyncHandler(async (req, res) => {
 module.exports = {
   createInvoice,
   getInvoices,
+  getEligibleVisits,
   getInvoiceById,
   updateInvoice,
   cancelInvoice,

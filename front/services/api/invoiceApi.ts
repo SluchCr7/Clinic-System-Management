@@ -7,9 +7,25 @@ import type {
   UpdateInvoiceRequest,
   InvoiceQueryParams,
 } from "@/types/invoice";
+import type { Visit, VisitQueryParams } from "@/types/visit";
 
 export const invoiceApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
+    getEligibleVisits: builder.query<
+      PaginatedResponse<Visit>,
+      VisitQueryParams | void
+    >({
+      query: (params) => ({
+        url: "/invoices/eligible-visits",
+        method: "GET",
+        params: cleanQueryParams(params),
+      }),
+      providesTags: [
+        { type: "Visit", id: "LIST" },
+        { type: "Invoice", id: "LIST" },
+      ],
+    }),
+
     getInvoices: builder.query<
       PaginatedResponse<Invoice>,
       InvoiceQueryParams | void
@@ -80,6 +96,7 @@ export const invoiceApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, id) => [
         { type: "Invoice", id },
         { type: "Invoice", id: "LIST" },
+        { type: "Visit", id: "LIST" },
         { type: "Dashboard", id: "OVERVIEW" },
         "Search",
       ],
@@ -88,6 +105,7 @@ export const invoiceApi = baseApi.injectEndpoints({
 });
 
 export const {
+  useGetEligibleVisitsQuery,
   useGetInvoicesQuery,
   useGetInvoiceByIdQuery,
   useCreateInvoiceMutation,

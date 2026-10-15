@@ -2,6 +2,7 @@ const request = require("supertest");
 const app = require("../index");
 const Appointment = require("../modules/Appointment/appointment.model");
 const Schedule = require("../modules/Schedule/schedule.model");
+const Visit = require("../modules/Visit/visit.model");
 const AuditLog = require("../modules/AuditLog/auditLog.model");
 const {
   createTestUser,
@@ -125,6 +126,50 @@ describe("Appointments API", () => {
     expect(response.status).toBe(409);
     expect(response.body.code).toBe("APPOINTMENT_CONFLICT");
     expect(await Appointment.countDocuments()).toBe(1);
+  });
+
+  test("prevents concurrent requests from booking the same doctor slot", async () => {
+    const createRequest = () =>
+      request(app)
+        .post("/api/appointments")
+        .set("Authorization", receptionist.authHeader)
+        .send(createAppointmentPayload());
+
+    const responses = await Promise.all([createRequest(), createRequest()]);
+
+    expect(responses.map(({ status }) => status).sort()).toEqual([201, 409]);
+    expect(await Appointment.countDocuments()).toBe(1);
+  });
+
+  test("rejects a follow-up linked to a visit for another patient", async () => {
+    const sourceAppointment = await createSavedAppointment({
+      status: "completed",
+    });
+    const sourceVisit = await Visit.create({
+      appointment: sourceAppointment._id,
+      patient: patient._id,
+      doctor: doctor._id,
+      chiefComplaint: "Follow-up reference test",
+      createdBy: receptionist.user._id,
+    });
+    const otherPatient = await createTestPatient(receptionist.user);
+    const followUpDate = getFutureAppointmentDate(5);
+    await createTestSchedule(doctor, receptionist.user, followUpDate);
+
+    const response = await request(app)
+      .post("/api/appointments")
+      .set("Authorization", receptionist.authHeader)
+      .send(
+        createAppointmentPayload({
+          patient: otherPatient._id.toString(),
+          appointmentDate: followUpDate.toISOString(),
+          isFollowUp: true,
+          originatingVisit: sourceVisit._id.toString(),
+        })
+      );
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("FOLLOW_UP_VISIT_MISMATCH");
   });
 
   test("validates required appointment fields", async () => {

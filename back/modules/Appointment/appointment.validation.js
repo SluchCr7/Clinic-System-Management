@@ -34,6 +34,18 @@ const createAppointmentSchema = Joi.object({
     .trim()
     .max(1000)
     .allow("", null),
+
+  isFollowUp: Joi.boolean(),
+
+  originatingVisit: Joi.string()
+    .hex()
+    .length(24)
+    .allow(null),
+
+  followUpOf: Joi.string()
+    .hex()
+    .length(24)
+    .allow(null),
 });
 
 const updateAppointmentSchema = Joi.object({
@@ -70,6 +82,18 @@ const updateAppointmentSchema = Joi.object({
     .trim()
     .max(500)
     .allow("", null),
+
+  isFollowUp: Joi.boolean(),
+
+  originatingVisit: Joi.string()
+    .hex()
+    .length(24)
+    .allow(null),
+
+  followUpOf: Joi.string()
+    .hex()
+    .length(24)
+    .allow(null),
 }).min(1);
 
 const appointmentListQuerySchema = createListQuerySchema({

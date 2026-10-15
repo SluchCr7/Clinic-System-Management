@@ -12,6 +12,7 @@ const {
   createInvoiceSchema,
   updateInvoiceSchema,
   invoiceListQuerySchema,
+  eligibleVisitListQuerySchema,
 } = require("./invoice.validation");
 
 // Create Invoice
@@ -21,6 +22,15 @@ router.post(
   authorize("admin", "receptionist"),
   validate(createInvoiceSchema),
   invoiceController.createInvoice
+);
+
+// Get All Invoices
+router.get(
+  "/eligible-visits",
+  protect,
+  authorize("admin", "receptionist"),
+  validateQuery(eligibleVisitListQuerySchema),
+  invoiceController.getEligibleVisits
 );
 
 // Get All Invoices

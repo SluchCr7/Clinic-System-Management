@@ -1,4 +1,5 @@
 const request = require("supertest");
+const jwt = require("jsonwebtoken");
 const app = require("../index");
 const User = require("../modules/User/user.model");
 const { createTestUser } = require("./testHelper");
@@ -192,5 +193,120 @@ describe("Authentication and user provisioning API", () => {
         updatedUser.password
       )
     ).toBe(true);
+  });
+
+  test("rejects a signed refresh token that is not an active session", async () => {
+    await User.updateOne(
+      { _id: administrator.user._id },
+      { $set: { activeRefreshTokens: [] } }
+    );
+    const currentUser = await User.findById(administrator.user._id);
+    const untrackedRefreshToken = jwt.sign(
+      {
+        id: currentUser._id,
+        type: "refresh",
+        tokenId: "not-an-active-session",
+        tokenVersion: currentUser.tokenVersion,
+      },
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: "7d", algorithm: "HS256" }
+    );
+
+    const response = await request(app)
+      .post("/api/auth/refresh")
+      .set("Cookie", `refreshToken=${untrackedRefreshToken}`);
+
+    expect(response.status).toBe(401);
+    expect(response.body.code).toBe("REFRESH_TOKEN_EXPIRED");
+    const updatedUser = await User.findById(administrator.user._id);
+    expect(updatedUser.tokenVersion).toBe(currentUser.tokenVersion);
+    expect(updatedUser.activeRefreshTokens).toHaveLength(0);
+  });
+
+  test("does not revoke sessions when an old signed refresh token is presented to logout", async () => {
+    const currentUser = await User.findById(administrator.user._id);
+    const oldRefreshToken = jwt.sign(
+      {
+        id: currentUser._id,
+        type: "refresh",
+        tokenId: "revoked-session",
+        tokenVersion: currentUser.tokenVersion,
+      },
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: "7d", algorithm: "HS256" }
+    );
+
+    const response = await request(app)
+      .post("/api/auth/logout")
+      .set("Cookie", `refreshToken=${oldRefreshToken}`);
+
+    const updatedUser = await User.findById(administrator.user._id);
+    expect(response.status).toBe(200);
+    expect(updatedUser.tokenVersion).toBe(currentUser.tokenVersion);
+    expect(updatedUser.activeRefreshTokens).toEqual(
+      currentUser.activeRefreshTokens
+    );
+  });
+
+  describe("POST /api/auth/logout", () => {
+    const loginAndGetRefreshCookie = async () => {
+      const loginResponse = await request(app)
+        .post("/api/auth/login")
+        .send({
+          email: administrator.user.email,
+          password: administrator.plainPassword,
+        });
+      const refreshCookie = loginResponse.headers["set-cookie"].find((cookie) =>
+        cookie.startsWith("refreshToken=")
+      );
+
+      return refreshCookie.split(";")[0];
+    };
+
+    test("does not revoke sessions for a forged refresh token", async () => {
+      await loginAndGetRefreshCookie();
+      const beforeLogout = await User.findById(administrator.user._id);
+      const forgedToken = require("jsonwebtoken").sign(
+        {
+          id: administrator.user._id.toString(),
+          type: "refresh",
+          tokenId: "forged-token",
+        },
+        "not-the-refresh-secret"
+      );
+
+      const response = await request(app)
+        .post("/api/auth/logout")
+        .set("Cookie", `refreshToken=${forgedToken}`);
+
+      const afterLogout = await User.findById(administrator.user._id);
+      expect(response.status).toBe(200);
+      expect(afterLogout.tokenVersion).toBe(beforeLogout.tokenVersion);
+      expect(afterLogout.activeRefreshTokens).toEqual(
+        beforeLogout.activeRefreshTokens
+      );
+    });
+
+    test("revokes sessions for a valid refresh token", async () => {
+      const refreshCookie = await loginAndGetRefreshCookie();
+      const beforeLogout = await User.findById(administrator.user._id);
+
+      const response = await request(app)
+        .post("/api/auth/logout")
+        .set("Cookie", refreshCookie);
+
+      const loggedOutUser = await User.findById(administrator.user._id);
+      expect(response.status).toBe(200);
+      expect(loggedOutUser.tokenVersion).toBe(
+        beforeLogout.tokenVersion + 1
+      );
+      expect(loggedOutUser.activeRefreshTokens).toHaveLength(0);
+    });
+
+    test("does not expose logout as a state-changing GET route", async () => {
+      const response = await request(app).get("/api/auth/logout");
+
+      expect(response.status).toBe(404);
+    });
   });
 });

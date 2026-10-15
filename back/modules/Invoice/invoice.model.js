@@ -2,10 +2,18 @@ const mongoose = require("mongoose");
 
 const InvoiceItemSchema = new mongoose.Schema(
   {
+    type: {
+      type: String,
+      enum: ["consultation", "performed_service"],
+      default: "performed_service",
+    },
+
     performedService: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "PerformedService",
-      required: true,
+      required: function () {
+        return this.type === "performed_service";
+      },
     },
 
     serviceName: {

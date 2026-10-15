@@ -73,6 +73,23 @@ const AppointmentSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    isFollowUp: {
+      type: Boolean,
+      default: false,
+    },
+
+    originatingVisit: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Visit",
+      default: null,
+    },
+
+    followUpOf: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Appointment",
+      default: null,
+    },
   },
   {
     timestamps: true,

@@ -1,18 +1,22 @@
-const assert = require('assert');
+const assert = require('node:assert/strict');
 
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = process.env.E2E_API_URL || 'http://localhost:3001/api';
 
 const USERS = {
-  admin: { email: 'ahmedking10710@gmail.com', password: 'Ahmed1020304050' },
-  doctor: { email: 'ahmedabobakr2972004@gmail.com', password: 'Ahmed1020304050' },
-  receptionist: { email: 'ahmed@gmail.com', password: 'Ahmed1020304050' },
+  admin: { email: process.env.E2E_ADMIN_EMAIL, password: process.env.E2E_ADMIN_PASSWORD },
+  doctor: { email: process.env.E2E_DOCTOR_EMAIL, password: process.env.E2E_DOCTOR_PASSWORD },
+  receptionist: { email: process.env.E2E_RECEPTIONIST_EMAIL, password: process.env.E2E_RECEPTIONIST_PASSWORD },
 };
+
+if (Object.values(USERS).some(({ email, password }) => !email || !password)) {
+  throw new Error("Set E2E_*_EMAIL and E2E_*_PASSWORD credentials before running");
+}
 
 async function login(user) {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(user),
+    body: JSON.stringify({ email: user.email, password: user.password }),
   });
   const data = await res.json();
   assert(res.ok && data.success, `Login failed for ${user.email}: ${JSON.stringify(data)}`);

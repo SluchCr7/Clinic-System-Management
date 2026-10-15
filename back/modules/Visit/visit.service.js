@@ -196,7 +196,7 @@ const getVisits = async (query = {}, currentUser = null) => {
       )
       .populate({
         path: "doctor",
-        select: "user specialization licenseNumber profilePhoto",
+        select: "user specialization licenseNumber consultationFee profilePhoto",
         populate: {
           path: "user",
           select: "firstName lastName email phone",
@@ -227,7 +227,7 @@ const getVisitById = async (id, currentUser = null) => {
     )
     .populate({
       path: "doctor",
-      select: "user specialization licenseNumber profilePhoto",
+      select: "user specialization licenseNumber consultationFee profilePhoto",
       populate: {
         path: "user",
         select: "firstName lastName email phone",

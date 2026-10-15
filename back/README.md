@@ -83,6 +83,10 @@ The API listens on:
 
 - http://localhost:3001
 
+The server starts listening only after MongoDB connects. `GET /health` returns
+HTTP 503 while the database is disconnected or connecting, and HTTP 200 when
+the API is ready to serve database-backed requests.
+
 ## Testing
 
 ```bash

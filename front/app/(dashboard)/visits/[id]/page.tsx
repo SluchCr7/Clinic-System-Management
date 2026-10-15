@@ -97,8 +97,8 @@ export default function VisitWorkspacePage() {
   );
 
   const { data: performedServicesData } = useGetPerformedServicesQuery(
-    patientId ? { patient: patientId } : undefined,
-    { skip: !patientId }
+    visitId ? { visit: visitId, limit: 100 } : undefined,
+    { skip: !visitId }
   );
 
   const { data: attachmentsData } = useGetMedicalAttachmentsQuery(
@@ -107,8 +107,8 @@ export default function VisitWorkspacePage() {
   );
 
   const { data: invoicesData } = useGetInvoicesQuery(
-    patientId ? { patient: patientId } : undefined,
-    { skip: !patientId }
+    visitId ? { visit: visitId, limit: 10 } : undefined,
+    { skip: !visitId }
   );
 
   const { data: catalogServicesData } = useGetMedicalServicesQuery({ isActive: true, limit: 100 });
@@ -118,6 +118,10 @@ export default function VisitWorkspacePage() {
     const vId = typeof p.visit === "object" && p.visit ? p.visit._id : p.visit;
     return vId === visitId;
   }) || [];
+  const visitDoctor =
+    typeof visit?.doctor === "object" && visit.doctor
+      ? visit.doctor
+      : null;
 
   const visitLabOrders = labOrdersData?.data?.filter((l) => {
     const vId = typeof l.visit === "object" && l.visit ? l.visit._id : l.visit;
@@ -369,19 +373,18 @@ export default function VisitWorkspacePage() {
   };
 
   const handleGenerateInvoice = async () => {
-    if (visitPerformedServices.length === 0) {
-      toast.error(t("visits.workspace.servicesRequiredForInvoice"));
-      return;
-    }
-
     try {
-      await createInvoice({
+      const result = await createInvoice({
         visit: visitId,
         discount: 0,
         tax: 0,
       }).unwrap();
 
-      toast.success(t("visits.workspace.invoiceGenerated"));
+      toast.success(
+        t("visits.workspace.invoiceGenerated", {
+          total: result.data.total.toFixed(2),
+        })
+      );
     } catch (err) {
       const extracted = extractApiError(err);
       toast.error(extracted.message || "Failed to generate invoice.");
@@ -655,6 +658,12 @@ export default function VisitWorkspacePage() {
               ) : (
                 <div>
                   <span className="text-slate-muted text-xs block">Unbilled</span>
+                  <span className="text-xs text-slate-muted block">
+                    {t("invoices.create.consultationFee")}:{" "}
+                    {typeof visitDoctor?.consultationFee === "number"
+                      ? `$${visitDoctor.consultationFee.toFixed(2)}`
+                      : t("invoices.create.consultationUnavailable")}
+                  </span>
                   {canManageBilling && (
                     <Button
                       variant="outline"
@@ -1008,7 +1017,14 @@ export default function VisitWorkspacePage() {
                     {visitInvoice.items.map((item, idx) => (
                       <tr key={idx}>
                         <td className="py-2 px-3 font-medium text-ink">
-                          {item.serviceName} ({item.serviceCode})
+                          {item.type === "consultation"
+                            ? t("invoices.modal.standardConsultation")
+                            : `${item.serviceName} (${item.serviceCode})`}
+                          {item.type !== "consultation" && item.discount > 0 && (
+                            <span className="block text-[10px] font-normal text-status-success">
+                              {t("invoices.modal.discount")}: -${item.discount.toFixed(2)}
+                            </span>
+                          )}
                         </td>
                         <td className="py-2 px-2 text-right text-slate-dark">{item.quantity}</td>
                         <td className="py-2 px-3 text-right text-slate-dark">
@@ -1026,6 +1042,19 @@ export default function VisitWorkspacePage() {
               {/* Balance Summary & Payment Action */}
               <div className="flex flex-col sm:flex-row justify-between items-start gap-4 p-4 bg-paper rounded-lg border border-border-subtle text-xs">
                 <div className="flex flex-col gap-1">
+                  <span className="text-slate-muted">
+                    {t("invoices.modal.subtotal")}: ${visitInvoice.subtotal.toFixed(2)}
+                  </span>
+                  {visitInvoice.discount > 0 && (
+                    <span className="text-status-success">
+                      {t("invoices.modal.discount")}: -${visitInvoice.discount.toFixed(2)}
+                    </span>
+                  )}
+                  {visitInvoice.tax > 0 && (
+                    <span className="text-slate-muted">
+                      {t("invoices.modal.tax")}: +${visitInvoice.tax.toFixed(2)}
+                    </span>
+                  )}
                   <span className="font-semibold text-ink">
                     Payment Status: <span className="capitalize">{visitInvoice.status.replace("_", " ")}</span>
                   </span>
@@ -1060,12 +1089,10 @@ export default function VisitWorkspacePage() {
               <div>
                 <h4 className="font-bold text-ink text-sm">{t("visits.workspace.noInvoice")}</h4>
                 <p className="text-xs text-slate-muted max-w-sm mt-1">
-                  {visitPerformedServices.length > 0
-                    ? "Generate the clinical invoice from the performed procedural services above."
-                    : t("visits.workspace.servicesRequiredForInvoice")}
+                  {t("visits.workspace.invoiceOptionalServices")}
                 </p>
               </div>
-              {canManageBilling && visitPerformedServices.length > 0 && (
+              {canManageBilling && (
                 <Button
                   variant="primary"
                   size="sm"
@@ -1199,6 +1226,17 @@ export default function VisitWorkspacePage() {
             />
           </div>
 
+          <div>
+            <label className="text-[10px] uppercase font-semibold text-slate-muted block mb-1">
+              {t("visits.workspace.prescriptionNotes")}
+            </label>
+            <Textarea
+              value={rxNotes}
+              onChange={(e) => setRxNotes(e.target.value)}
+              rows={2}
+            />
+          </div>
+
           <div className="flex justify-end gap-2 pt-3 border-t border-border-subtle">
             <Button type="button" variant="ghost" size="sm" onClick={() => setIsRxModalOpen(false)}>
               {t("common.cancel")}
@@ -1270,6 +1308,17 @@ export default function VisitWorkspacePage() {
               value={labReason}
               onChange={(e) => setLabReason(e.target.value)}
               placeholder="Clinical indication for test..."
+              rows={2}
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] uppercase font-semibold text-slate-muted block mb-1">
+              {t("visits.workspace.labOrderNotes")}
+            </label>
+            <Textarea
+              value={labNotes}
+              onChange={(e) => setLabNotes(e.target.value)}
               rows={2}
             />
           </div>

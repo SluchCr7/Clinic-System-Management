@@ -60,8 +60,14 @@ const invoiceListQuerySchema = createListQuerySchema({
   },
 });
 
+const eligibleVisitListQuerySchema = createListQuerySchema({
+  sortFields: ["createdAt"],
+  search: false,
+});
+
 module.exports = {
   createInvoiceSchema,
   updateInvoiceSchema,
   invoiceListQuerySchema,
+  eligibleVisitListQuerySchema,
 };

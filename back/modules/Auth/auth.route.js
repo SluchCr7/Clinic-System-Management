@@ -24,11 +24,6 @@ router.get(
   authController.getMe
 );
 
-router.get(
-  "/logout",
-  authController.logout
-);
-
 router.post(
   "/logout",
   authController.logout

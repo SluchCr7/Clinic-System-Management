@@ -7,6 +7,7 @@ const AuditLog = require("../modules/AuditLog/auditLog.model");
 const PerformedService = require("../modules/performedService/performedService.model");
 const Visit = require("../modules/Visit/visit.model");
 const Appointment = require("../modules/Appointment/appointment.model");
+const Doctor = require("../modules/Doctor/doctor.model");
 const {
   createTestUser,
   createTestDoctor,
@@ -33,7 +34,7 @@ describe("Invoices API", () => {
       doctor: doctor._id,
       appointmentDate: getFutureAppointmentDate(),
       duration: 30,
-      status: "confirmed",
+      status: "completed",
       createdBy: receptionist.user._id,
     });
     visit = await Visit.create({
@@ -64,6 +65,18 @@ describe("Invoices API", () => {
         serviceName: "Lab test",
         serviceCode: "LAB-1",
         price: 25,
+        quantity: 1,
+        discount: 0,
+        createdBy: receptionist.user._id,
+      },
+      {
+        visit: visit._id,
+        patient: patient._id,
+        doctor: doctor._id,
+        service: new mongoose.Types.ObjectId(),
+        serviceName: "ECG",
+        serviceCode: "ECG-1",
+        price: 200,
         quantity: 1,
         discount: 0,
         createdBy: receptionist.user._id,
@@ -107,17 +120,18 @@ describe("Invoices API", () => {
       ...overrides,
     });
 
-  test("generates an invoice from performed services and records an audit log", async () => {
+  test("generates a consultation and performed-service invoice and records an audit log", async () => {
     const response = await createInvoice({ discount: 5, tax: 7 });
 
     expect(response.status).toBe(201);
     expect(response.body.success).toBe(true);
-    expect(response.body.data.items).toHaveLength(2);
-    expect(response.body.data.subtotal).toBe(175);
+    expect(response.body.data.items).toHaveLength(3);
+    expect(response.body.data.items[0].type).toBe("consultation");
+    expect(response.body.data.subtotal).toBe(325);
     expect(response.body.data.discount).toBe(5);
     expect(response.body.data.tax).toBe(7);
-    expect(response.body.data.total).toBe(177);
-    expect(response.body.data.remainingAmount).toBe(177);
+    expect(response.body.data.total).toBe(327);
+    expect(response.body.data.remainingAmount).toBe(327);
     expect(response.body.data.status).toBe("unpaid");
 
     const [savedInvoice, auditLog] = await Promise.all([
@@ -171,14 +185,145 @@ describe("Invoices API", () => {
     expect(await Payment.countDocuments({ invoice: invoice._id })).toBe(2);
   });
 
-  test("rejects invoice creation when the visit has no performed services", async () => {
+  test("creates an invoice when no additional performed services exist", async () => {
     await PerformedService.deleteMany({ visit: visit._id });
 
     const response = await createInvoice();
 
+    expect(response.status).toBe(201);
+    expect(response.body.data.items).toHaveLength(1);
+    expect(response.body.data.items[0]).toMatchObject({
+      type: "consultation",
+      serviceCode: "CONSULTATION",
+      unitPrice: 100,
+      total: 100,
+    });
+    expect(response.body.data.total).toBe(100);
+    expect(await Invoice.countDocuments()).toBe(1);
+  });
+
+  test("concurrent invoice requests cannot create duplicate invoices for a visit", async () => {
+    const responses = await Promise.all([
+      createInvoice(),
+      createInvoice(),
+    ]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([
+      201,
+      409,
+    ]);
+    expect(await Invoice.countDocuments({ visit: visit._id })).toBe(1);
+  });
+
+  test("does not charge a performed consultation twice", async () => {
+    await PerformedService.deleteMany({ visit: visit._id });
+    await PerformedService.create({
+      visit: visit._id,
+      patient: patient._id,
+      doctor: doctor._id,
+      service: new mongoose.Types.ObjectId(),
+      serviceName: "Consultation",
+      serviceCode: "CONSULT",
+      price: 80,
+      quantity: 1,
+      discount: 0,
+      createdBy: receptionist.user._id,
+    });
+
+    const response = await createInvoice();
+
+    expect(response.status).toBe(201);
+    expect(response.body.data.items).toHaveLength(1);
+    expect(response.body.data.subtotal).toBe(100);
+  });
+
+  test("rounds consultation, service, and invoice amounts to currency precision", async () => {
+    await PerformedService.deleteMany({ visit: visit._id });
+    await Doctor.updateOne(
+      { _id: doctor._id },
+      { consultationFee: 100.005 }
+    );
+    await PerformedService.create({
+      visit: visit._id,
+      patient: patient._id,
+      doctor: doctor._id,
+      service: new mongoose.Types.ObjectId(),
+      serviceName: "Wound dressing",
+      serviceCode: "DRESS-1",
+      price: 0.105,
+      quantity: 1,
+      discount: 0,
+      createdBy: receptionist.user._id,
+    });
+
+    const response = await createInvoice();
+
+    expect(response.status).toBe(201);
+    expect(response.body.data.items.map((item) => item.total)).toEqual([
+      100.01,
+      0.11,
+    ]);
+    expect(response.body.data.subtotal).toBe(100.12);
+    expect(response.body.data.total).toBe(100.12);
+  });
+
+  test("accepts a legitimate zero-fee consultation", async () => {
+    await PerformedService.deleteMany({ visit: visit._id });
+    await Doctor.updateOne(
+      { _id: doctor._id },
+      { consultationFee: 0 }
+    );
+
+    const response = await createInvoice();
+
+    expect(response.status).toBe(201);
+    expect(response.body.data.total).toBe(0);
+    expect(response.body.data.status).toBe("paid");
+  });
+
+  test("rejects a visit when consultation pricing is missing", async () => {
+    await PerformedService.deleteMany({ visit: visit._id });
+    await Doctor.collection.updateOne(
+      { _id: doctor._id },
+      { $unset: { consultationFee: "" } }
+    );
+
+    const response = await createInvoice();
+
     expect(response.status).toBe(400);
-    expect(response.body.code).toBe("NO_PERFORMED_SERVICES");
+    expect(response.body.code).toBe("CONSULTATION_FEE_UNAVAILABLE");
     expect(await Invoice.countDocuments()).toBe(0);
+  });
+
+  test("rejects a visit whose appointment is not completed", async () => {
+    await Appointment.updateOne(
+      { _id: visit.appointment },
+      { status: "cancelled" }
+    );
+
+    const response = await createInvoice();
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("VISIT_NOT_BILLABLE");
+    expect(await Invoice.countDocuments()).toBe(0);
+  });
+
+  test("lists only unbilled completed visits for billing roles", async () => {
+    const response = await request(app)
+      .get("/api/invoices/eligible-visits?page=1&limit=1")
+      .set("Authorization", receptionist.authHeader);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.pagination.total).toBe(1);
+
+    await createInvoice();
+    const noLongerEligible = await request(app)
+      .get("/api/invoices/eligible-visits")
+      .set("Authorization", receptionist.authHeader);
+
+    expect(noLongerEligible.status).toBe(200);
+    expect(noLongerEligible.body.data).toHaveLength(0);
   });
 
   test("rejects invalid invoice payloads", async () => {

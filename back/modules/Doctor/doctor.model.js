@@ -31,6 +31,12 @@ const DoctorSchema = new mongoose.Schema(
       min: 0,
     },
 
+    appointmentBookingVersion: {
+      type: Number,
+      default: 0,
+      select: false,
+    },
+
     bio: {
       type: String,
       trim: true,

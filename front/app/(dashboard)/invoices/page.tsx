@@ -6,15 +6,16 @@ import {
   useGetInvoicesQuery,
   useCreateInvoiceMutation,
   useCancelInvoiceMutation,
+  useGetEligibleVisitsQuery,
 } from "@/services/api/invoiceApi";
 import {
   useGetPaymentsQuery,
   useCreatePaymentMutation,
 } from "@/services/api/paymentApi";
-import { useGetVisitsQuery } from "@/services/api/visitApi";
 import { useGetPerformedServicesQuery } from "@/services/api/performedServiceApi";
 import type { Invoice, InvoiceQueryParams, InvoiceStatus } from "@/types/invoice";
 import type { PaymentMethod } from "@/types/payment";
+import type { PerformedService } from "@/types/performedService";
 import {
   PageHeader,
   DataTable,
@@ -23,7 +24,6 @@ import {
   Input,
   Textarea,
   StatusBadge,
-  Badge,
   Modal,
   toast,
   type Column,
@@ -41,11 +41,22 @@ import {
   LuEye,
   LuPlus,
   LuHistory,
-  LuBanknote,
-  LuBuilding2,
-  LuGlobe,
-  LuShield,
 } from "react-icons/lu";
+
+const isConsultationPerformedService = (service: PerformedService) => {
+  const normalize = (value: string) =>
+    value.toLowerCase().replace(/[^a-z]/g, "");
+  const name = normalize(service.serviceName);
+  const code = normalize(service.serviceCode);
+
+  return (
+    ["consultation", "consultationfee", "clinicalconsultation"].includes(name) ||
+    ["consult", "consultation", "consultationfee"].includes(code)
+  );
+};
+
+const roundMoney = (value: number) =>
+  Math.round((value + Number.EPSILON) * 100) / 100;
 
 export default function InvoicesPage() {
   const { t } = useTranslation();
@@ -70,6 +81,7 @@ export default function InvoicesPage() {
   const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null);
   const [cancelInvoiceTarget, setCancelInvoiceTarget] = useState<Invoice | null>(null);
   const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false);
+  const [eligibleVisitsPage, setEligibleVisitsPage] = useState(1);
 
   // Create Invoice Form State
   const [selectedVisitId, setSelectedVisitId] = useState<string>("");
@@ -90,25 +102,57 @@ export default function InvoicesPage() {
   );
 
   // Fetch Visits eligible for invoicing
-  const { data: eligibleVisitsData } = useGetVisitsQuery(
-    isCreateInvoiceOpen ? { limit: 50 } : undefined,
+  const {
+    data: eligibleVisitsData,
+    isLoading: isLoadingEligibleVisits,
+    isError: isEligibleVisitsError,
+    refetch: refetchEligibleVisits,
+  } = useGetEligibleVisitsQuery(
+    isCreateInvoiceOpen ? { page: eligibleVisitsPage, limit: 50 } : undefined,
     { skip: !isCreateInvoiceOpen }
   );
 
-  // Fetch Performed Services for selected visit in Create Invoice modal
-  const { data: visitServicesData } = useGetPerformedServicesQuery(
+  const {
+    data: visitServicesData,
+    isLoading: isLoadingVisitServices,
+    isError: isVisitServicesError,
+    refetch: refetchVisitServices,
+  } = useGetPerformedServicesQuery(
     selectedVisitId ? { visit: selectedVisitId, limit: 100 } : undefined,
     { skip: !selectedVisitId }
   );
 
-  const selectedVisitServices = visitServicesData?.data || [];
-  const selectedVisitSubtotal = selectedVisitServices.reduce(
-    (acc, s) => acc + (s.price * s.quantity - s.discount),
-    0
+  const selectedVisit = eligibleVisitsData?.data.find(
+    (visit) => visit._id === selectedVisitId
+  );
+  const selectedVisitDoctor =
+    selectedVisit && typeof selectedVisit.doctor === "object"
+      ? selectedVisit.doctor
+      : null;
+  const consultationFee = selectedVisitDoctor?.consultationFee;
+  const hasValidConsultationFee =
+    typeof consultationFee === "number" &&
+    Number.isFinite(consultationFee) &&
+    consultationFee >= 0;
+  const selectedVisitServices = (visitServicesData?.data || []).filter(
+    (service) => !isConsultationPerformedService(service)
+  );
+  const servicesSubtotal = roundMoney(
+    selectedVisitServices.reduce(
+      (acc, service) =>
+        acc +
+        roundMoney(
+          service.price * service.quantity - service.discount
+        ),
+      0
+    )
+  );
+  const selectedVisitSubtotal = roundMoney(
+    (hasValidConsultationFee ? consultationFee : 0) + servicesSubtotal
   );
   const selectedVisitCalculatedTotal = Math.max(
     0,
-    selectedVisitSubtotal - invoiceDiscount + invoiceTax
+    roundMoney(selectedVisitSubtotal - invoiceDiscount + invoiceTax)
   );
 
   const handleOpenCreateInvoice = () => {
@@ -116,6 +160,7 @@ export default function InvoicesPage() {
     setInvoiceDiscount(0);
     setInvoiceTax(0);
     setInvoiceNotes("");
+    setEligibleVisitsPage(1);
     setIsCreateInvoiceOpen(true);
   };
 
@@ -125,8 +170,8 @@ export default function InvoicesPage() {
       toast.error(t("invoices.create.selectVisit"));
       return;
     }
-    if (selectedVisitServices.length === 0) {
-      toast.error(t("invoices.create.noServicesForVisit"));
+    if (!hasValidConsultationFee) {
+      toast.error(t("invoices.create.consultationUnavailable"));
       return;
     }
     if (invoiceDiscount > selectedVisitSubtotal) {
@@ -135,7 +180,7 @@ export default function InvoicesPage() {
     }
 
     try {
-      await createInvoice({
+      const result = await createInvoice({
         visit: selectedVisitId,
         discount: Number(invoiceDiscount) || 0,
         tax: Number(invoiceTax) || 0,
@@ -145,6 +190,7 @@ export default function InvoicesPage() {
       toast.success(t("invoices.create.success"));
       setIsCreateInvoiceOpen(false);
       setSelectedVisitId("");
+      setViewInvoice(result.data);
     } catch (err) {
       const extracted = extractApiError(err);
       toast.error(extracted.message || t("invoices.create.error"));
@@ -461,10 +507,18 @@ export default function InvoicesPage() {
                       viewInvoice.items.map((item, idx) => (
                         <tr key={idx}>
                           <td className="py-2 px-3 font-medium text-ink">
-                            {item.serviceName || (item as unknown as { name?: string }).name}
-                            {item.serviceCode && (
+                            {item.type === "consultation"
+                              ? t("invoices.modal.standardConsultation")
+                              : item.serviceName ||
+                                (item as unknown as { name?: string }).name}
+                            {item.type !== "consultation" && item.serviceCode && (
                               <span className="text-[10px] text-slate-muted font-mono ml-1.5">
                                 ({item.serviceCode})
+                              </span>
+                            )}
+                            {item.type !== "consultation" && item.discount > 0 && (
+                              <span className="block text-[10px] font-normal text-status-success">
+                                {t("invoices.modal.discount")}: -${item.discount.toFixed(2)}
                               </span>
                             )}
                           </td>
@@ -603,9 +657,12 @@ export default function InvoicesPage() {
                     variant="primary"
                     size="sm"
                     onClick={() => {
-                      handleOpenPayment(viewInvoice);
+                      if (canManageBilling) {
+                        handleOpenPayment(viewInvoice);
+                      }
                     }}
                     leftIcon={<LuCreditCard className="w-3.5 h-3.5" />}
+                    disabled={!canManageBilling}
                   >
                     {t("invoices.modal.recordPayment")}
                   </Button>
@@ -638,7 +695,10 @@ export default function InvoicesPage() {
             </label>
             <Select
               value={selectedVisitId}
-              onChange={(e) => setSelectedVisitId(e.target.value)}
+              onChange={(e) => {
+                setSelectedVisitId(e.target.value);
+                setInvoiceDiscount(0);
+              }}
               placeholder={t("invoices.create.visitPlaceholder")}
               options={
                 eligibleVisitsData?.data?.map((v) => {
@@ -654,15 +714,107 @@ export default function InvoicesPage() {
                 }) || []
               }
             />
+            {isLoadingEligibleVisits && (
+              <p className="mt-1 text-slate-muted">
+                {t("invoices.create.loadingVisits")}
+              </p>
+            )}
+            {isEligibleVisitsError && (
+              <div className="mt-1 flex items-center gap-2 text-status-error">
+                <span>{t("invoices.create.visitsError")}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={refetchEligibleVisits}
+                >
+                  {t("invoices.create.retry")}
+                </Button>
+              </div>
+            )}
+            {!isLoadingEligibleVisits &&
+              !isEligibleVisitsError &&
+              eligibleVisitsData?.pagination.total === 0 && (
+                <p className="mt-1 text-slate-muted">
+                  {t("invoices.create.noEligibleVisits")}
+                </p>
+              )}
+            {eligibleVisitsData?.pagination.pages &&
+              eligibleVisitsData.pagination.pages > 1 && (
+                <div className="mt-2 flex items-center justify-between">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={!eligibleVisitsData.pagination.hasPrevPage}
+                    onClick={() => {
+                      setSelectedVisitId("");
+                      setEligibleVisitsPage((page) => page - 1);
+                    }}
+                  >
+                    {t("invoices.create.previousVisits")}
+                  </Button>
+                  <span className="text-slate-muted">
+                    {eligibleVisitsData.pagination.page} / {eligibleVisitsData.pagination.pages}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={!eligibleVisitsData.pagination.hasNextPage}
+                    onClick={() => {
+                      setSelectedVisitId("");
+                      setEligibleVisitsPage((page) => page + 1);
+                    }}
+                  >
+                    {t("invoices.create.nextVisits")}
+                  </Button>
+                </div>
+              )}
           </div>
 
-          {/* Performed Services in Selected Visit */}
           {selectedVisitId && (
             <div className="flex flex-col gap-2">
+              <div className="flex justify-between gap-4 rounded-md border border-border-subtle bg-paper p-3">
+                <div>
+                  <p className="font-semibold text-ink">
+                    {selectedVisit && typeof selectedVisit.patient === "object"
+                      ? `${selectedVisit.patient.firstName} ${selectedVisit.patient.lastName}`
+                      : t("invoices.modal.patientDefault")}
+                  </p>
+                  <p className="text-slate-muted">
+                    {selectedVisitDoctor &&
+                    typeof selectedVisitDoctor.user === "object"
+                      ? `Dr. ${selectedVisitDoctor.user.firstName} ${selectedVisitDoctor.user.lastName}`
+                      : t("invoices.modal.physicianDefault")}
+                  </p>
+                </div>
+              </div>
+              {!hasValidConsultationFee && (
+                <p className="text-xs text-status-error">
+                  {t("invoices.create.consultationUnavailable")}
+                </p>
+              )}
               <span className="font-semibold text-ink text-xs uppercase tracking-wider">
                 {t("invoices.create.performedServices")}
               </span>
-              {selectedVisitServices.length > 0 ? (
+              {isVisitServicesError ? (
+                <div className="flex items-center gap-2 text-status-error">
+                  <span>{t("invoices.create.servicesError")}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={refetchVisitServices}
+                  >
+                    {t("invoices.create.retry")}
+                  </Button>
+                </div>
+              ) : isLoadingVisitServices ? (
+                <p className="text-slate-muted">
+                  {t("invoices.create.loadingServices")}
+                </p>
+              ) : selectedVisitServices.length > 0 ? (
                 <div className="border border-border-subtle rounded-md overflow-hidden">
                   <table className="w-full text-xs text-left">
                     <thead className="bg-paper border-b border-border-subtle text-slate-muted font-medium">
@@ -678,6 +830,11 @@ export default function InvoicesPage() {
                         <tr key={s._id}>
                           <td className="py-2 px-3 font-medium text-ink">
                             {s.serviceName}
+                            {s.discount > 0 && (
+                              <span className="block text-[10px] font-normal text-status-success">
+                                {t("invoices.modal.discount")}: -${s.discount.toFixed(2)}
+                              </span>
+                            )}
                             {s.serviceCode && (
                               <span className="text-[10px] text-slate-muted font-mono ml-1.5">
                                 ({s.serviceCode})
@@ -695,12 +852,22 @@ export default function InvoicesPage() {
                   </table>
                 </div>
               ) : (
-                <p className="text-xs text-status-warning p-2.5 bg-status-warning-bg rounded-md border border-status-warning/20">
-                  {t("invoices.create.noServicesForVisit")}
+                <p className="text-xs text-slate-muted p-2.5 bg-paper rounded-md border border-border-subtle">
+                  {t("invoices.create.optionalServicesEmpty")}
                 </p>
               )}
 
-              {/* Financial Inputs */}
+              <div className="flex justify-between text-slate-muted">
+                <span>{t("invoices.create.consultationFee")}:</span>
+                <span className="font-mono">
+                  ${hasValidConsultationFee ? consultationFee.toFixed(2) : "—"}
+                </span>
+              </div>
+              <div className="flex justify-between text-slate-muted">
+                <span>{t("invoices.create.servicesSubtotal")}:</span>
+                <span className="font-mono">${servicesSubtotal.toFixed(2)}</span>
+              </div>
+
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <Input
                   label={t("invoices.create.discountLabel")}
@@ -727,6 +894,18 @@ export default function InvoicesPage() {
                   <span>{t("invoices.create.subtotal")}:</span>
                   <span className="font-semibold text-ink font-mono">${selectedVisitSubtotal.toFixed(2)}</span>
                 </div>
+                {invoiceDiscount > 0 && (
+                  <div className="flex justify-between text-status-success">
+                    <span>{t("invoices.modal.discount")}:</span>
+                    <span className="font-mono">-${invoiceDiscount.toFixed(2)}</span>
+                  </div>
+                )}
+                {invoiceTax > 0 && (
+                  <div className="flex justify-between text-slate-muted">
+                    <span>{t("invoices.modal.tax")}:</span>
+                    <span className="font-mono">+${invoiceTax.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-bold text-ink text-sm pt-1 border-t border-border-subtle">
                   <span>{t("invoices.create.totalPreview")}:</span>
                   <span className="text-teal-primary font-mono">${selectedVisitCalculatedTotal.toFixed(2)}</span>
@@ -757,7 +936,14 @@ export default function InvoicesPage() {
               variant="primary"
               size="sm"
               isLoading={isCreatingInvoice}
-              disabled={!selectedVisitId || selectedVisitServices.length === 0}
+              disabled={
+                !selectedVisitId ||
+                !hasValidConsultationFee ||
+                isLoadingVisitServices ||
+                isVisitServicesError ||
+                invoiceDiscount > selectedVisitSubtotal ||
+                isCreatingInvoice
+              }
               leftIcon={<LuCircleCheck className="w-3.5 h-3.5" />}
             >
               {t("invoices.create.confirm")}

@@ -1,26 +1,33 @@
-const { chromium } = require('playwright');
-const assert = require('assert');
+let chromium;
+let assert;
 
-const BASE_URL = 'http://localhost:3000';
-const API_URL = 'http://localhost:3001/api';
+const BASE_URL = process.env.E2E_FRONTEND_URL || "http://localhost:3000";
+const API_URL = process.env.E2E_API_URL || "http://localhost:3001/api";
 
 const USERS = {
   admin: {
-    email: 'ahmedking10710@gmail.com',
-    password: 'Ahmed1020304050',
+    email: process.env.E2E_ADMIN_EMAIL,
+    password: process.env.E2E_ADMIN_PASSWORD,
     role: 'admin',
   },
   doctor: {
-    email: 'ahmedabobakr2972004@gmail.com',
-    password: 'Ahmed1020304050',
+    email: process.env.E2E_DOCTOR_EMAIL,
+    password: process.env.E2E_DOCTOR_PASSWORD,
     role: 'doctor',
   },
   receptionist: {
-    email: 'ahmed@gmail.com',
-    password: 'Ahmed1020304050',
+    email: process.env.E2E_RECEPTIONIST_EMAIL,
+    password: process.env.E2E_RECEPTIONIST_PASSWORD,
     role: 'receptionist',
   },
 };
+
+const missingCredentials = Object.entries(USERS).some(
+  ([, user]) => !user.email || !user.password
+);
+if (missingCredentials) {
+  throw new Error("Set E2E_*_EMAIL and E2E_*_PASSWORD credentials before running");
+}
 
 const results = [];
 
@@ -62,9 +69,9 @@ async function testAuthAndSession(browser) {
     record('HttpOnly Cookies Verified', 'PASS', 'accessToken and refreshToken are HttpOnly');
 
     // Test Logout via API /auth/logout
-    await page.evaluate(async () => {
-      await fetch('http://localhost:3001/api/auth/logout', { method: 'POST', credentials: 'include' });
-    });
+    await page.evaluate(async (apiUrl) => {
+      await fetch(`${apiUrl}/auth/logout`, { method: 'POST', credentials: 'include' });
+    }, API_URL);
     await page.goto(`${BASE_URL}/dashboard`, { waitUntil: 'networkidle' });
     await page.waitForURL('**/login', { timeout: 10000 });
     record('Session Revocation & Protected Route Interception', 'PASS', 'Unauthenticated user redirected to /login');
@@ -119,17 +126,17 @@ async function testRBACAndPrivacy(browser) {
     record('Receptionist Direct Route Guard (/lab-orders)', 'PASS', `Rendered: "${h1Lab}"`);
 
     // API-Level verification (HTTP 403 Forbidden)
-    const apiVisitRes = await recPage.evaluate(async () => {
-      const res = await fetch('http://localhost:3001/api/visits', { credentials: 'include' });
+    const apiVisitRes = await recPage.evaluate(async (apiUrl) => {
+      const res = await fetch(`${apiUrl}/visits`, { credentials: 'include' });
       return { status: res.status, json: await res.json() };
-    });
+    }, API_URL);
     assert.strictEqual(apiVisitRes.status, 403, 'GET /api/visits must return 403 for receptionist');
     record('API RBAC Enforcement: GET /api/visits', 'PASS', `Returned status 403 (${apiVisitRes.json.code || 'FORBIDDEN'})`);
 
-    const apiLabRes = await recPage.evaluate(async () => {
-      const res = await fetch('http://localhost:3001/api/lab-orders', { credentials: 'include' });
+    const apiLabRes = await recPage.evaluate(async (apiUrl) => {
+      const res = await fetch(`${apiUrl}/lab-orders`, { credentials: 'include' });
       return { status: res.status, json: await res.json() };
-    });
+    }, API_URL);
     assert.strictEqual(apiLabRes.status, 403, 'GET /api/lab-orders must return 403 for receptionist');
     record('API RBAC Enforcement: GET /api/lab-orders', 'PASS', `Returned status 403 (${apiLabRes.json.code || 'FORBIDDEN'})`);
   } catch (err) {
@@ -156,10 +163,10 @@ async function testRBACAndPrivacy(browser) {
     record('Doctor Admin Route Guard (/users)', 'PASS', `Rendered: "${h1Users}"`);
 
     // API-Level verification: Doctor denied from /api/users
-    const apiUsersRes = await docPage.evaluate(async () => {
-      const res = await fetch('http://localhost:3001/api/users', { credentials: 'include' });
+    const apiUsersRes = await docPage.evaluate(async (apiUrl) => {
+      const res = await fetch(`${apiUrl}/users`, { credentials: 'include' });
       return { status: res.status, json: await res.json() };
-    });
+    }, API_URL);
     assert.strictEqual(apiUsersRes.status, 403, 'GET /api/users must return 403 for doctor');
     record('API RBAC Enforcement: GET /api/users', 'PASS', `Doctor denied with status 403 (${apiUsersRes.json.code || 'FORBIDDEN'})`);
   } catch (err) {
@@ -211,6 +218,9 @@ async function testResponsiveLayouts(browser) {
 }
 
 async function runE2E() {
+  ({ chromium } = await import("playwright"));
+  assert = (await import("node:assert")).default;
+
   console.log('Starting End-to-End Browser Automation Suite...');
   const browser = await chromium.launch({ headless: true });
   try {

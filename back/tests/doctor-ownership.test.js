@@ -5,6 +5,8 @@ const LabOrder = require("../modules/LabOrder/labOrder.model");
 const PerformedService = require("../modules/performedService/performedService.model");
 const Schedule = require("../modules/Schedule/schedule.model");
 const Visit = require("../modules/Visit/visit.model");
+const Appointment = require("../modules/Appointment/appointment.model");
+const MedicalAttachment = require("../modules/medicalAttachment/medicalAttachment.model");
 const MedicalService = require("../modules/medicalService/medicalService.model");
 const {
   createTestUser,
@@ -130,6 +132,36 @@ describe("Doctor resource ownership", () => {
     expect(response.status).toBe(403);
     expect(response.body.code).toBe("FORBIDDEN");
     expect(await PerformedService.countDocuments()).toBe(0);
+  });
+
+  test("does not grant attachment access based on an appointment without a visit", async () => {
+    await Appointment.create({
+      patient: patient._id,
+      doctor: doctor._id,
+      appointmentDate: getFutureAppointmentDate(),
+      duration: 30,
+      createdBy: admin.user._id,
+    });
+    const attachment = await MedicalAttachment.create({
+      patient: patient._id,
+      type: "medical_report",
+      title: "Private medical report",
+      file: {
+        url: "https://example.com/report.pdf",
+        publicId: "test-report",
+        originalName: "report.pdf",
+        mimeType: "application/pdf",
+        size: 128,
+      },
+      uploadedBy: admin.user._id,
+    });
+
+    const response = await request(app)
+      .get(`/api/medical-attachments/${attachment._id}`)
+      .set("Authorization", doctorUser.authHeader);
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe("FORBIDDEN");
   });
 
   test("restricts schedule details to the assigned doctor", async () => {

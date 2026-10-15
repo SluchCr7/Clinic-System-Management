@@ -1,4 +1,5 @@
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 const User = require("../modules/User/user.model");
 const Patient = require("../modules/Patient/patient.model");
 const Doctor = require("../modules/Doctor/doctor.model");
@@ -20,6 +21,7 @@ const createTestUser = async ({
   isActive = true,
 } = {}) => {
   const hashedPassword = await bcrypt.hash(password, 4);
+  const tokenId = crypto.randomUUID();
   const user = await User.create({
     firstName,
     lastName,
@@ -28,17 +30,18 @@ const createTestUser = async ({
     phone,
     role,
     isActive,
+    activeRefreshTokens: [{ tokenId, createdAt: new Date() }],
   });
 
   const accessToken = generateAccessToken(user);
-  const refreshToken = generateRefreshToken(user);
+  const refreshToken = generateRefreshToken(user, tokenId);
 
   return {
     user,
     plainPassword: password,
     accessToken,
     refreshToken,
-    authHeader: `Bearer ${accessToken}`,
+    authHeader: "Bearer " + accessToken,
   };
 };
 

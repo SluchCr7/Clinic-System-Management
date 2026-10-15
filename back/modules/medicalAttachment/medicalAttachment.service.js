@@ -1,9 +1,9 @@
+const mongoose = require("mongoose");
 const MedicalAttachment = require("./medicalAttachment.model");
 
 const Patient = require("../Patient/patient.model");
 const Visit = require("../Visit/visit.model");
 const Doctor = require("../Doctor/doctor.model");
-const Appointment = require("../Appointment/appointment.model");
 
 const { AppError } = require("../../middlewares/errorHandler");
 const { validateFileSignature } = require("../../utils/validateFileSignature");
@@ -118,65 +118,68 @@ const createMedicalAttachment = async (
     `clinic/medical-attachments/${patientId}`
   );
 
+  let session;
   try {
-    // -----------------------------------------
-    // 4. Create Database Record
-    // -----------------------------------------
+    session = await mongoose.startSession();
+    let attachment;
 
-    const attachment =
-      await MedicalAttachment.create({
-        patient: patientId,
-        visit: visitId || null,
-        type,
-        title,
-        description: description || null,
+    await session.withTransaction(async () => {
+      [attachment] = await MedicalAttachment.create(
+        [
+          {
+            patient: patientId,
+            visit: visitId || null,
+            type,
+            title,
+            description: description || null,
+            file: {
+              url: uploadedFile.url,
+              publicId: uploadedFile.publicId,
+              originalName: file.originalname,
+              mimeType: file.mimetype,
+              size: file.size,
+            },
+            uploadedBy: currentUser._id,
+          },
+        ],
+        { session }
+      );
 
-        file: {
-          url: uploadedFile.url,
-          publicId: uploadedFile.publicId,
-          originalName: file.originalname,
-          mimeType: file.mimetype,
-          size: file.size,
+      await auditLogService.logActivity({
+        actor: currentUser,
+        action: "MEDICAL_ATTACHMENT_UPLOADED",
+        resource: "MedicalAttachment",
+        resourceId: attachment._id,
+        details: {
+          patient: attachment.patient,
+          visit: attachment.visit,
+          type: attachment.type,
+          title: attachment.title,
+          file: {
+            originalName: attachment.file.originalName,
+            mimeType: attachment.file.mimeType,
+            size: attachment.file.size,
+          },
         },
-
-        uploadedBy: currentUser._id,
+        session,
       });
-
-    // -----------------------------------------
-    // 5. Audit Log
-    // -----------------------------------------
-
-    await auditLogService.logActivity({
-      actor: currentUser,
-      action: "MEDICAL_ATTACHMENT_UPLOADED",
-      resource: "MedicalAttachment",
-      resourceId: attachment._id,
-
-      details: {
-        patient: attachment.patient,
-        visit: attachment.visit,
-        type: attachment.type,
-        title: attachment.title,
-
-        file: {
-          originalName: attachment.file.originalName,
-          mimeType: attachment.file.mimeType,
-          size: attachment.file.size,
-        },
-      },
     });
 
     return attachment;
   } catch (error) {
-    // -----------------------------------------
-    // Cleanup Cloudinary File
-    // -----------------------------------------
-
-    await deleteFromCloudinary(
-      uploadedFile.publicId
-    );
-
+    try {
+      await deleteFromCloudinary(uploadedFile.publicId);
+    } catch (cleanupError) {
+      console.error(
+        "Failed to remove uploaded medical attachment after database failure:",
+        cleanupError
+      );
+    }
     throw error;
+  } finally {
+    if (session) {
+      await session.endSession();
+    }
   }
 };
 
@@ -296,12 +299,12 @@ const getMedicalAttachmentById = async (id, currentUser = null) => {
     }
 
     const patientId = attachment.patient?._id || attachment.patient;
-    const [hasAppointment, hasVisit] = await Promise.all([
-      Appointment.exists({ doctor: doctor._id, patient: patientId }),
-      Visit.exists({ doctor: doctor._id, patient: patientId }),
-    ]);
+    const hasVisit = await Visit.exists({
+      doctor: doctor._id,
+      patient: patientId,
+    });
 
-    if (!hasAppointment && !hasVisit) {
+    if (!hasVisit) {
       throw new AppError(
         "You are not authorized to view this patient's medical attachment",
         403,

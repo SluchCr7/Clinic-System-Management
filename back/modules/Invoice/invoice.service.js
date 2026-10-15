@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 
 const Invoice = require("./invoice.model");
 const Visit = require("../Visit/visit.model");
+const Appointment = require("../Appointment/appointment.model");
 const PerformedService = require("../performedService/performedService.model");
 const Patient = require("../Patient/patient.model");
 const Doctor = require("../Doctor/doctor.model");
@@ -11,7 +12,11 @@ const { AppError } = require("../../middlewares/errorHandler");
 const generateInvoiceNumber = require("../../utils/generateInvoiceNumber");
 
 const auditLogService = require("../AuditLog/auditLog.service");
-const { paginateQuery } = require("../../utils/pagination");
+const {
+  getPagination,
+  getPaginationMeta,
+  paginateQuery,
+} = require("../../utils/pagination");
 const {
   getSearchRegex,
   getSort,
@@ -26,6 +31,18 @@ const {
 
 const roundMoney = (value) => {
   return Math.round((value + Number.EPSILON) * 100) / 100;
+};
+
+const isConsultationService = (service) => {
+  const normalize = (value) =>
+    String(value || "").toLowerCase().replace(/[^a-z]/g, "");
+  const name = normalize(service.serviceName);
+  const code = normalize(service.serviceCode);
+
+  return (
+    ["consultation", "consultationfee", "clinicalconsultation"].includes(name) ||
+    ["consult", "consultation", "consultationfee"].includes(code)
+  );
 };
 
 // ---------------------------------------------
@@ -94,7 +111,7 @@ const validateDoctor = async (doctorId) => {
 // Create Invoice
 // ---------------------------------------------
 
-const createInvoice = async (data, currentUser) => {
+const createInvoiceAttempt = async (data, currentUser) => {
   const {
     visit: visitId,
     discount = 0,
@@ -127,10 +144,45 @@ const createInvoice = async (data, currentUser) => {
     // 2. Validate Patient & Doctor
     // -----------------------------------------
 
-    await Promise.all([
+    const [, doctor] = await Promise.all([
       validatePatient(visit.patient),
       validateDoctor(visit.doctor),
     ]);
+
+    if (
+      !Number.isFinite(doctor.consultationFee) ||
+      doctor.consultationFee < 0
+    ) {
+      throw new AppError(
+        "The doctor's consultation fee is unavailable. Update the doctor fee before creating this invoice.",
+        400,
+        "CONSULTATION_FEE_UNAVAILABLE"
+      );
+    }
+
+    const appointment = await Appointment.findById(
+      visit.appointment
+    ).session(session);
+
+    if (
+      !appointment ||
+      appointment.patient.toString() !== visit.patient.toString() ||
+      appointment.doctor.toString() !== visit.doctor.toString()
+    ) {
+      throw new AppError(
+        "The visit is not linked to a valid appointment",
+        400,
+        "INVALID_VISIT_APPOINTMENT"
+      );
+    }
+
+    if (appointment.status !== "completed") {
+      throw new AppError(
+        "Only completed visits can be invoiced",
+        400,
+        "VISIT_NOT_BILLABLE"
+      );
+    }
 
     // -----------------------------------------
     // 3. One Visit = One Invoice
@@ -159,52 +211,86 @@ const createInvoice = async (data, currentUser) => {
         .sort({ createdAt: 1 })
         .session(session);
 
-    if (performedServices.length === 0) {
-      throw new AppError(
-        "Cannot create invoice without performed services",
-        400,
-        "NO_PERFORMED_SERVICES"
-      );
-    }
+    const consultationFee = roundMoney(doctor.consultationFee);
 
     // -----------------------------------------
     // 5. Build Invoice Items
     // -----------------------------------------
 
-    const items = performedServices.map(
-      (performedService) => {
-        const itemSubtotal =
-          performedService.price *
-          performedService.quantity;
+    const items = [
+      {
+        type: "consultation",
+        serviceName: "Consultation fee",
+        serviceCode: "CONSULTATION",
+        unitPrice: consultationFee,
+        quantity: 1,
+        discount: 0,
+        total: consultationFee,
+      },
+      ...performedServices
+        .filter((performedService) => !isConsultationService(performedService))
+        .map((performedService) => {
+          if (
+            performedService.patient?.toString() !== visit.patient.toString() ||
+            performedService.doctor?.toString() !== visit.doctor.toString() ||
+            !Number.isFinite(performedService.price) ||
+            performedService.price < 0 ||
+            !Number.isSafeInteger(performedService.quantity) ||
+            performedService.quantity < 1 ||
+            !Number.isFinite(performedService.discount) ||
+            performedService.discount < 0
+          ) {
+            throw new AppError(
+              "A performed service is invalid or does not belong to this visit",
+              400,
+              "INVALID_PERFORMED_SERVICE"
+            );
+          }
 
-        const itemTotal =
-          itemSubtotal -
-          performedService.discount;
+          const itemSubtotal =
+            performedService.price *
+            performedService.quantity;
 
-        return {
-          performedService:
-            performedService._id,
+          if (
+            !Number.isFinite(itemSubtotal) ||
+            performedService.discount > itemSubtotal
+          ) {
+            throw new AppError(
+              "A performed service has an invalid price or discount",
+              400,
+              "INVALID_PERFORMED_SERVICE"
+            );
+          }
 
-          serviceName:
-            performedService.serviceName,
+          const itemTotal =
+            itemSubtotal -
+            performedService.discount;
 
-          serviceCode:
-            performedService.serviceCode,
+          return {
+            type: "performed_service",
+            performedService:
+              performedService._id,
 
-          unitPrice:
-            performedService.price,
+            serviceName:
+              performedService.serviceName,
 
-          quantity:
-            performedService.quantity,
+            serviceCode:
+              performedService.serviceCode,
 
-          discount:
-            performedService.discount,
+            unitPrice:
+              performedService.price,
 
-          total:
-            roundMoney(itemTotal),
-        };
-      }
-    );
+            quantity:
+              performedService.quantity,
+
+            discount:
+              performedService.discount,
+
+            total:
+              roundMoney(itemTotal),
+          };
+        }),
+    ];
 
     // -----------------------------------------
     // 6. Calculate Subtotal
@@ -330,6 +416,131 @@ const createInvoice = async (data, currentUser) => {
   } finally {
     session.endSession();
   }
+};
+
+const createInvoice = async (data, currentUser) => {
+  let attempt = 0;
+  const maxAttempts = 3;
+
+  while (true) {
+    try {
+      return await createInvoiceAttempt(data, currentUser);
+    } catch (error) {
+      const isTransientTransactionConflict =
+        error.code === 112 ||
+        error.hasErrorLabel?.("TransientTransactionError");
+
+      if (!isTransientTransactionConflict) {
+        throw error;
+      }
+
+      const existingInvoice = await Invoice.findOne({
+        visit: data.visit,
+      })
+        .select("_id")
+        .lean();
+
+      if (existingInvoice) {
+        throw new AppError(
+          "An invoice already exists for this visit",
+          409,
+          "INVOICE_ALREADY_EXISTS"
+        );
+      }
+
+      if (attempt >= maxAttempts - 1) {
+        throw error;
+      }
+
+      attempt += 1;
+      await new Promise((resolve) =>
+        setTimeout(resolve, 10 * attempt)
+      );
+    }
+  }
+};
+
+const getEligibleVisits = async (query = {}) => {
+  const pagination = getPagination(query.page, query.limit);
+  const pipeline = [
+    {
+      $lookup: {
+        from: Appointment.collection.name,
+        localField: "appointment",
+        foreignField: "_id",
+        as: "appointmentRecord",
+      },
+    },
+    { $match: { "appointmentRecord.status": "completed" } },
+    {
+      $lookup: {
+        from: Invoice.collection.name,
+        localField: "_id",
+        foreignField: "visit",
+        as: "existingInvoices",
+      },
+    },
+    { $match: { "existingInvoices.0": { $exists: false } } },
+    {
+      $lookup: {
+        from: Patient.collection.name,
+        localField: "patient",
+        foreignField: "_id",
+        as: "patientRecord",
+      },
+    },
+    { $match: { "patientRecord.isActive": true } },
+    {
+      $lookup: {
+        from: Doctor.collection.name,
+        localField: "doctor",
+        foreignField: "_id",
+        as: "doctorRecord",
+      },
+    },
+    { $match: { "doctorRecord.isActive": true } },
+    {
+      $facet: {
+        data: [
+          { $sort: { createdAt: -1, _id: -1 } },
+          { $skip: pagination.skip },
+          { $limit: pagination.limit },
+        ],
+        total: [{ $count: "count" }],
+      },
+    },
+  ];
+
+  const [result] = await Visit.aggregate(pipeline);
+  const records = result?.data || [];
+  const visits = await Visit.populate(records, [
+    {
+      path: "patient",
+      select: "firstName lastName phone email",
+    },
+    {
+      path: "doctor",
+      select: "user specialization licenseNumber consultationFee",
+      populate: {
+        path: "user",
+        select: "firstName lastName",
+      },
+    },
+    {
+      path: "appointment",
+      select: "appointmentDate duration status",
+    },
+  ]);
+  const total = result?.total?.[0]?.count || 0;
+
+  return {
+    data: visits,
+    pagination: getPaginationMeta(
+      pagination.page,
+      pagination.limit,
+      total
+    ),
+  };
 };
 
 // ---------------------------------------------
@@ -628,6 +839,7 @@ const cancelInvoice = async (id, currentUser) => {
 
 module.exports = {
   createInvoice,
+  getEligibleVisits,
   getInvoices,
   getInvoiceById,
   updateInvoice,

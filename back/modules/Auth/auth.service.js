@@ -48,6 +48,10 @@ const login = async (email, password, requestInfo = {}) => {
     );
   }
 
+  if (user.activeRefreshTokens.length > 0) {
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+  }
+
   const tokenId = crypto.randomUUID();
   user.activeRefreshTokens = [{ tokenId, createdAt: new Date() }];
   user.lastLogin = new Date();
@@ -169,13 +173,23 @@ const refreshAccessToken = async (refreshToken, requestInfo = {}) => {
     );
   }
 
-  // Refresh Token Replay Detection
-  if (decoded.tokenId && Array.isArray(user.activeRefreshTokens) && user.activeRefreshTokens.length > 0) {
-    const tokenIndex = user.activeRefreshTokens.findIndex(
-      (t) => t.tokenId === decoded.tokenId
+  if (!decoded.tokenId) {
+    throw new AppError(
+      "Invalid refresh token",
+      401,
+      "INVALID_REFRESH_TOKEN"
     );
+  }
 
-    if (tokenIndex === -1) {
+  const activeRefreshTokens = Array.isArray(user.activeRefreshTokens)
+    ? user.activeRefreshTokens
+    : [];
+  const tokenIndex = activeRefreshTokens.findIndex(
+    (token) => token.tokenId === decoded.tokenId
+  );
+
+  if (tokenIndex === -1) {
+    if (activeRefreshTokens.length > 0) {
       // Replay detected! An old/already used refresh token was presented.
       user.activeRefreshTokens = [];
       user.tokenVersion = (user.tokenVersion || 0) + 1;
@@ -198,9 +212,15 @@ const refreshAccessToken = async (refreshToken, requestInfo = {}) => {
       );
     }
 
-    // Remove the consumed token
-    user.activeRefreshTokens.splice(tokenIndex, 1);
+    throw new AppError(
+      "Refresh token has been revoked",
+      401,
+      "REFRESH_TOKEN_EXPIRED"
+    );
   }
+
+  // Remove the consumed token
+  user.activeRefreshTokens.splice(tokenIndex, 1);
 
   // Issue new rotated token
   const newTokenId = crypto.randomUUID();
@@ -242,19 +262,41 @@ const logout = async (refreshToken, currentUser = null, requestInfo = {}) => {
   let user = currentUser;
 
   if (refreshToken) {
+    let decoded;
+
     try {
-      const decoded = jwt.decode(refreshToken);
-      if (decoded?.id) {
-        const foundUser = await User.findById(decoded.id);
-        if (foundUser) {
-          user = foundUser;
-          foundUser.tokenVersion = (foundUser.tokenVersion || 0) + 1;
-          foundUser.activeRefreshTokens = [];
-          await foundUser.save();
-        }
+      decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, {
+        algorithms: ["HS256"],
+        ignoreExpiration: true,
+      });
+    } catch (error) {
+      if (!(error instanceof jwt.JsonWebTokenError)) {
+        throw error;
       }
-    } catch (e) {
-      // Ignore malformed token on logout
+    }
+
+    if (
+      decoded?.type === "refresh" &&
+      decoded.id &&
+      decoded.tokenId &&
+      decoded.tokenVersion !== undefined
+    ) {
+      const foundUser = await User.findOneAndUpdate(
+        {
+          _id: decoded.id,
+          tokenVersion: decoded.tokenVersion,
+          "activeRefreshTokens.tokenId": decoded.tokenId,
+        },
+        {
+          $inc: { tokenVersion: 1 },
+          $set: { activeRefreshTokens: [] },
+        },
+        { returnDocument: "after" }
+      );
+
+      if (foundUser) {
+        user = foundUser;
+      }
     }
   } else if (user) {
     user.tokenVersion = (user.tokenVersion || 0) + 1;

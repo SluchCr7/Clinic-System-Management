@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -41,14 +41,8 @@ export default function NewVisitPage() {
   const [selectedAppointmentId, setSelectedAppointmentId] = useState(
     appointmentIdFromUrl || ""
   );
-
-  useEffect(() => {
-    if (appointmentIdFromUrl) {
-      setSelectedAppointmentId(appointmentIdFromUrl);
-    } else if (eligibleAppointments.length > 0 && !selectedAppointmentId) {
-      setSelectedAppointmentId(eligibleAppointments[0]._id);
-    }
-  }, [appointmentIdFromUrl, eligibleAppointments.length]);
+  const effectiveAppointmentId =
+    selectedAppointmentId || eligibleAppointments[0]?._id || "";
   const [chiefComplaint, setChiefComplaint] = useState("");
   const [symptoms, setSymptoms] = useState("");
   const [examination, setExamination] = useState("");
@@ -73,10 +67,10 @@ export default function NewVisitPage() {
     setFormError(null);
 
     const appointment = appointmentsData?.data?.find(
-      (a) => a._id === selectedAppointmentId
+      (a) => a._id === effectiveAppointmentId
     );
 
-    if (!selectedAppointmentId || !appointment) {
+    if (!effectiveAppointmentId || !appointment) {
       setFormError(t("visits.consultation.requiredAppointment"));
       return;
     }
@@ -98,7 +92,7 @@ export default function NewVisitPage() {
 
     try {
       const payload = {
-        appointment: selectedAppointmentId,
+        appointment: effectiveAppointmentId,
         patient: patientId,
         doctor: doctorId,
         chiefComplaint: chiefComplaint.trim(),
@@ -185,7 +179,7 @@ export default function NewVisitPage() {
             <Select
               label={t("visits.consultation.linkedAppointment")}
               required
-              value={selectedAppointmentId}
+              value={effectiveAppointmentId}
               onChange={(e) => setSelectedAppointmentId(e.target.value)}
               options={
                 eligibleAppointments.map((a) => {
