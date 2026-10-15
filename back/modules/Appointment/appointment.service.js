@@ -1201,6 +1201,17 @@ const updateAppointment = async (id, data, currentUser) => {
     }
 
     if (
+      data.status === "completed" &&
+      !(await Visit.exists({ appointment: appointment._id }).session(session))
+    ) {
+      throw new AppError(
+        "An appointment cannot be completed before its visit is recorded",
+        400,
+        "VISIT_REQUIRED_FOR_COMPLETION"
+      );
+    }
+
+    if (
       newStatus === "cancelled" &&
       !data.cancellationReason &&
       !appointment.cancellationReason

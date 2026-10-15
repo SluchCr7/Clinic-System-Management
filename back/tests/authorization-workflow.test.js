@@ -142,7 +142,19 @@ describe("Authorization and Clinical Workflow Integrity API", () => {
   });
 
   describe("Clinical Workflow: Appointments and Visits", () => {
-    test("creates a visit, verifies relationship, and transitions appointment to completed", async () => {
+    test("records a visit while an appointment is in progress and completes it afterward", async () => {
+      const confirmResponse = await request(app)
+        .patch(`/api/appointments/${appointment._id}`)
+        .set("Authorization", admin.authHeader)
+        .send({ status: "confirmed" });
+      expect(confirmResponse.status).toBe(200);
+
+      const startResponse = await request(app)
+        .patch(`/api/appointments/${appointment._id}`)
+        .set("Authorization", doctorUser.authHeader)
+        .send({ status: "in_progress" });
+      expect(startResponse.status).toBe(200);
+
       const visitPayload = {
         appointment: appointment._id.toString(),
         patient: patient._id.toString(),
@@ -162,9 +174,17 @@ describe("Authorization and Clinical Workflow Integrity API", () => {
       expect(response.body.success).toBe(true);
       expect(response.body.data.chiefComplaint).toBe("Persistent dry cough");
 
-      // Verify that the appointment automatically transitioned to completed
-      const updatedAppointment = await Appointment.findById(appointment._id);
-      expect(updatedAppointment.status).toBe("completed");
+      const inProgressAppointment = await Appointment.findById(appointment._id);
+      expect(inProgressAppointment.status).toBe("in_progress");
+
+      const completeResponse = await request(app)
+        .patch(`/api/appointments/${appointment._id}`)
+        .set("Authorization", doctorUser.authHeader)
+        .send({ status: "completed" });
+      expect(completeResponse.status).toBe(200);
+
+      const completedAppointment = await Appointment.findById(appointment._id);
+      expect(completedAppointment.status).toBe("completed");
     });
 
     test("prevents creating a second visit for the same appointment", async () => {

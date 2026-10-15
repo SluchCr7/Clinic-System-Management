@@ -93,9 +93,17 @@ export default function AppointmentsPage() {
         data: { status: newStatus },
       }).unwrap();
       toast.success(t("appointments.success.statusUpdated"));
+      return true;
     } catch (err) {
       const extracted = extractApiError(err);
       toast.error(extracted.message || t("appointments.errors.updateStatusFailed"));
+      return false;
+    }
+  };
+
+  const handleStartVisit = async (id: string) => {
+    if (await handleStatusTransition(id, "in_progress")) {
+      router.push(`/visits/new?appointmentId=${id}`);
     }
   };
 
@@ -308,8 +316,8 @@ export default function AppointmentsPage() {
                 isRtl={isRtl}
                 isUpdating={isUpdating}
                 handleStatusTransition={handleStatusTransition}
+                handleStartVisit={handleStartVisit}
                 setActiveMenuId={setActiveMenuId}
-                router={router}
                 setCancelTargetId={setCancelTargetId}
                 t={t}
               />

@@ -82,7 +82,11 @@ const validateAppointment = async (appointmentId, patientId, doctorId) => {
     );
   }
 
-  if (!["scheduled", "confirmed", "checked_in"].includes(appointment.status)) {
+  if (
+    !["scheduled", "confirmed", "checked_in", "in_progress"].includes(
+      appointment.status
+    )
+  ) {
     throw new AppError(
       "Appointment cannot be used to create a visit",
       400,
@@ -140,7 +144,7 @@ const createVisit = async (data, currentUser) => {
       { session }
     );
 
-    appointmentData.status = "completed";
+    appointmentData.status = "in_progress";
     appointmentData.updatedBy = currentUser._id;
     await appointmentData.save({ session });
 

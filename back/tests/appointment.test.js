@@ -349,6 +349,21 @@ describe("Appointments API", () => {
     expect(recCompleteRes.body.code).toBe("FORBIDDEN");
   });
 
+  test("prevents completing an appointment before a visit is recorded", async () => {
+    const appointment = await createSavedAppointment({ status: "in_progress" });
+
+    const response = await request(app)
+      .patch(`/api/appointments/${appointment._id}`)
+      .set("Authorization", admin.authHeader)
+      .send({ status: "completed" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("VISIT_REQUIRED_FOR_COMPLETION");
+    expect((await Appointment.findById(appointment._id)).status).toBe(
+      "in_progress"
+    );
+  });
+
   test("prevents doctor from modifying another doctor's appointment", async () => {
     const otherDoctor = await createTestDoctor(receptionist.user);
     const appointment = await createSavedAppointment({

@@ -1027,6 +1027,7 @@
       "confirm": "تأكيد",
       "checkIn": "تسجيل الوصول",
       "startVisit": "بدء الزيارة",
+      "completeVisit": "إنهاء الزيارة",
       "markNoShow": "تسجيل عدم الحضور"
     },
     "success": {

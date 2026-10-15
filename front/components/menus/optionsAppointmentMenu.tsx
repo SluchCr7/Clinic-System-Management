@@ -11,16 +11,14 @@ interface OptionsAppointmentMenuProps {
     role: string | undefined;
     isRtl: boolean;
     isUpdating: boolean;
-    handleStatusTransition: (id: string, status: AppointmentStatus) => void | Promise<void>;
+    handleStatusTransition: (id: string, status: AppointmentStatus) => void | Promise<boolean>;
+    handleStartVisit: (id: string) => void | Promise<void>;
     setActiveMenuId: (id: string | null) => void;
-    router: {
-        push: (url: string) => void;
-    };
     setCancelTargetId: (id: string) => void;
     t: (key: string) => string;
 }
 
-const OptionsAppointmentMenu = ({ apt, role, isRtl, isUpdating, handleStatusTransition, setActiveMenuId, router, setCancelTargetId , t } : OptionsAppointmentMenuProps) => {
+const OptionsAppointmentMenu = ({ apt, role, isRtl, isUpdating, handleStatusTransition, handleStartVisit, setActiveMenuId, setCancelTargetId , t } : OptionsAppointmentMenuProps) => {
   return (
     <div 
         className={`absolute top-full mt-1 w-48 bg-surface border border-border-subtle rounded-lg shadow-lg py-1.5 z-50 flex flex-col ${
@@ -57,14 +55,24 @@ const OptionsAppointmentMenu = ({ apt, role, isRtl, isUpdating, handleStatusTran
         {(apt.status === "checked_in" || apt.status === "confirmed" || apt.status === "in_progress") && (role === "admin" || role === "doctor") && (
         <button
             type="button"
-            onClick={() => {
-            setActiveMenuId(null);
-            router.push(`/visits/new?appointmentId=${apt._id}`);
-            }}
+            onClick={() => handleStartVisit(apt._id)}
+            disabled={isUpdating}
             className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-teal-dark hover:bg-mint/50 text-start transition-colors"
         >
             <LuStethoscope className="w-4 h-4 text-teal-primary shrink-0" />
             <span>{t("appointments.actions.startVisit")}</span>
+        </button>
+        )}
+
+        {apt.status === "in_progress" && (role === "admin" || role === "doctor") && (
+        <button
+            type="button"
+            onClick={() => handleStatusTransition(apt._id, "completed")}
+            disabled={isUpdating}
+            className="flex items-center gap-2 px-3 py-2 text-xs text-ink hover:bg-mint/40 text-start transition-colors"
+        >
+            <LuCheck className="w-4 h-4 text-teal-primary shrink-0" />
+            <span>{t("appointments.actions.completeVisit")}</span>
         </button>
         )}
 

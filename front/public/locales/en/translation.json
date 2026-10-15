@@ -1051,6 +1051,7 @@
       "confirm": "Confirm",
       "checkIn": "Check In",
       "startVisit": "Start Visit",
+      "completeVisit": "Complete Visit",
       "markNoShow": "No Show"
     },
     "success": {

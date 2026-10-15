@@ -87,13 +87,13 @@ export default function VisitWorkspacePage() {
 
   // Fetch Clinical Encounters Child Resources
   const { data: prescriptionsData } = useGetPrescriptionsQuery(
-    patientId ? { patient: patientId } : undefined,
-    { skip: !patientId }
+    visitId ? { visit: visitId } : undefined,
+    { skip: !visitId }
   );
 
   const { data: labOrdersData } = useGetLabOrdersQuery(
-    patientId ? { patient: patientId } : undefined,
-    { skip: !patientId }
+    visitId ? { visit: visitId } : undefined,
+    { skip: !visitId }
   );
 
   const { data: performedServicesData } = useGetPerformedServicesQuery(

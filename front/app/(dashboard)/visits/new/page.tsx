@@ -32,10 +32,10 @@ export default function NewVisitPage() {
     limit: 100,
   });
 
-  // Filter appointments eligible to start a visit: checked_in, confirmed, or scheduled
+  // Include in-progress appointments when resuming an unfinished encounter.
   const eligibleAppointments =
     appointmentsData?.data?.filter((a) =>
-      ["checked_in", "confirmed", "scheduled"].includes(a.status)
+      ["checked_in", "confirmed", "scheduled", "in_progress"].includes(a.status)
     ) || [];
 
   const [selectedAppointmentId, setSelectedAppointmentId] = useState(
