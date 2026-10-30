@@ -916,7 +916,6 @@ const validateFollowUpDoesNotDuplicate = async ({
     );
   }
 };
-
 const validateFollowUpReferences = async ({
   originatingVisit,
   followUpOf,
@@ -1232,11 +1231,84 @@ const updateAppointment = async (id, data, currentUser) => {
       data.duration !== undefined &&
       data.duration !== previousValues.duration;
 
-    const followUpReferenceChanged =
-      data.originatingVisit !== undefined || data.followUpOf !== undefined;
+const followUpReferenceChanged =
+  data.originatingVisit !== undefined || data.followUpOf !== undefined;
 
-    if (isRescheduled || isDurationChanged || followUpReferenceChanged) {
-      await lockDoctorAppointmentBookings(appointment.doctor, session);
+if (isRescheduled || isDurationChanged || followUpReferenceChanged) {
+  await lockDoctorAppointmentBookings(appointment.doctor, session);
+}
+
+if (isRescheduled || isDurationChanged) {
+  const appointmentDate = toClinicDate(newDate);
+
+  if (appointmentDate <= new Date()) {
+    throw new AppError(
+      "Appointment date must be in the future",
+      400,
+      "INVALID_APPOINTMENT_DATE"
+    );
+  }
+
+  const schedule = await getDoctorSchedule(
+    appointment.doctor,
+    newDate,
+    session
+  );
+
+  validateAppointmentTime(newDate, newDuration, schedule);
+
+  await validateNoConflict({
+    doctorId: appointment.doctor,
+    appointmentDate: newDate,
+    duration: newDuration,
+    excludeAppointmentId: id,
+    session,
+  });
+
+  await validateFollowUpDoesNotDuplicate({
+    originatingVisit:
+      data.originatingVisit !== undefined
+        ? data.originatingVisit
+        : appointment.originatingVisit,
+    doctorId: appointment.doctor,
+    patientId: appointment.patient,
+    excludeAppointmentId: id,
+    session,
+  });
+}
+
+if (followUpReferenceChanged) {
+  await validateFollowUpReferences({
+    originatingVisit:
+      data.originatingVisit !== undefined
+        ? data.originatingVisit
+        : appointment.originatingVisit,
+    followUpOf:
+      data.followUpOf !== undefined
+        ? data.followUpOf
+        : appointment.followUpOf,
+    doctorId: appointment.doctor,
+    patientId: appointment.patient,
+    excludeAppointmentId: id,
+    session,
+  });
+}
+    const allowedFields = [
+      "appointmentDate",
+      "duration",
+      "status",
+      "reason",
+      "notes",
+      "cancellationReason",
+      "isFollowUp",
+      "originatingVisit",
+      "followUpOf",
+    ];
+
+    for (const field of allowedFields) {
+      if (data[field] !== undefined) {
+        appointment[field] = data[field];
+      }
     }
 
     if (isRescheduled || isDurationChanged) {
@@ -1293,17 +1365,6 @@ const updateAppointment = async (id, data, currentUser) => {
       });
     }
 
-    const allowedFields = [
-      "appointmentDate",
-      "duration",
-      "status",
-      "reason",
-      "notes",
-      "cancellationReason",
-      "isFollowUp",
-      "originatingVisit",
-      "followUpOf",
-    ];
 
     for (const field of allowedFields) {
       if (data[field] !== undefined) {
