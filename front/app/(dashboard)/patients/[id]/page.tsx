@@ -43,6 +43,9 @@ export default function PatientProfilePage() {
   const role = useAppSelector(selectUserRole);
   const canBookAppointment = hasPermission(role, "appointments.create");
   const canCreateVisit = hasPermission(role, "visits.create");
+  const canViewVisits = hasPermission(role, "visits.view");
+  const canViewLabs = hasPermission(role, "laboratory.view");
+  const canViewBilling = hasPermission(role, "billing.view");
   const params = useParams();
   const patientId = params.id as string;
 
@@ -57,19 +60,19 @@ export default function PatientProfilePage() {
     useGetAppointmentsQuery({ patient: patientId, limit: 10 });
 
   const { data: visitsData, isLoading: isVisitsLoading } =
-    useGetVisitsQuery({ patient: patientId, limit: 10 });
+    useGetVisitsQuery({ patient: patientId, limit: 10 }, { skip: !canViewVisits });
 
   const { data: prescriptionsData, isLoading: isRxsLoading } =
     useGetPrescriptionsQuery({ patient: patientId, limit: 10 });
 
   const { data: labOrdersData, isLoading: isLabsLoading } =
-    useGetLabOrdersQuery({ patient: patientId, limit: 10 });
+    useGetLabOrdersQuery({ patient: patientId, limit: 10 }, { skip: !canViewLabs });
 
   const { data: attachmentsData, isLoading: isFilesLoading } =
     useGetMedicalAttachmentsQuery({ patient: patientId, limit: 10 });
 
   const { data: invoicesData, isLoading: isInvoicesLoading } =
-    useGetInvoicesQuery({ patient: patientId, limit: 10 });
+    useGetInvoicesQuery({ patient: patientId, limit: 10 }, { skip: !canViewBilling });
 
   if (isError) {
     return <ErrorState message={t("patientProfile.errorNotFound")} onRetry={refetch} />;
@@ -95,23 +98,43 @@ export default function PatientProfilePage() {
       label: t("patientProfile.tabs.appointments"),
       count: appointmentsData?.pagination?.total,
     },
-    { id: "visits", label: t("patientProfile.tabs.visits"), count: visitsData?.pagination?.total },
+    ...(canViewVisits
+      ? [
+          {
+            id: "visits",
+            label: t("patientProfile.tabs.visits"),
+            count: visitsData?.pagination?.total,
+          },
+        ]
+      : []),
     {
       id: "prescriptions",
       label: t("patientProfile.tabs.prescriptions"),
       count: prescriptionsData?.pagination?.total,
     },
-    {
-      id: "laboratory",
-      label: t("patientProfile.tabs.laboratory"),
-      count: labOrdersData?.pagination?.total,
-    },
+    ...(canViewLabs
+      ? [
+          {
+            id: "laboratory",
+            label: t("patientProfile.tabs.laboratory"),
+            count: labOrdersData?.pagination?.total,
+          },
+        ]
+      : []),
     {
       id: "attachments",
       label: t("patientProfile.tabs.attachments"),
       count: attachmentsData?.pagination?.total,
     },
-    { id: "billing", label: t("patientProfile.tabs.billing"), count: invoicesData?.pagination?.total },
+    ...(canViewBilling
+      ? [
+          {
+            id: "billing",
+            label: t("patientProfile.tabs.billing"),
+            count: invoicesData?.pagination?.total,
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -262,18 +285,22 @@ export default function PatientProfilePage() {
               subtitle={t("patientProfile.activitySubtitle")}
             />
             <CardContent className="flex flex-col gap-3 text-xs">
-              <div className="flex items-center justify-between p-2.5 rounded-md bg-paper border border-border-subtle">
-                <span className="text-slate-muted">{t("patientProfile.totalConsultations")}:</span>
-                <span className="font-semibold text-ink">
-                  {t("patientProfile.visitsCount", { count: visitsData?.pagination?.total ?? 0 })}
-                </span>
-              </div>
-              <div className="flex items-center justify-between p-2.5 rounded-md bg-paper border border-border-subtle">
-                <span className="text-slate-muted">{t("patientProfile.totalInvoiced")}:</span>
-                <span className="font-semibold text-ink">
-                  {t("patientProfile.invoicesCount", { count: invoicesData?.pagination?.total ?? 0 })}
-                </span>
-              </div>
+              {canViewVisits && (
+                <div className="flex items-center justify-between p-2.5 rounded-md bg-paper border border-border-subtle">
+                  <span className="text-slate-muted">{t("patientProfile.totalConsultations")}:</span>
+                  <span className="font-semibold text-ink">
+                    {t("patientProfile.visitsCount", { count: visitsData?.pagination?.total ?? 0 })}
+                  </span>
+                </div>
+              )}
+              {canViewBilling && (
+                <div className="flex items-center justify-between p-2.5 rounded-md bg-paper border border-border-subtle">
+                  <span className="text-slate-muted">{t("patientProfile.totalInvoiced")}:</span>
+                  <span className="font-semibold text-ink">
+                    {t("patientProfile.invoicesCount", { count: invoicesData?.pagination?.total ?? 0 })}
+                  </span>
+                </div>
+              )}
               <div className="flex items-center justify-between p-2.5 rounded-md bg-paper border border-border-subtle">
                 <span className="text-slate-muted">{t("patientProfile.registeredOn")}:</span>
                 <span className="font-mono text-slate-dark">
@@ -320,7 +347,7 @@ export default function PatientProfilePage() {
         />
       )}
 
-      {activeTab === "visits" && (
+      {canViewVisits && activeTab === "visits" && (
         <DataTable
           columns={[
             {
@@ -406,7 +433,7 @@ export default function PatientProfilePage() {
         />
       )}
 
-      {activeTab === "laboratory" && (
+      {canViewLabs && activeTab === "laboratory" && (
         <DataTable
           columns={[
             {
@@ -496,7 +523,7 @@ export default function PatientProfilePage() {
         />
       )}
 
-      {activeTab === "billing" && (
+      {canViewBilling && activeTab === "billing" && (
         <DataTable
           columns={[
             {

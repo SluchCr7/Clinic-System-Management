@@ -72,17 +72,34 @@ export const appointmentApi = baseApi.injectEndpoints({
       ],
     }),
 
-    cancelAppointment: builder.mutation<ApiMessageResponse, string>({
-      query: (id) => ({
-        url: `/appointments/${id}`,
-        method: "DELETE",
-      }),
-      invalidatesTags: (_result, _error, id) => [
-        { type: "Appointment", id },
-        { type: "Appointment", id: "LIST" },
-        { type: "Dashboard", id: "OVERVIEW" },
-        "Search",
-      ],
+    cancelAppointment: builder.mutation<
+      ApiMessageResponse,
+      string | { id: string; cancellationReason?: string }
+    >({
+      query: (arg) => {
+        if (typeof arg === "string") {
+          return {
+            url: `/appointments/${arg}`,
+            method: "DELETE",
+          };
+        }
+        return {
+          url: `/appointments/${arg.id}`,
+          method: "DELETE",
+          body: arg.cancellationReason
+            ? { cancellationReason: arg.cancellationReason }
+            : undefined,
+        };
+      },
+      invalidatesTags: (_result, _error, arg) => {
+        const id = typeof arg === "string" ? arg : arg.id;
+        return [
+          { type: "Appointment", id },
+          { type: "Appointment", id: "LIST" },
+          { type: "Dashboard", id: "OVERVIEW" },
+          "Search",
+        ];
+      },
     }),
   }),
 });

@@ -264,4 +264,44 @@ describe("Authorization and Clinical Workflow Integrity API", () => {
       expect(updatedAppointment.doctor.toString()).toBe(doctorRecord._id.toString());
     });
   });
+  describe("User Profile Self-Management & Privilege Boundaries", () => {
+    test("allows a doctor or receptionist to update their own profile name and phone", async () => {
+      const response = await request(app)
+        .patch(`/api/users/${doctorUser.user._id}`)
+        .set("Authorization", doctorUser.authHeader)
+        .send({
+          firstName: "UpdatedDrFirst",
+          lastName: "UpdatedDrLast",
+          phone: "01099988877",
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.firstName).toBe("UpdatedDrFirst");
+      expect(response.body.data.lastName).toBe("UpdatedDrLast");
+    });
+
+    test("strictly rejects non-admin attempts to update another user (403)", async () => {
+      const response = await request(app)
+        .patch(`/api/users/${admin.user._id}`)
+        .set("Authorization", receptionist.authHeader)
+        .send({
+          firstName: "HackedAdminName",
+        });
+
+      expect(response.status).toBe(403);
+      expect(response.body.code).toBe("FORBIDDEN");
+    });
+
+    test("strictly rejects non-admin privilege escalation or status modification (403)", async () => {
+      const response = await request(app)
+        .patch(`/api/users/${receptionist.user._id}`)
+        .set("Authorization", receptionist.authHeader)
+        .send({
+          role: "admin",
+        });
+
+      expect(response.status).toBe(403);
+      expect(response.body.code).toBe("FORBIDDEN");
+    });
+  });
 });

@@ -89,6 +89,27 @@ const getUserById = async (id) => {
 };
 
 const updateUser = async (id, data, currentUser = null) => {
+  if (currentUser && currentUser.role !== "admin") {
+    if (id.toString() !== currentUser._id.toString()) {
+      throw new AppError(
+        "You are not authorized to update another user",
+        403,
+        "FORBIDDEN"
+      );
+    }
+    if (
+      data.role !== undefined ||
+      data.isActive !== undefined ||
+      data.email !== undefined
+    ) {
+      throw new AppError(
+        "You are not authorized to modify role, status, or email",
+        403,
+        "FORBIDDEN"
+      );
+    }
+  }
+
   const user = await User.findById(id);
 
   if (!user) {

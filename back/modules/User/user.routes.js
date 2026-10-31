@@ -52,7 +52,7 @@ router.get(
 router.patch(
   "/:id",
   protect,
-  authorize("admin"),
+  authorize("admin", "doctor", "receptionist"),
   validateId("id", "user ID"),
   validate(updateUserSchema),
   userController.updateUser
