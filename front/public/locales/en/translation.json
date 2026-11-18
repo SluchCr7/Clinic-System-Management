@@ -263,10 +263,34 @@
   "doctors": {
     "title": "Physicians & Specialists",
     "subtitle": "Medical staff directory, specialization credentials, and clinic availability",
+    "addDoctor": "Add Doctor",
     "searchPlaceholder": "Search by specialty, license, or name...",
     "allStatus": "All Status",
     "emptyTitle": "No doctors found",
     "emptyDescription": "There are currently no physician records matching this search query.",
+    "create": {
+      "title": "Add a Doctor",
+      "subtitle": "Create a doctor login account and professional profile",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "email": "Email address",
+      "phone": "Phone number",
+      "password": "Temporary password",
+      "specialization": "Specialization",
+      "licenseNumber": "License number",
+      "consultationFee": "Consultation fee ($)",
+      "yearsOfExperience": "Years of experience",
+      "bio": "Biography",
+      "submit": "Create Doctor",
+      "accountCreatedNotice": "The doctor account was created, but the profile is incomplete. Submit again to retry profile creation."
+    },
+    "success": {
+      "created": "Doctor created successfully."
+    },
+    "errors": {
+      "createFailed": "Could not create the doctor account.",
+      "profileAfterAccountFailed": "The doctor account was created, but profile creation failed: {{message}}"
+    },
     "table": {
       "doctorSpecialist": "Doctor / Specialist",
       "specialty": "Specialty",

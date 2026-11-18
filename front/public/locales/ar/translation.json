@@ -287,10 +287,34 @@
   "doctors": {
     "title": "الأطباء والمتخصصون",
     "subtitle": "دليل الطاقم الطبي، الاعتمادات التخصصية، وتوافر العيادة",
+    "addDoctor": "إضافة طبيب",
     "searchPlaceholder": "ابحث حسب التخصص أو الرخصة أو الاسم...",
     "allStatus": "كل الحالات",
     "emptyTitle": "لم يتم العثور على أطباء",
     "emptyDescription": "لا توجد سجلات طبية مطابقة لهذا البحث حاليًا.",
+    "create": {
+      "title": "إضافة طبيب",
+      "subtitle": "إنشاء حساب دخول وملف مهني للطبيب",
+      "firstName": "الاسم الأول",
+      "lastName": "اسم العائلة",
+      "email": "البريد الإلكتروني",
+      "phone": "رقم الهاتف",
+      "password": "كلمة مرور مؤقتة",
+      "specialization": "التخصص",
+      "licenseNumber": "رقم الرخصة",
+      "consultationFee": "رسوم الاستشارة ($)",
+      "yearsOfExperience": "سنوات الخبرة",
+      "bio": "السيرة الذاتية",
+      "submit": "إنشاء الطبيب",
+      "accountCreatedNotice": "تم إنشاء حساب الطبيب ولكن الملف غير مكتمل. أرسل النموذج مرة أخرى لمحاولة إنشاء الملف."
+    },
+    "success": {
+      "created": "تم إنشاء الطبيب بنجاح."
+    },
+    "errors": {
+      "createFailed": "تعذر إنشاء حساب الطبيب.",
+      "profileAfterAccountFailed": "تم إنشاء حساب الطبيب ولكن تعذر إنشاء الملف: {{message}}"
+    },
     "table": {
       "doctorSpecialist": "الطبيب / المتخصص",
       "specialty": "التخصص",
