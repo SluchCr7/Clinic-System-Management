@@ -16,6 +16,11 @@ export const metadata: Metadata = {
   title: "Clinical Precision | Clinic Management System",
   description:
     "Production-grade, professional clinical operations and patient management platform.",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 const themeInitScript = `

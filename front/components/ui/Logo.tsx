@@ -29,34 +29,30 @@ export default function Logo({
 
   return (
     <div className={`flex items-center gap-2.5 ${className}`}>
-      {/* Abstract geometric mark representing: Care + Connection + Precision */}
       <div
-        className={`${iconSizes[size]} shrink-0 rounded-md bg-teal-primary/10 flex items-center justify-center p-1.5 border border-teal-primary/20`}
+        className={`${iconSizes[size]} shrink-0 rounded-lg bg-gradient-to-br from-teal-primary to-teal-dark flex items-center justify-center shadow-sm`}
       >
         <svg
-          viewBox="0 0 32 32"
+          viewBox="0 0 64 64"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
-          className="w-full h-full text-teal-primary"
+          className="w-full h-full"
+          aria-hidden="true"
         >
-          {/* Outer precise circular focus arcs */}
           <path
-            d="M8 16C8 11.5817 11.5817 8 16 8"
-            stroke="currentColor"
-            strokeWidth="2.5"
+            d="M16 46L28.7 18.6C30 15.8 34 15.8 35.3 18.6L48 46"
+            stroke="#F5FFFD"
+            strokeWidth="4.5"
             strokeLinecap="round"
+            strokeLinejoin="round"
           />
           <path
-            d="M24 16C24 20.4183 20.4183 24 16 24"
-            stroke="currentColor"
-            strokeWidth="2.5"
+            d="M13.5 34H23L28.7 26L36 41L42 30L45 34H50.5"
+            stroke="#A8F0D8"
+            strokeWidth="4"
             strokeLinecap="round"
+            strokeLinejoin="round"
           />
-          {/* Inner connecting node */}
-          <circle cx="16" cy="16" r="3.5" fill="currentColor" />
-          {/* Precision alignment ticks */}
-          <circle cx="23" cy="9" r="1.5" fill="currentColor" className="opacity-80" />
-          <circle cx="9" cy="23" r="1.5" fill="currentColor" className="opacity-80" />
         </svg>
       </div>
 
@@ -70,7 +66,7 @@ export default function Logo({
             Aura<span className="text-teal-primary font-normal">Clinic</span>
           </span>
           <span
-            className={`text-[9px] uppercase tracking-wider font-medium mt-0.5 ${
+            className={`text-[8px] uppercase tracking-[0.16em] font-medium mt-1 ${
               isExplicitLight ? "text-slate-light" : "text-slate-muted"
             }`}
           >
