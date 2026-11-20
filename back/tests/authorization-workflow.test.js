@@ -151,13 +151,19 @@ describe("Authorization and Clinical Workflow Integrity API", () => {
         .patch(`/api/appointments/${appointment._id}`)
         .set("Authorization", admin.authHeader)
         .send({ status: "confirmed" });
-      expect(confirmResponse.status).toBe(200);
+      expect(confirmResponse.status).toBe(403);
 
-      const startResponse = await request(app)
+      const receptionistConfirmResponse = await request(app)
         .patch(`/api/appointments/${appointment._id}`)
-        .set("Authorization", doctorUser.authHeader)
-        .send({ status: "in_progress" });
-      expect(startResponse.status).toBe(200);
+        .set("Authorization", receptionist.authHeader)
+        .send({ status: "confirmed" });
+      expect(receptionistConfirmResponse.status).toBe(200);
+
+      const checkInResponse = await request(app)
+        .patch(`/api/appointments/${appointment._id}`)
+        .set("Authorization", receptionist.authHeader)
+        .send({ status: "checked_in" });
+      expect(checkInResponse.status).toBe(200);
 
       const visitPayload = {
         appointment: appointment._id.toString(),
@@ -167,6 +173,8 @@ describe("Authorization and Clinical Workflow Integrity API", () => {
         symptoms: ["Cough", "Mild fever"],
         diagnosis: ["Acute bronchitis"],
         doctorNotes: "Prescribed bronchodilator and fluids",
+        followUpDate: getFutureAppointmentDate(10).toISOString(),
+        followUpReason: "Review symptoms after treatment",
       };
 
       const response = await request(app)
@@ -177,21 +185,97 @@ describe("Authorization and Clinical Workflow Integrity API", () => {
       expect(response.status).toBe(201);
       expect(response.body.success).toBe(true);
       expect(response.body.data.chiefComplaint).toBe("Persistent dry cough");
+      expect(response.body.data.status).toBe("in_progress");
+      expect(response.body.data.statusHistory).toHaveLength(1);
+      expect(response.body.data.followUpReason).toBe(
+        "Review symptoms after treatment"
+      );
+      expect(
+        await Appointment.countDocuments({ originatingVisit: response.body.data._id })
+      ).toBe(0);
 
       const inProgressAppointment = await Appointment.findById(appointment._id);
       expect(inProgressAppointment.status).toBe("in_progress");
+      expect(inProgressAppointment.startedBy.toString()).toBe(
+        doctorUser.user._id.toString()
+      );
 
       const completeResponse = await request(app)
-        .patch(`/api/appointments/${appointment._id}`)
+        .post(`/api/visits/${response.body.data._id}/complete`)
         .set("Authorization", doctorUser.authHeader)
-        .send({ status: "completed" });
+        .send({});
       expect(completeResponse.status).toBe(200);
+      expect(completeResponse.body.data.status).toBe("completed");
+      expect(completeResponse.body.data.completedBy).toBe(
+        doctorUser.user._id.toString()
+      );
 
       const completedAppointment = await Appointment.findById(appointment._id);
       expect(completedAppointment.status).toBe("completed");
+      expect(completedAppointment.statusHistory.at(-1).to).toBe("completed");
+
+      const statusHistoryLength = completeResponse.body.data.statusHistory.length;
+      const repeatedCompletion = await request(app)
+        .post(`/api/visits/${response.body.data._id}/complete`)
+        .set("Authorization", doctorUser.authHeader)
+        .send({});
+      expect(repeatedCompletion.status).toBe(200);
+      expect(repeatedCompletion.body.data.statusHistory).toHaveLength(
+        statusHistoryLength
+      );
+
+      const editCompletedVisit = await request(app)
+        .patch(`/api/visits/${response.body.data._id}`)
+        .set("Authorization", doctorUser.authHeader)
+        .send({ doctorNotes: "Late edit" });
+      expect(editCompletedVisit.status).toBe(409);
+      expect(editCompletedVisit.body.code).toBe("VISIT_NOT_EDITABLE");
+    });
+
+    test("does not allow administrators to complete a visit", async () => {
+      const visit = await Visit.create({
+        appointment: appointment._id,
+        patient: patient._id,
+        doctor: doctorRecord._id,
+        chiefComplaint: "Admin completion authorization",
+        createdBy: doctorUser.user._id,
+      });
+
+      const response = await request(app)
+        .post(`/api/visits/${visit._id}/complete`)
+        .set("Authorization", admin.authHeader);
+
+      expect(response.status).toBe(403);
+      expect(response.body.code).toBe("FORBIDDEN");
+    });
+
+    test("rejects inconsistent blood pressure before creating a visit", async () => {
+      await Appointment.updateOne(
+        { _id: appointment._id },
+        { $set: { status: "checked_in", checkedInAt: new Date() } }
+      );
+
+      const response = await request(app)
+        .post("/api/visits")
+        .set("Authorization", doctorUser.authHeader)
+        .send({
+          appointment: appointment._id.toString(),
+          patient: patient._id.toString(),
+          doctor: doctorRecord._id.toString(),
+          chiefComplaint: "Blood pressure validation",
+          vitals: { bloodPressure: { systolic: 70, diastolic: 90 } },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.code).toBe("VALIDATION_ERROR");
+      expect(await Visit.countDocuments()).toBe(0);
     });
 
     test("prevents creating a second visit for the same appointment", async () => {
+      await Appointment.updateOne(
+        { _id: appointment._id },
+        { $set: { status: "checked_in", checkedInAt: new Date() } }
+      );
       await Visit.create({
         appointment: appointment._id,
         patient: patient._id,
@@ -212,6 +296,52 @@ describe("Authorization and Clinical Workflow Integrity API", () => {
 
       expect(response.status).toBe(409);
       expect(response.body.code).toBe("VISIT_ALREADY_EXISTS");
+    });
+
+    test("rejects visit creation for cancelled and no-show appointments", async () => {
+      for (const status of ["cancelled", "no-show"]) {
+        await Appointment.updateOne({ _id: appointment._id }, { $set: { status } });
+
+        const response = await request(app)
+          .post("/api/visits")
+          .set("Authorization", doctorUser.authHeader)
+          .send({
+            appointment: appointment._id.toString(),
+            patient: patient._id.toString(),
+            doctor: doctorRecord._id.toString(),
+            chiefComplaint: `Visit for ${status} appointment`,
+          });
+
+        expect(response.status).toBe(400);
+        expect(response.body.code).toBe("INVALID_APPOINTMENT_STATUS");
+      }
+
+      expect(await Visit.countDocuments()).toBe(0);
+    });
+
+    test("allows only one concurrent visit creation for a checked-in appointment", async () => {
+      await Appointment.updateOne(
+        { _id: appointment._id },
+        { $set: { status: "checked_in", checkedInAt: new Date() } }
+      );
+      const createRequest = () =>
+        request(app)
+          .post("/api/visits")
+          .set("Authorization", doctorUser.authHeader)
+          .send({
+            appointment: appointment._id.toString(),
+            patient: patient._id.toString(),
+            doctor: doctorRecord._id.toString(),
+            chiefComplaint: "Concurrent visit start",
+          });
+
+      const responses = await Promise.all([createRequest(), createRequest()]);
+
+      expect(responses.map(({ status }) => status).sort()).toEqual([201, 409]);
+      expect(await Visit.countDocuments({ appointment: appointment._id })).toBe(1);
+      expect((await Appointment.findById(appointment._id)).status).toBe(
+        "in_progress"
+      );
     });
 
     test("prevents a doctor from creating a visit for another doctor's appointment", async () => {

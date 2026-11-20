@@ -18,9 +18,15 @@ export interface Appointment {
   appointmentDate: string;
   duration: number;
   status: AppointmentStatus;
+  checkedInAt?: string | null;
+  noShowEligibleAt?: string | null;
   reason?: string | null;
   notes?: string | null;
   cancellationReason?: string | null;
+  isFollowUp?: boolean;
+  followUpReason?: string | null;
+  originatingVisit?: string | null;
+  followUpOf?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -32,6 +38,10 @@ export interface CreateAppointmentRequest {
   duration?: number;
   reason?: string | null;
   notes?: string | null;
+  isFollowUp?: boolean;
+  followUpReason?: string;
+  originatingVisit?: string;
+  followUpOf?: string;
 }
 
 export interface UpdateAppointmentRequest {
@@ -46,5 +56,6 @@ export interface UpdateAppointmentRequest {
 export interface AppointmentQueryParams extends Omit<BaseListQueryParams, "search"> {
   patient?: string;
   doctor?: string;
+  originatingVisit?: string;
   status?: AppointmentStatus;
 }

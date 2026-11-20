@@ -37,6 +37,11 @@ const createAppointmentSchema = Joi.object({
 
   isFollowUp: Joi.boolean(),
 
+  followUpReason: Joi.string()
+    .trim()
+    .max(500)
+    .allow("", null),
+
   originatingVisit: Joi.string()
     .hex()
     .length(24)
@@ -80,25 +85,26 @@ const updateAppointmentSchema = Joi.object({
 
   cancellationReason: Joi.string()
     .trim()
+    .min(1)
     .max(500)
-    .allow("", null),
+    .when("status", {
+      is: "cancelled",
+      then: Joi.required(),
+    }),
 
-  isFollowUp: Joi.boolean(),
 
-  originatingVisit: Joi.string()
-    .hex()
-    .length(24)
-    .allow(null),
+})
+  .with("cancellationReason", "status")
+  .min(1);
 
-  followUpOf: Joi.string()
-    .hex()
-    .length(24)
-    .allow(null),
-}).min(1);
+const cancelAppointmentSchema = Joi.object({
+  cancellationReason: Joi.string().trim().min(1).max(500).required(),
+});
 
 const appointmentListQuerySchema = createListQuerySchema({
   sortFields: [
     "appointmentDate",
+    "checkedInAt",
     "status",
     "createdAt",
     "updatedAt",
@@ -108,6 +114,7 @@ const appointmentListQuerySchema = createListQuerySchema({
   filters: {
     patient: objectId,
     doctor: objectId,
+    originatingVisit: objectId,
     status: Joi.string().valid(
       "scheduled",
       "confirmed",
@@ -123,5 +130,6 @@ const appointmentListQuerySchema = createListQuerySchema({
 module.exports = {
   createAppointmentSchema,
   updateAppointmentSchema,
+  cancelAppointmentSchema,
   appointmentListQuerySchema,
 };

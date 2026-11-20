@@ -24,6 +24,7 @@ import { useCreatePaymentMutation } from "@/services/api/paymentApi";
 import { selectUserRole } from "@/features/auth/authSelectors";
 import { useAppSelector } from "@/redux/hooks";
 import { hasPermission } from "@/lib/permissions";
+import VisitLifecyclePanel from "@/components/visits/VisitLifecyclePanel";
 import { extractApiError } from "@/services/api/baseQuery";
 import type { MedicationRoute } from "@/types/prescription";
 import type { LabOrderPriority } from "@/types/labOrder";
@@ -577,6 +578,12 @@ export default function VisitWorkspacePage() {
         }
       />
 
+      <VisitLifecyclePanel
+        key={`${visit._id}:${visit.updatedAt}:${visit.status}`}
+        visit={visit}
+        role={role}
+      />
+
       {/* Header Context Banner */}
       <Card className="bg-surface border-border-subtle p-5 shadow-card">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
@@ -857,7 +864,9 @@ export default function VisitWorkspacePage() {
                 {t("visits.workspace.prescriptionsSubtitle")}
               </p>
             </div>
-            {canCreatePrescription && visitPrescriptions.length === 0 && (
+            {canCreatePrescription &&
+              visit.status === "in_progress" &&
+              visitPrescriptions.length === 0 && (
               <Button
                 variant="primary"
                 size="sm"
@@ -889,7 +898,7 @@ export default function VisitWorkspacePage() {
                 {t("visits.workspace.labOrdersSubtitle")}
               </p>
             </div>
-            {canCreateLabOrder && (
+            {canCreateLabOrder && visit.status === "in_progress" && (
               <Button
                 variant="primary"
                 size="sm"
@@ -921,7 +930,7 @@ export default function VisitWorkspacePage() {
                 {t("visits.workspace.servicesSubtitle")}
               </p>
             </div>
-            {(role === "admin" || role === "doctor") && (
+            {role === "doctor" && visit.status === "in_progress" && (
               <Button
                 variant="primary"
                 size="sm"
@@ -955,14 +964,16 @@ export default function VisitWorkspacePage() {
                 {t("visits.workspace.attachmentsSubtitle")}
               </p>
             </div>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setIsAttachmentModalOpen(true)}
-              leftIcon={<LuPlus className="w-3.5 h-3.5" />}
-            >
-              {t("visits.workspace.uploadDocument")}
-            </Button>
+            {role === "doctor" && visit.status === "in_progress" && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setIsAttachmentModalOpen(true)}
+                leftIcon={<LuPlus className="w-3.5 h-3.5" />}
+              >
+                {t("visits.workspace.uploadDocument")}
+              </Button>
+            )}
           </div>
           <div className="pt-4">
             <DataTable

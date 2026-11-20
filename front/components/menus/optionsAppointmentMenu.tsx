@@ -4,7 +4,9 @@ import { LuCheck, LuCircleX, LuStethoscope, LuUserCheck, LuUserX } from 'react-i
 import { AppointmentStatus } from '@/types';
 interface Appointment {
     _id: string;
-    status : AppointmentStatus;
+    status: AppointmentStatus;
+    checkedInAt?: string | null;
+    noShowEligibleAt?: string | null;
 }
 
 interface OptionsAppointmentMenuProps {
@@ -34,8 +36,30 @@ const OptionsAppointmentMenu = ({
 }: OptionsAppointmentMenuProps) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  const [now, setNow] = useState(0);
   const portalRoot =
     typeof document === "undefined" ? null : document.body;
+  const canMarkNoShow =
+    (apt.status === "scheduled" || apt.status === "confirmed") &&
+    !apt.checkedInAt &&
+    Boolean(
+      now > 0 &&
+      apt.noShowEligibleAt &&
+      new Date(apt.noShowEligibleAt).getTime() <= now
+    );
+
+  useEffect(() => {
+    let intervalId: number | undefined;
+    const timeoutId = window.setTimeout(() => {
+      setNow(Date.now());
+      intervalId = window.setInterval(() => setNow(Date.now()), 30_000);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      if (intervalId !== undefined) window.clearInterval(intervalId);
+    };
+  }, []);
 
   useEffect(() => {
     const updatePosition = () => {
@@ -96,7 +120,7 @@ const OptionsAppointmentMenu = ({
       className="w-48 bg-surface border border-border-subtle rounded-lg shadow-lg py-1.5 z-[1000] flex flex-col"
     >
         {/* Scheduled -> Confirm */}
-        {apt.status === "scheduled" && (role === "admin" || role === "receptionist") && (
+        {apt.status === "scheduled" && role === "receptionist" && (
         <button
             type="button"
             onClick={() => handleStatusTransition(apt._id, "confirmed")}
@@ -109,7 +133,7 @@ const OptionsAppointmentMenu = ({
         )}
 
         {/* Confirmed / Scheduled -> Check In */}
-        {(apt.status === "scheduled" || apt.status === "confirmed") && (role === "admin" || role === "receptionist") && (
+        {(apt.status === "scheduled" || apt.status === "confirmed") && role === "receptionist" && (
         <button
             type="button"
             onClick={() => handleStatusTransition(apt._id, "checked_in")}
@@ -122,7 +146,7 @@ const OptionsAppointmentMenu = ({
         )}
 
         {/* Checked In / In Progress -> Start Visit */}
-        {(apt.status === "checked_in" || apt.status === "confirmed" || apt.status === "in_progress") && (role === "admin" || role === "doctor") && (
+        {(apt.status === "checked_in" || apt.status === "in_progress") && role === "doctor" && (
         <button
             type="button"
             onClick={() => handleStartVisit(apt._id)}
@@ -134,20 +158,8 @@ const OptionsAppointmentMenu = ({
         </button>
         )}
 
-        {apt.status === "in_progress" && (role === "admin" || role === "doctor") && (
-        <button
-            type="button"
-            onClick={() => handleStatusTransition(apt._id, "completed")}
-            disabled={isUpdating}
-            className="flex items-center gap-2 px-3 py-2 text-xs text-ink hover:bg-mint/40 text-start transition-colors"
-        >
-            <LuCheck className="w-4 h-4 text-teal-primary shrink-0" />
-            <span>{t("appointments.actions.completeVisit")}</span>
-        </button>
-        )}
-
         {/* Mark No Show */}
-        {(apt.status === "scheduled" || apt.status === "confirmed") && (role === "admin" || role === "receptionist") && (
+        {canMarkNoShow && role === "receptionist" && (
         <button
             type="button"
             onClick={() => handleStatusTransition(apt._id, "no-show")}
@@ -162,6 +174,9 @@ const OptionsAppointmentMenu = ({
         <div className="my-1 border-t border-border-subtle" />
 
         {/* Cancel appointment */}
+        {(role === "receptionist" ||
+          (role === "doctor" &&
+            ["scheduled", "confirmed", "checked_in"].includes(apt.status))) && (
         <button
         type="button"
         onClick={() => {
@@ -173,6 +188,7 @@ const OptionsAppointmentMenu = ({
         <LuCircleX className="w-4 h-4 shrink-0" />
         <span>{t("appointments.cancelAppointment")}</span>
         </button>
+        )}
     </div>,
     portalRoot
   )

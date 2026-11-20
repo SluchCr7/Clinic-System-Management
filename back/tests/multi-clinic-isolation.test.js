@@ -279,6 +279,12 @@ describe("Multi-Clinic Isolation & Assignment Access Control", () => {
     });
 
     test("Doctor A can successfully create a visit for own clinic", async () => {
+      const checkInResponse = await request(app)
+        .patch(`/api/appointments/${appointmentA._id}`)
+        .set("Authorization", receptionistA.authHeader)
+        .send({ status: "checked_in" });
+      expect(checkInResponse.status).toBe(200);
+
       const res = await request(app)
         .post("/api/visits")
         .set("Authorization", doctorUserA.authHeader)

@@ -9,6 +9,7 @@ import {
   PageHeader,
   DataTable,
   Button,
+  StatusBadge,
   type Column,
 } from "@/components/ui";
 import { LuPlus, LuExternalLink } from "react-icons/lu";
@@ -38,6 +39,11 @@ export default function VisitsPage() {
           {new Date(v.createdAt).toLocaleDateString()}
         </span>
       ),
+    },
+    {
+      key: "status",
+      header: t("common.status"),
+      render: (visit) => <StatusBadge status={visit.status} size="sm" />,
     },
     {
       key: "patient",

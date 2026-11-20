@@ -10,31 +10,10 @@ const {
   getSort,
   applyDoctorScope,
 } = require("../../utils/listQuery");
+const { transitionAppointment } = require("../../utils/appointmentLifecycle");
 
-const validatePatient = async (patientId) => {
-  const patient = await Patient.findById(patientId);
-
-  if (!patient) {
-    throw new AppError(
-      "Patient not found",
-      404,
-      "PATIENT_NOT_FOUND"
-    );
-  }
-
-  if (!patient.isActive) {
-    throw new AppError(
-      "Patient is inactive",
-      400,
-      "PATIENT_INACTIVE"
-    );
-  }
-
-  return patient;
-};
-
-const validateDoctor = async (doctorId) => {
-  const doctor = await Doctor.findById(doctorId);
+const validateDoctor = async (doctorId, session = null) => {
+  const doctor = await Doctor.findById(doctorId).session(session);
 
   if (!doctor) {
     throw new AppError(
@@ -55,8 +34,13 @@ const validateDoctor = async (doctorId) => {
   return doctor;
 };
 
-const validateAppointment = async (appointmentId, patientId, doctorId) => {
-  const appointment = await Appointment.findById(appointmentId);
+const validateAppointment = async (
+  appointmentId,
+  patientId,
+  doctorId,
+  session
+) => {
+  const appointment = await Appointment.findById(appointmentId).session(session);
 
   if (!appointment) {
     throw new AppError(
@@ -82,18 +66,6 @@ const validateAppointment = async (appointmentId, patientId, doctorId) => {
     );
   }
 
-  if (
-    !["scheduled", "confirmed", "checked_in", "in_progress"].includes(
-      appointment.status
-    )
-  ) {
-    throw new AppError(
-      "Appointment cannot be used to create a visit",
-      400,
-      "INVALID_APPOINTMENT_STATUS"
-    );
-  }
-
   return appointment;
 };
 
@@ -108,60 +80,109 @@ const createVisit = async (data, currentUser) => {
     );
   }
 
-  const doctorRecord = await Doctor.findOne({ user: currentUser._id, isActive: true })
-    .select("_id")
-    .lean()
-    .exec();
-
-  if (!doctorRecord || doctorRecord._id.toString() !== doctor.toString()) {
-    throw new AppError(
-      "Doctors can only create visits for themselves",
-      403,
-      "FORBIDDEN"
-    );
-  }
-
-  const patientRecord = await validatePatient(patient);
-  if (patientRecord.doctor && patientRecord.doctor.toString() !== doctor.toString()) {
-    throw new AppError(
-      "Patient does not belong to this doctor's clinic",
-      400,
-      "PATIENT_DOCTOR_MISMATCH"
-    );
-  }
-  await validateDoctor(doctor);
-
   const session = await mongoose.startSession();
+  const startedAt = new Date();
+  let createdVisit;
+
   try {
-    session.startTransaction();
+    await session.withTransaction(async () => {
+      const doctorRecord = await Doctor.findOne({
+        user: currentUser._id,
+        isActive: true,
+      })
+        .select("_id")
+        .session(session)
+        .exec();
 
-    const appointmentData = await validateAppointment(appointment, patient, doctor);
+      if (!doctorRecord || doctorRecord._id.toString() !== doctor.toString()) {
+        throw new AppError(
+          "Doctors can only create visits for themselves",
+          403,
+          "FORBIDDEN"
+        );
+      }
 
-    const existingVisit = await Visit.findOne({ appointment }).session(session);
+      const patientRecord = await Patient.findById(patient).session(session);
+      if (!patientRecord) {
+        throw new AppError("Patient not found", 404, "PATIENT_NOT_FOUND");
+      }
+      if (!patientRecord.isActive) {
+        throw new AppError("Patient is inactive", 400, "PATIENT_INACTIVE");
+      }
+      if (
+        patientRecord.doctor &&
+        patientRecord.doctor.toString() !== doctor.toString()
+      ) {
+        throw new AppError(
+          "Patient does not belong to this doctor's clinic",
+          400,
+          "PATIENT_DOCTOR_MISMATCH"
+        );
+      }
 
-    if (existingVisit) {
-      throw new AppError(
-        "A visit already exists for this appointment",
-        409,
-        "VISIT_ALREADY_EXISTS"
+      const appointmentData = await validateAppointment(
+        appointment,
+        patient,
+        doctor,
+        session
       );
-    }
+      const existingVisit = await Visit.findOne({ appointment }).session(session);
 
-    const [visit] = await Visit.create(
-      [
-        {
-          ...data,
-          createdBy: currentUser._id,
-        },
-      ],
-      { session }
-    );
+      if (existingVisit) {
+        throw new AppError(
+          "A visit already exists for this appointment",
+          409,
+          "VISIT_ALREADY_EXISTS"
+        );
+      }
 
-    appointmentData.status = "in_progress";
-    appointmentData.updatedBy = currentUser._id;
-    await appointmentData.save({ session });
+      await validateDoctor(doctor, session);
+      if (appointmentData.status !== "checked_in") {
+        throw new AppError(
+          "Only checked-in appointments can start a visit",
+          400,
+          "INVALID_APPOINTMENT_STATUS"
+        );
+      }
 
-    if (currentUser?._id) {
+      const [visit] = await Visit.create(
+        [
+          {
+            appointment: appointmentData._id,
+            patient: appointmentData.patient,
+            doctor: appointmentData.doctor,
+            chiefComplaint: data.chiefComplaint,
+            symptoms: data.symptoms,
+            vitals: data.vitals,
+            examination: data.examination,
+            diagnosis: data.diagnosis,
+            doctorNotes: data.doctorNotes,
+            followUpDate: data.followUpDate,
+            followUpReason: data.followUpReason,
+            status: "in_progress",
+            startedAt,
+            statusHistory: [
+              {
+                from: null,
+                to: "in_progress",
+                changedBy: currentUser._id,
+                changedAt: startedAt,
+              },
+            ],
+            createdBy: currentUser._id,
+            updatedBy: currentUser._id,
+          },
+        ],
+        { session }
+      );
+
+      transitionAppointment(appointmentData, "in_progress", currentUser, {
+        source: "visit",
+        changedAt: startedAt,
+      });
+      appointmentData.updatedBy = currentUser._id;
+      await appointmentData.save({ session });
+
       await auditLogService.logActivity({
         actor: currentUser,
         action: "VISIT_CREATED",
@@ -171,18 +192,15 @@ const createVisit = async (data, currentUser) => {
           appointment: visit.appointment,
           patient: visit.patient,
           doctor: visit.doctor,
-          chiefComplaint: visit.chiefComplaint,
-          diagnosis: visit.diagnosis,
-          followUpDate: visit.followUpDate,
         },
         session,
       });
-    }
 
-    await session.commitTransaction();
-    return visit;
+      createdVisit = visit;
+    });
+
+    return createdVisit;
   } catch (error) {
-    await session.abortTransaction();
     if (error.code === 11000) {
       if (error.keyPattern?.appointment || (error.keyValue && error.keyValue.appointment)) {
         throw new AppError(
@@ -194,15 +212,21 @@ const createVisit = async (data, currentUser) => {
     }
     throw error;
   } finally {
-    session.endSession();
+    await session.endSession();
   }
 };
 
 const getVisits = async (query = {}, currentUser = null) => {
+  if (!["admin", "doctor"].includes(currentUser?.role)) {
+    throw new AppError("Forbidden", 403, "FORBIDDEN");
+  }
+
   const filter = {};
 
   if (query.patient) filter.patient = query.patient;
   if (query.doctor) filter.doctor = query.doctor;
+  if (query.appointment) filter.appointment = query.appointment;
+  if (query.status) filter.status = query.status;
   await applyDoctorScope(filter, query, currentUser, Doctor);
 
   return paginateQuery(
@@ -237,10 +261,27 @@ const getVisits = async (query = {}, currentUser = null) => {
 };
 
 const getVisitById = async (id, currentUser = null) => {
-  const visit = await Visit.findById(id)
+  if (!["admin", "doctor"].includes(currentUser?.role)) {
+    throw new AppError("Forbidden", 403, "FORBIDDEN");
+  }
+
+  const filter = { _id: id };
+  if (currentUser.role === "doctor") {
+    const doctor = await Doctor.findOne({
+      user: currentUser._id,
+    })
+      .select("_id")
+      .lean()
+      .exec();
+
+    if (!doctor) return null;
+    filter.doctor = doctor._id;
+  }
+
+  const visit = await Visit.findOne(filter)
     .populate(
       "patient",
-      "firstName lastName phone email dateOfBirth gender bloodType"
+      "firstName lastName phone email dateOfBirth gender bloodType doctor"
     )
     .populate({
       path: "doctor",
@@ -252,37 +293,33 @@ const getVisitById = async (id, currentUser = null) => {
     })
     .populate({
       path: "appointment",
-      select: "appointmentDate duration status reason",
+      select: "patient doctor appointmentDate duration status reason",
     });
 
   if (!visit) {
     return null;
   }
 
-  if (currentUser?.role === "doctor") {
-    const doctor = await Doctor.findOne({
-      user: currentUser._id,
-    })
-      .select("_id")
-      .lean()
-      .exec();
+  if (!visit.appointment || !visit.patient || !visit.doctor) {
+    return null;
+  }
 
-    const visitDoctorId = visit.doctor?._id || visit.doctor;
-    if (!doctor || doctor._id.toString() !== visitDoctorId.toString()) {
-      return null;
-    }
+  const visitDoctorId = visit.doctor?._id || visit.doctor;
+  const visitPatientId = visit.patient?._id || visit.patient;
+  if (
+    !visit.appointment ||
+    visit.appointment.patient?.toString() !== visitPatientId.toString() ||
+    visit.appointment.doctor?.toString() !== visitDoctorId.toString() ||
+    (visit.patient.doctor &&
+      visit.patient.doctor.toString() !== visitDoctorId.toString())
+  ) {
+    return null;
   }
 
   return visit;
 };
 
 const updateVisit = async (id, data, currentUser) => {
-  const visit = await Visit.findById(id);
-
-  if (!visit) {
-    return null;
-  }
-
   if (!currentUser || currentUser.role !== "doctor") {
     throw new AppError(
       "Only doctors have permission to update clinical records",
@@ -291,69 +328,192 @@ const updateVisit = async (id, data, currentUser) => {
     );
   }
 
-  const doctor = await Doctor.findOne({
-    user: currentUser._id,
-  })
-    .select("_id")
-    .lean()
-    .exec();
+  const session = await mongoose.startSession();
+  let updatedVisit;
 
-  if (!doctor || doctor._id.toString() !== visit.doctor.toString()) {
-    return null;
-  }
+  try {
+    await session.withTransaction(async () => {
+      const doctor = await Doctor.findOne({ user: currentUser._id })
+        .select("_id")
+        .session(session)
+        .exec();
+      if (!doctor) return;
 
-  const previousValues = {
-    appointment: visit.appointment,
-    patient: visit.patient,
-    doctor: visit.doctor,
-    chiefComplaint: visit.chiefComplaint,
-    diagnosis: visit.diagnosis,
-    followUpDate: visit.followUpDate,
-  };
+      const visit = await Visit.findOne({
+        _id: id,
+        doctor: doctor._id,
+      }).session(session);
+      if (!visit) return;
 
-  const allowedFields = [
-    "chiefComplaint",
-    "symptoms",
-    "vitals",
-    "examination",
-    "diagnosis",
-    "doctorNotes",
-    "followUpDate",
-  ];
+      if (visit.status !== "in_progress") {
+        throw new AppError(
+          "Completed visits cannot be edited",
+          409,
+          "VISIT_NOT_EDITABLE"
+        );
+      }
 
-  for (const field of allowedFields) {
-    if (data[field] !== undefined) {
-      visit[field] = data[field];
-    }
-  }
+      const appointment = await Appointment.findById(visit.appointment)
+        .session(session);
+      const patient = await Patient.findById(visit.patient).session(session);
+      if (
+        !appointment ||
+        !patient ||
+        (patient.doctor &&
+          patient.doctor.toString() !== visit.doctor.toString()) ||
+        appointment.patient.toString() !== visit.patient.toString() ||
+        appointment.doctor.toString() !== visit.doctor.toString() ||
+        appointment.status !== "in_progress"
+      ) {
+        throw new AppError(
+          "Visit and appointment lifecycle are inconsistent",
+          409,
+          "VISIT_APPOINTMENT_STATUS_MISMATCH"
+        );
+      }
 
-  visit.updatedBy = currentUser._id;
+      const allowedFields = [
+        "chiefComplaint",
+        "symptoms",
+        "vitals",
+        "examination",
+        "diagnosis",
+        "doctorNotes",
+        "followUpDate",
+        "followUpReason",
+      ];
+      const updatedFields = [];
 
-  await visit.save();
+      for (const field of allowedFields) {
+        if (data[field] !== undefined) {
+          visit[field] = data[field];
+          updatedFields.push(field);
+        }
+      }
 
-  const newValues = {
-    appointment: visit.appointment,
-    patient: visit.patient,
-    doctor: visit.doctor,
-    chiefComplaint: visit.chiefComplaint,
-    diagnosis: visit.diagnosis,
-    followUpDate: visit.followUpDate,
-  };
+      visit.updatedBy = currentUser._id;
+      await visit.save({ session });
+      await auditLogService.logActivity({
+        actor: currentUser,
+        action: "VISIT_UPDATED",
+        resource: "Visit",
+        resourceId: visit._id,
+        details: { updatedFields },
+        session,
+      });
 
-  if (currentUser?._id) {
-    await auditLogService.logActivity({
-      actor: currentUser,
-      action: "VISIT_UPDATED",
-      resource: "Visit",
-      resourceId: visit._id,
-      details: {
-        previousValues,
-        newValues,
-      },
+      updatedVisit = visit;
     });
+
+    return updatedVisit || null;
+  } finally {
+    await session.endSession();
+  }
+};
+
+const completeVisit = async (id, currentUser) => {
+  if (!currentUser || currentUser.role !== "doctor") {
+    throw new AppError(
+      "Only the assigned doctor can complete a visit",
+      403,
+      "FORBIDDEN"
+    );
   }
 
-  return visit;
+  const session = await mongoose.startSession();
+  const completedAt = new Date();
+  let completedVisit;
+
+  try {
+    await session.withTransaction(async () => {
+      const doctor = await Doctor.findOne({
+        user: currentUser._id,
+        isActive: true,
+      })
+        .select("_id")
+        .session(session)
+        .exec();
+      if (!doctor) return;
+
+      const visit = await Visit.findOne({
+        _id: id,
+        doctor: doctor._id,
+      }).session(session);
+      if (!visit) return;
+
+      const appointment = await Appointment.findById(visit.appointment)
+        .session(session);
+      const patient = await Patient.findById(visit.patient).session(session);
+      if (
+        !appointment ||
+        !patient ||
+        (patient.doctor &&
+          patient.doctor.toString() !== visit.doctor.toString()) ||
+        appointment.patient.toString() !== visit.patient.toString() ||
+        appointment.doctor.toString() !== visit.doctor.toString()
+      ) {
+        throw new AppError(
+          "Visit and appointment relationship is invalid",
+          409,
+          "VISIT_APPOINTMENT_MISMATCH"
+        );
+      }
+
+      if (visit.status === "completed" && appointment.status === "completed") {
+        completedVisit = visit;
+        return;
+      }
+
+      if (visit.status !== "in_progress" || appointment.status !== "in_progress") {
+        throw new AppError(
+          "Visit and appointment must both be in progress before completion",
+          409,
+          "VISIT_APPOINTMENT_STATUS_MISMATCH"
+        );
+      }
+
+      visit.status = "completed";
+      visit.completedAt = completedAt;
+      visit.completedBy = currentUser._id;
+      visit.updatedBy = currentUser._id;
+      visit.statusHistory.push({
+        from: "in_progress",
+        to: "completed",
+        changedBy: currentUser._id,
+        changedAt: completedAt,
+      });
+
+      transitionAppointment(appointment, "completed", currentUser, {
+        changedAt: completedAt,
+      });
+      appointment.updatedBy = currentUser._id;
+
+      await visit.save({ session });
+      await appointment.save({ session });
+      await auditLogService.logActivity({
+        actor: currentUser,
+        action: "VISIT_COMPLETED",
+        resource: "Visit",
+        resourceId: visit._id,
+        details: { appointment: appointment._id },
+        session,
+      });
+      await auditLogService.logActivity({
+        actor: currentUser,
+        action: "APPOINTMENT_COMPLETED",
+        resource: "Appointment",
+        resourceId: appointment._id,
+        details: { visit: visit._id },
+        session,
+      });
+
+      completedVisit = visit;
+    });
+
+    return completedVisit || null;
+  } finally {
+    await session.endSession();
+  }
 };
 
 module.exports = {
@@ -361,4 +521,5 @@ module.exports = {
   getVisits,
   getVisitById,
   updateVisit,
+  completeVisit,
 };

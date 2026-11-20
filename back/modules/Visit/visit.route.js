@@ -47,4 +47,12 @@ router.patch(
   visitController.updateVisit
 );
 
+router.post(
+  "/:id/complete",
+  protect,
+  authorize("doctor"),
+  validateId("id", "visit ID"),
+  visitController.completeVisit
+);
+
 module.exports = router;

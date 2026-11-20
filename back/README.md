@@ -54,6 +54,7 @@ Create a `.env` file in `back/` with values similar to:
 PORT=3001
 FRONTEND_URL=http://localhost:3000
 MONGO_URI=your_mongodb_connection_string
+APPOINTMENT_NO_SHOW_GRACE_PERIOD_MINUTES=15
 
 JWT_ACCESS_SECRET=replace_with_a_secure_random_value
 JWT_REFRESH_SECRET=replace_with_a_secure_random_value
@@ -123,6 +124,27 @@ and Socket.IO updates; reading notifications and the unread-count endpoint are
 already part of the notifications API. The worker is in-app only; SMS/WhatsApp
 delivery can be connected using the shared message formatter in
 `utils/appointmentReminder.js`.
+
+Manual no-show registration is available after the appointment start time and
+the configured grace period (15 minutes by default). No automated no-show job
+is enabled. Set `APPOINTMENT_NO_SHOW_GRACE_PERIOD_MINUTES` to an integer from
+0 to 1440 to change the grace period.
+
+## Visit lifecycle
+
+Only the assigned doctor can start a visit, and the linked appointment must be
+checked in. Starting a consultation creates one `in_progress` visit and moves
+the appointment to `in_progress` in the same transaction. The doctor completes
+the visit through `POST /api/visits/:id/complete`; this records the visit and
+appointment completion metadata together. A completed visit is read-only.
+
+Follow-up recommendations (`followUpDate` and optional `followUpReason`) are
+stored on the visit and do not create an appointment. The doctor can book a
+separate follow-up after completing the visit; it is validated and scheduled
+through the normal appointment scheduling rules and linked to both the source
+visit and source appointment. Receptionist appointment responses omit the
+clinical follow-up reason. Existing Visit documents without a status are
+treated as completed by the schema default; no migration is required.
 
 ### Local reminder test
 

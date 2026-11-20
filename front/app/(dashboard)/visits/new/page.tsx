@@ -1,11 +1,15 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useCreateVisitMutation } from "@/services/api/visitApi";
-import { useGetAppointmentsQuery } from "@/services/api/appointmentApi";
+import {
+  useGetAppointmentsQuery,
+  useGetAppointmentByIdQuery,
+} from "@/services/api/appointmentApi";
+import { useGetVisitsQuery } from "@/services/api/visitApi";
 import {
   PageHeader,
   Card,
@@ -31,12 +35,24 @@ export default function NewVisitPage() {
   const { data: appointmentsData, isLoading: isLoadingAppointments } = useGetAppointmentsQuery({
     limit: 100,
   });
+  const { data: selectedAppointmentData } = useGetAppointmentByIdQuery(
+    appointmentIdFromUrl || "",
+    { skip: !appointmentIdFromUrl }
+  );
+  const { data: existingVisitsData } = useGetVisitsQuery(
+    { appointment: appointmentIdFromUrl || undefined, page: 1, limit: 1 },
+    { skip: !appointmentIdFromUrl }
+  );
 
-  // Include in-progress appointments when resuming an unfinished encounter.
+  useEffect(() => {
+    const existingVisit = existingVisitsData?.data?.[0];
+    if (existingVisit) {
+      router.replace(`/visits/${existingVisit._id}`);
+    }
+  }, [existingVisitsData, router]);
+
   const eligibleAppointments =
-    appointmentsData?.data?.filter((a) =>
-      ["checked_in", "confirmed", "scheduled", "in_progress"].includes(a.status)
-    ) || [];
+    appointmentsData?.data?.filter((appointment) => appointment.status === "checked_in") || [];
 
   const [selectedAppointmentId, setSelectedAppointmentId] = useState(
     appointmentIdFromUrl || ""
@@ -49,6 +65,7 @@ export default function NewVisitPage() {
   const [diagnosis, setDiagnosis] = useState("");
   const [doctorNotes, setDoctorNotes] = useState("");
   const [followUpDate, setFollowUpDate] = useState("");
+  const [followUpReason, setFollowUpReason] = useState("");
 
   // Vitals
   const [temperature, setTemperature] = useState("");
@@ -68,15 +85,25 @@ export default function NewVisitPage() {
 
     const appointment = appointmentsData?.data?.find(
       (a) => a._id === effectiveAppointmentId
-    );
+    ) || selectedAppointmentData?.data;
 
     if (!effectiveAppointmentId || !appointment) {
       setFormError(t("visits.consultation.requiredAppointment"));
       return;
     }
 
+    if (appointment.status !== "checked_in") {
+      setFormError(t("visits.consultation.appointmentNotCheckedIn"));
+      return;
+    }
+
     if (!chiefComplaint.trim()) {
       setFormError(t("visits.consultation.requiredComplaint"));
+      return;
+    }
+
+    if (Boolean(systolic) !== Boolean(diastolic)) {
+      setFormError(t("visits.consultation.bloodPressurePairRequired"));
       return;
     }
 
@@ -117,12 +144,13 @@ export default function NewVisitPage() {
           : [],
         doctorNotes: doctorNotes.trim() || undefined,
         followUpDate: followUpDate ? new Date(followUpDate).toISOString() : null,
+        followUpReason: followUpReason.trim() || undefined,
       };
 
       const res = await createVisit(payload).unwrap();
       if (res.success) {
         toast.success(t("visits.consultation.success"));
-        router.push("/visits");
+        router.push(`/visits/${res.data._id}`);
       }
     } catch (err) {
       const extracted = extractApiError(err);
@@ -319,6 +347,12 @@ export default function NewVisitPage() {
               onChange={(e) => setFollowUpDate(e.target.value)}
             />
           </div>
+          <Textarea
+            label={t("visits.consultation.followUpReason")}
+            rows={2}
+            value={followUpReason}
+            onChange={(e) => setFollowUpReason(e.target.value)}
+          />
         </CardContent>
         <CardFooter className="justify-end">
           <Button

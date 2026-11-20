@@ -4,6 +4,39 @@ const {
   objectId,
 } = require("../../utils/listQuery");
 
+const bloodPressureSchema = Joi.object({
+  systolic: Joi.number().integer().min(50).max(250),
+  diastolic: Joi.number().integer().min(30).max(150),
+})
+  .and("systolic", "diastolic")
+  .custom((bloodPressure, helpers) => {
+    if (
+      bloodPressure.systolic !== undefined &&
+      bloodPressure.diastolic !== undefined &&
+      bloodPressure.systolic <= bloodPressure.diastolic
+    ) {
+      return helpers.error("bloodPressure.order");
+    }
+
+    return bloodPressure;
+  })
+  .messages({
+    "bloodPressure.order":
+      "Systolic blood pressure must be greater than diastolic",
+  });
+
+const vitalsSchema = Joi.object({
+  temperature: Joi.number().min(25).max(45),
+  bloodPressure: bloodPressureSchema,
+  heartRate: Joi.number().integer().min(20).max(250),
+  respiratoryRate: Joi.number().integer().min(5).max(60),
+  oxygenSaturation: Joi.number().min(50).max(100),
+  weight: Joi.number().min(0.1).max(500),
+  height: Joi.number().min(1).max(300),
+});
+
+const followUpDateSchema = Joi.date().iso().greater("now").allow(null);
+
 const createVisitSchema = Joi.object({
   appointment: Joi.string()
     .hex()
@@ -35,45 +68,7 @@ const createVisitSchema = Joi.object({
     .max(50)
     .default([]),
 
-  vitals: Joi.object({
-    temperature: Joi.number()
-      .min(25)
-      .max(45),
-
-    bloodPressure: Joi.object({
-      systolic: Joi.number()
-        .integer()
-        .min(50)
-        .max(250),
-
-      diastolic: Joi.number()
-        .integer()
-        .min(30)
-        .max(150),
-    }),
-
-    heartRate: Joi.number()
-      .integer()
-      .min(20)
-      .max(250),
-
-    respiratoryRate: Joi.number()
-      .integer()
-      .min(5)
-      .max(60),
-
-    oxygenSaturation: Joi.number()
-      .min(50)
-      .max(100),
-
-    weight: Joi.number()
-      .min(0)
-      .max(500),
-
-    height: Joi.number()
-      .min(0)
-      .max(300),
-  }),
+  vitals: vitalsSchema,
 
   examination: Joi.string()
     .trim()
@@ -96,7 +91,13 @@ const createVisitSchema = Joi.object({
 
   followUpDate: Joi.date()
     .iso()
+    .greater("now")
     .allow(null),
+
+  followUpReason: Joi.string()
+    .trim()
+    .max(500)
+    .allow("", null),
 });
 
 const updateVisitSchema = Joi.object({
@@ -113,45 +114,7 @@ const updateVisitSchema = Joi.object({
     )
     .max(50),
 
-  vitals: Joi.object({
-    temperature: Joi.number()
-      .min(25)
-      .max(45),
-
-    bloodPressure: Joi.object({
-      systolic: Joi.number()
-        .integer()
-        .min(50)
-        .max(250),
-
-      diastolic: Joi.number()
-        .integer()
-        .min(30)
-        .max(150),
-    }),
-
-    heartRate: Joi.number()
-      .integer()
-      .min(20)
-      .max(250),
-
-    respiratoryRate: Joi.number()
-      .integer()
-      .min(5)
-      .max(60),
-
-    oxygenSaturation: Joi.number()
-      .min(50)
-      .max(100),
-
-    weight: Joi.number()
-      .min(0)
-      .max(500),
-
-    height: Joi.number()
-      .min(0)
-      .max(300),
-  }),
+  vitals: vitalsSchema,
 
   examination: Joi.string()
     .trim()
@@ -171,9 +134,12 @@ const updateVisitSchema = Joi.object({
     .max(3000)
     .allow("", null),
 
-  followUpDate: Joi.date()
-    .iso()
-    .allow(null),
+  followUpDate: followUpDateSchema,
+
+  followUpReason: Joi.string()
+    .trim()
+    .max(500)
+    .allow("", null),
 }).min(1);
 
 const visitListQuerySchema = createListQuerySchema({
@@ -182,6 +148,8 @@ const visitListQuerySchema = createListQuerySchema({
   filters: {
     patient: objectId,
     doctor: objectId,
+    appointment: objectId,
+    status: Joi.string().valid("in_progress", "completed"),
   },
 });
 

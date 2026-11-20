@@ -10,14 +10,16 @@ const { paginateQuery } = require("../../utils/pagination");
 const {
   getSort,
   applyCairoDateRange,
-  applyDoctorScope,
-  getDoctorScopeId,
 } = require("../../utils/listQuery");
 const {
   assertDoctorAccess,
   applyClinicScope,
   getAuthorizedDoctorIds,
 } = require("../../utils/accessControl");
+const {
+  createInitialStatusHistory,
+  transitionAppointment,
+} = require("../../utils/appointmentLifecycle");
 
 const CLINIC_TIMEZONE = "Africa/Cairo";
 
@@ -333,6 +335,8 @@ const validateFollowUpReferences = async ({
   excludeAppointmentId = null,
   session = null,
 }) => {
+  let sourceAppointment = null;
+
   if (originatingVisit) {
     const visit = await Visit.findById(originatingVisit).session(session);
 
@@ -350,10 +354,53 @@ const validateFollowUpReferences = async ({
         "FOLLOW_UP_VISIT_MISMATCH"
       );
     }
+
+    if (visit.status !== "completed") {
+      throw new AppError(
+        "A follow-up can only be created from a completed visit",
+        400,
+        "FOLLOW_UP_VISIT_NOT_COMPLETED"
+      );
+    }
+
+    sourceAppointment = await Appointment.findById(visit.appointment)
+      .session(session);
+    if (
+      !sourceAppointment ||
+      sourceAppointment.patient.toString() !== visit.patient.toString() ||
+      sourceAppointment.doctor.toString() !== visit.doctor.toString()
+    ) {
+      throw new AppError(
+        "The originating visit is not linked to its appointment",
+        400,
+        "FOLLOW_UP_VISIT_MISMATCH"
+      );
+    }
+
+    if (sourceAppointment.status !== "completed") {
+      throw new AppError(
+        "A follow-up can only be created from a completed visit",
+        400,
+        "FOLLOW_UP_VISIT_NOT_COMPLETED"
+      );
+    }
+
+    if (
+      followUpOf &&
+      sourceAppointment._id.toString() !== followUpOf.toString()
+    ) {
+      throw new AppError(
+        "Follow-up appointment must reference the originating visit's appointment",
+        400,
+        "FOLLOW_UP_APPOINTMENT_MISMATCH"
+      );
+    }
   }
 
   if (followUpOf) {
-    const parentAppointment = await Appointment.findById(followUpOf).session(session);
+    const parentAppointment =
+      sourceAppointment ||
+      (await Appointment.findById(followUpOf).session(session));
 
     if (!parentAppointment) {
       throw new AppError(
@@ -374,7 +421,17 @@ const validateFollowUpReferences = async ({
         "FOLLOW_UP_APPOINTMENT_MISMATCH"
       );
     }
+
+    if (parentAppointment.status !== "completed") {
+      throw new AppError(
+        "A follow-up can only be linked to a completed appointment",
+        400,
+        "FOLLOW_UP_APPOINTMENT_NOT_COMPLETED"
+      );
+    }
   }
+
+  return sourceAppointment?._id || followUpOf || null;
 };
 
 const createAppointment = async (data, currentUser) => {
@@ -387,6 +444,48 @@ const createAppointment = async (data, currentUser) => {
     followUpOf,
   } = data;
   const appointment = toClinicDate(appointmentDate);
+
+  if (data.isFollowUp && currentUser?.role !== "doctor") {
+    throw new AppError(
+      "Only doctors can create follow-up appointments",
+      403,
+      "FORBIDDEN"
+    );
+  }
+
+  if (!data.isFollowUp && data.followUpReason?.trim()) {
+    throw new AppError(
+      "A follow-up reason can only be set on a follow-up appointment",
+      400,
+      "FOLLOW_UP_REASON_REQUIRES_FOLLOW_UP"
+    );
+  }
+
+  const hasFollowUpReference = Boolean(originatingVisit || followUpOf);
+
+  if (Boolean(data.isFollowUp) !== hasFollowUpReference) {
+    throw new AppError(
+      "Follow-up appointments must reference an originating visit or appointment",
+      400,
+      "FOLLOW_UP_REFERENCE_REQUIRED"
+    );
+  }
+
+  if (data.isFollowUp && !originatingVisit) {
+    throw new AppError(
+      "A follow-up appointment must reference its originating visit",
+      400,
+      "FOLLOW_UP_VISIT_REQUIRED"
+    );
+  }
+
+  if (currentUser?.role === "doctor" && !data.isFollowUp) {
+    throw new AppError(
+      "Doctors can only create follow-up appointments",
+      403,
+      "FORBIDDEN"
+    );
+  }
 
   if (appointment <= new Date()) {
     throw new AppError(
@@ -408,7 +507,7 @@ const createAppointment = async (data, currentUser) => {
     const schedule = await getDoctorSchedule(doctor, appointmentDate, session);
     validateAppointmentTime(appointmentDate, duration, schedule);
 
-    await validateFollowUpReferences({
+    const resolvedFollowUpOf = await validateFollowUpReferences({
       originatingVisit,
       followUpOf,
       doctorId: doctor,
@@ -434,7 +533,10 @@ const createAppointment = async (data, currentUser) => {
       [
         {
           ...data,
+          followUpOf: resolvedFollowUpOf,
+          followUpReason: data.isFollowUp ? data.followUpReason : null,
           createdBy: currentUser._id,
+          statusHistory: createInitialStatusHistory(currentUser),
         },
       ],
       { session }
@@ -467,13 +569,19 @@ const getAppointments = async (query = {}, currentUser = null) => {
 
   if (query.doctor) filter.doctor = query.doctor;
   if (query.patient) filter.patient = query.patient;
+  if (query.originatingVisit) {
+    filter.originatingVisit = query.originatingVisit;
+  }
   if (query.status) filter.status = query.status;
-
   applyCairoDateRange(filter, "appointmentDate", query);
   await applyClinicScope(filter, query, currentUser, "doctor");
+  const appointmentQuery = Appointment.find(filter);
+  if (currentUser?.role === "receptionist") {
+    appointmentQuery.select("-followUpReason");
+  }
 
   return paginateQuery(
-    Appointment.find(filter)
+    appointmentQuery
       .populate("patient", "firstName lastName phone email dateOfBirth gender")
       .populate({
         path: "doctor",
@@ -486,7 +594,13 @@ const getAppointments = async (query = {}, currentUser = null) => {
       .sort(
         getSort(
           query,
-          ["appointmentDate", "status", "createdAt", "updatedAt"],
+          [
+            "appointmentDate",
+            "checkedInAt",
+            "status",
+            "createdAt",
+            "updatedAt",
+          ],
           "appointmentDate",
           "asc"
         )
@@ -498,7 +612,12 @@ const getAppointments = async (query = {}, currentUser = null) => {
 };
 
 const getAppointmentById = async (id, currentUser = null) => {
-  const appointment = await Appointment.findById(id)
+  const appointmentQuery = Appointment.findById(id);
+  if (currentUser?.role === "receptionist") {
+    appointmentQuery.select("-followUpReason");
+  }
+
+  const appointment = await appointmentQuery
     .populate("patient", "firstName lastName phone email dateOfBirth gender")
     .populate({
       path: "doctor",
@@ -507,7 +626,11 @@ const getAppointmentById = async (id, currentUser = null) => {
         path: "user",
         select: "firstName lastName email phone",
       },
-    });
+    })
+    .populate(
+      "statusHistory.changedBy confirmedBy checkedInBy startedBy completedBy cancelledBy noShowBy",
+      "firstName lastName role"
+    );
 
   if (!appointment) return null;
 
@@ -576,72 +699,16 @@ const updateAppointment = async (id, data, currentUser) => {
       notes: appointment.notes,
     };
 
-    const newDate = data.appointmentDate || appointment.appointmentDate;
-    const newDuration = data.duration || appointment.duration;
-    const newStatus = data.status || appointment.status;
-
     if (currentUser) {
       await assertDoctorAccess(currentUser, appointment.doctor);
     }
 
-    const allowedTransitions = {
-      scheduled: ["confirmed", "checked_in", "cancelled", "no-show"],
-      confirmed: ["checked_in", "in_progress", "cancelled", "no-show"],
-      checked_in: ["in_progress", "cancelled", "no-show"],
-      in_progress: ["completed", "cancelled"],
-      completed: [],
-      cancelled: [],
-      "no-show": [],
-    };
-
-    const roleAllowedTransitions = {
-      admin: ["confirmed", "checked_in", "in_progress", "completed", "cancelled", "no-show"],
-      receptionist: ["confirmed", "checked_in", "cancelled", "no-show"],
-      doctor: ["in_progress", "completed", "cancelled"],
-    };
-
-    if (data.status && data.status !== appointment.status) {
-      const validNextStates = allowedTransitions[appointment.status] || [];
-      if (!validNextStates.includes(data.status)) {
-        throw new AppError(
-          `Cannot transition appointment from '${appointment.status}' to '${data.status}'`,
-          400,
-          "INVALID_STATUS_TRANSITION"
-        );
-      }
-
-      const roleAllowed = roleAllowedTransitions[currentUser?.role] || [];
-      if (!roleAllowed.includes(data.status)) {
-        throw new AppError(
-          `Role '${currentUser?.role}' is not authorized to transition appointment to '${data.status}'`,
-          403,
-          "FORBIDDEN"
-        );
-      }
-    }
-
-    if (
-      data.status === "completed" &&
-      !(await Visit.exists({ appointment: appointment._id }).session(session))
-    ) {
-      throw new AppError(
-        "An appointment cannot be completed before its visit is recorded",
-        400,
-        "VISIT_REQUIRED_FOR_COMPLETION"
-      );
-    }
-
-    if (
-      newStatus === "cancelled" &&
-      !data.cancellationReason &&
-      !appointment.cancellationReason
-    ) {
-      throw new AppError(
-        "Cancellation reason is required",
-        400,
-        "CANCELLATION_REASON_REQUIRED"
-      );
-    }
+    const newDate =
+      data.appointmentDate !== undefined
+        ? data.appointmentDate
+        : appointment.appointmentDate;
+    const newDuration =
+      data.duration !== undefined ? data.duration : appointment.duration;
 
     const isRescheduled =
       Boolean(data.appointmentDate) &&
@@ -652,84 +719,52 @@ const updateAppointment = async (id, data, currentUser) => {
       data.duration !== undefined &&
       data.duration !== previousValues.duration;
 
-const followUpReferenceChanged =
-  data.originatingVisit !== undefined || data.followUpOf !== undefined;
+    if (
+      currentUser?.role === "doctor" &&
+      Object.keys(data).some(
+        (field) => !["status", "cancellationReason"].includes(field)
+      )
+    ) {
+      throw new AppError(
+        "Doctors can only update appointment status through the clinical workflow",
+        403,
+        "FORBIDDEN"
+      );
+    }
 
-if (isRescheduled || isDurationChanged || followUpReferenceChanged) {
-  await lockDoctorAppointmentBookings(appointment.doctor, session);
-}
+    if (
+      appointment.status !== "scheduled" &&
+      appointment.status !== "confirmed" &&
+      (isRescheduled || isDurationChanged)
+    ) {
+      throw new AppError(
+        "Only scheduled or confirmed appointments can be rescheduled",
+        400,
+        "INVALID_APPOINTMENT_STATUS"
+      );
+    }
 
-if (isRescheduled || isDurationChanged) {
-  const appointmentDate = toClinicDate(newDate);
+    if (data.cancellationReason !== undefined && data.status !== "cancelled") {
+      throw new AppError(
+        "A cancellation reason can only be set when cancelling an appointment",
+        400,
+        "INVALID_CANCELLATION_REASON"
+      );
+    }
 
-  if (appointmentDate <= new Date()) {
-    throw new AppError(
-      "Appointment date must be in the future",
-      400,
-      "INVALID_APPOINTMENT_DATE"
-    );
-  }
+    if (
+      ["in_progress", "completed"].includes(data.status) &&
+      currentUser?.role !== "doctor"
+    ) {
+      throw new AppError(
+        "Only the assigned doctor can perform examination operations",
+        403,
+        "FORBIDDEN"
+      );
+    }
 
-  const schedule = await getDoctorSchedule(
-    appointment.doctor,
-    newDate,
-    session
-  );
-
-  validateAppointmentTime(newDate, newDuration, schedule);
-
-  await validateNoConflict({
-    doctorId: appointment.doctor,
-    appointmentDate: newDate,
-    duration: newDuration,
-    excludeAppointmentId: id,
-    session,
-  });
-
-  await validateFollowUpDoesNotDuplicate({
-    originatingVisit:
-      data.originatingVisit !== undefined
-        ? data.originatingVisit
-        : appointment.originatingVisit,
-    doctorId: appointment.doctor,
-    patientId: appointment.patient,
-    excludeAppointmentId: id,
-    session,
-  });
-}
-
-if (followUpReferenceChanged) {
-  await validateFollowUpReferences({
-    originatingVisit:
-      data.originatingVisit !== undefined
-        ? data.originatingVisit
-        : appointment.originatingVisit,
-    followUpOf:
-      data.followUpOf !== undefined
-        ? data.followUpOf
-        : appointment.followUpOf,
-    doctorId: appointment.doctor,
-    patientId: appointment.patient,
-    excludeAppointmentId: id,
-    session,
-  });
-}
-    const allowedFields = [
-      "appointmentDate",
-      "duration",
-      "status",
-      "reason",
-      "notes",
-      "cancellationReason",
-      "isFollowUp",
-      "originatingVisit",
-      "followUpOf",
-    ];
-
-    for (const field of allowedFields) {
-      if (data[field] !== undefined) {
-        appointment[field] = data[field];
-      }
+    if (isRescheduled || isDurationChanged) {
+      await lockDoctorAppointmentBookings(appointment.doctor, session);
     }
 
     if (isRescheduled || isDurationChanged) {
@@ -760,10 +795,7 @@ if (followUpReferenceChanged) {
       });
 
       await validateFollowUpDoesNotDuplicate({
-        originatingVisit:
-          data.originatingVisit !== undefined
-            ? data.originatingVisit
-            : appointment.originatingVisit,
+        originatingVisit: appointment.originatingVisit,
         doctorId: appointment.doctor,
         patientId: appointment.patient,
         excludeAppointmentId: id,
@@ -771,26 +803,54 @@ if (followUpReferenceChanged) {
       });
     }
 
-    if (followUpReferenceChanged) {
-      await validateFollowUpReferences({
-        originatingVisit:
-          data.originatingVisit !== undefined
-            ? data.originatingVisit
-            : appointment.originatingVisit,
-        followUpOf:
-          data.followUpOf !== undefined ? data.followUpOf : appointment.followUpOf,
-        doctorId: appointment.doctor,
-        patientId: appointment.patient,
-        excludeAppointmentId: id,
-        session,
-      });
-    }
-
+    const allowedFields = [
+      "appointmentDate",
+      "duration",
+      "reason",
+      "notes",
+    ];
 
     for (const field of allowedFields) {
       if (data[field] !== undefined) {
         appointment[field] = data[field];
       }
+    }
+
+    if (data.status === "completed") {
+      const visit = await Visit.findOne({ appointment: appointment._id })
+        .session(session);
+      if (!visit) {
+        throw new AppError(
+          "An appointment cannot be completed before its visit is recorded",
+          400,
+          "VISIT_REQUIRED_FOR_COMPLETION"
+        );
+      }
+
+      if (
+        visit.patient.toString() !== appointment.patient.toString() ||
+        visit.doctor.toString() !== appointment.doctor.toString()
+      ) {
+        throw new AppError(
+          "The visit does not belong to this appointment's patient and doctor",
+          400,
+          "VISIT_APPOINTMENT_MISMATCH"
+        );
+      }
+
+      if (visit.status !== "completed") {
+        throw new AppError(
+          "An appointment cannot be completed before its visit is completed",
+          400,
+          "VISIT_NOT_COMPLETED"
+        );
+      }
+    }
+
+    if (data.status !== undefined) {
+      transitionAppointment(appointment, data.status, currentUser, {
+        reason: data.cancellationReason,
+      });
     }
 
     if (isRescheduled) {
@@ -808,12 +868,22 @@ if (followUpReferenceChanged) {
       status: appointment.status,
       reason: appointment.reason,
       notes: appointment.notes,
+      statusHistory: appointment.statusHistory,
     };
+
+    let auditAction = "APPOINTMENT_UPDATED";
+    if (data.status === "cancelled") {
+      auditAction = "APPOINTMENT_CANCELLED";
+    } else if (data.status === "no-show") {
+      auditAction = "APPOINTMENT_NO_SHOW";
+    } else if (isRescheduled) {
+      auditAction = "APPOINTMENT_RESCHEDULED";
+    }
 
     if (currentUser?._id) {
       await auditLogService.logActivity({
         actor: currentUser,
-        action: isRescheduled ? "APPOINTMENT_RESCHEDULED" : "APPOINTMENT_UPDATED",
+        action: auditAction,
         resource: "Appointment",
         resourceId: appointment._id,
         details: {
@@ -830,55 +900,11 @@ if (followUpReferenceChanged) {
 };
 
 const cancelAppointment = async (id, cancellationReason, currentUser) => {
-  const appointment = await Appointment.findById(id);
-
-  if (!appointment) {
-    return null;
-  }
-
-  if (currentUser) {
-    await assertDoctorAccess(currentUser, appointment.doctor);
-  }
-
-  if (appointment.status === "completed") {
-    throw new AppError(
-      "Completed appointment cannot be cancelled",
-      400,
-      "INVALID_APPOINTMENT_STATUS"
-    );
-  }
-
-  if (appointment.status === "cancelled") {
-    throw new AppError(
-      "Appointment is already cancelled",
-      400,
-      "APPOINTMENT_ALREADY_CANCELLED"
-    );
-  }
-
-  const previousStatus = appointment.status;
-
-  appointment.status = "cancelled";
-  appointment.cancellationReason = cancellationReason;
-  appointment.updatedBy = currentUser._id;
-
-  await appointment.save();
-
-  if (currentUser?._id) {
-    await auditLogService.logActivity({
-      actor: currentUser,
-      action: "APPOINTMENT_CANCELLED",
-      resource: "Appointment",
-      resourceId: appointment._id,
-      details: {
-        previousStatus,
-        newStatus: "cancelled",
-        cancellationReason,
-      },
-    });
-  }
-
-  return appointment;
+  return updateAppointment(
+    id,
+    { status: "cancelled", cancellationReason },
+    currentUser
+  );
 };
 
 module.exports = {

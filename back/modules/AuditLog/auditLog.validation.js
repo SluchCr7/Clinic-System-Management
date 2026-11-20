@@ -39,6 +39,8 @@ const createAuditLogSchema = Joi.object({
 
       "VISIT_CREATED",
       "VISIT_UPDATED",
+      "VISIT_COMPLETED",
+      "APPOINTMENT_COMPLETED",
 
       "PRESCRIPTION_CREATED",
       "PRESCRIPTION_UPDATED",

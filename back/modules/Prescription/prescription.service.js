@@ -6,6 +6,7 @@ const { AppError } = require("../../middlewares/errorHandler");
 const auditLogService = require("../AuditLog/auditLog.service");
 const { paginateQuery } = require("../../utils/pagination");
 const { getSort } = require("../../utils/listQuery");
+const { assertVisitInProgress } = require("../../utils/visitLifecycle");
 const {
   assertDoctorAccess,
   applyClinicScope,
@@ -82,7 +83,7 @@ const validateVisit = async (visitId, patientId, doctorId) => {
     );
   }
 
-  return visit;
+  return assertVisitInProgress(visit);
 };
 
 const createPrescription = async (data, currentUser) => {

@@ -35,6 +35,7 @@ describe("Lab orders API", () => {
       patient: patient._id,
       doctor: doctor._id,
       chiefComplaint: "Routine blood work",
+      status: "in_progress",
       createdBy: admin.user._id,
     });
   });

@@ -60,6 +60,11 @@ describe("Appointments API", () => {
     expect(response.body.data.doctor).toBe(doctor._id.toString());
     expect(response.body.data.status).toBe("scheduled");
     expect(response.body.data.reminderSent).toBe(false);
+    expect(response.body.data.statusHistory).toHaveLength(1);
+    expect(response.body.data.statusHistory[0].to).toBe("scheduled");
+    expect(new Date(response.body.data.noShowEligibleAt).getTime()).toBe(
+      appointmentDate.getTime() + 15 * 60 * 1000
+    );
 
     const [savedAppointment, auditLog] = await Promise.all([
       Appointment.findById(response.body.data._id),
@@ -157,13 +162,15 @@ describe("Appointments API", () => {
       chiefComplaint: "Follow-up reference test",
       createdBy: receptionist.user._id,
     });
-    const otherPatient = await createTestPatient(receptionist.user);
+    const otherPatient = await createTestPatient(receptionist.user, {
+      doctor: doctor._id,
+    });
     const followUpDate = getFutureAppointmentDate(5);
     await createTestSchedule(doctor, receptionist.user, followUpDate);
 
     const response = await request(app)
       .post("/api/appointments")
-      .set("Authorization", receptionist.authHeader)
+      .set("Authorization", doctorUser.authHeader)
       .send(
         createAppointmentPayload({
           patient: otherPatient._id.toString(),
@@ -175,6 +182,76 @@ describe("Appointments API", () => {
 
     expect(response.status).toBe(400);
     expect(response.body.code).toBe("FOLLOW_UP_VISIT_MISMATCH");
+  });
+
+  test("does not allow receptionists to create medical follow-up appointments", async () => {
+    const sourceAppointment = await createSavedAppointment({
+      status: "completed",
+    });
+    const sourceVisit = await Visit.create({
+      appointment: sourceAppointment._id,
+      patient: patient._id,
+      doctor: doctor._id,
+      chiefComplaint: "Follow-up permission test",
+      createdBy: doctorUser.user._id,
+    });
+    const followUpDate = getFutureAppointmentDate(5);
+    await createTestSchedule(doctor, receptionist.user, followUpDate);
+
+    const response = await request(app)
+      .post("/api/appointments")
+      .set("Authorization", receptionist.authHeader)
+      .send(
+        createAppointmentPayload({
+          appointmentDate: followUpDate.toISOString(),
+          isFollowUp: true,
+          originatingVisit: sourceVisit._id.toString(),
+        })
+      );
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe("FORBIDDEN");
+  });
+
+  test("allows the assigned doctor to create a follow-up for a completed appointment", async () => {
+    const sourceAppointment = await createSavedAppointment({
+      status: "completed",
+    });
+    const sourceVisit = await Visit.create({
+      appointment: sourceAppointment._id,
+      patient: patient._id,
+      doctor: doctor._id,
+      chiefComplaint: "Follow-up visit",
+      createdBy: doctorUser.user._id,
+    });
+    const followUpDate = getFutureAppointmentDate(5);
+    await createTestSchedule(doctor, receptionist.user, followUpDate);
+
+    const response = await request(app)
+      .post("/api/appointments")
+      .set("Authorization", doctorUser.authHeader)
+      .send(
+        createAppointmentPayload({
+          appointmentDate: followUpDate.toISOString(),
+          isFollowUp: true,
+          originatingVisit: sourceVisit._id.toString(),
+          followUpReason: "Review symptoms after treatment",
+        })
+      );
+
+    expect(response.status).toBe(201);
+    expect(response.body.data.status).toBe("scheduled");
+    expect(response.body.data.isFollowUp).toBe(true);
+    expect(response.body.data.followUpOf).toBe(sourceAppointment._id.toString());
+    expect(response.body.data.followUpReason).toBe(
+      "Review symptoms after treatment"
+    );
+
+    const receptionistView = await request(app)
+      .get(`/api/appointments/${response.body.data._id}`)
+      .set("Authorization", receptionist.authHeader);
+    expect(receptionistView.status).toBe(200);
+    expect(receptionistView.body.data.followUpReason).toBeUndefined();
   });
 
   test("validates required appointment fields", async () => {
@@ -225,6 +302,13 @@ describe("Appointments API", () => {
     expect(cancelResponse.body.data.cancellationReason).toBe(
       "Patient requested cancellation"
     );
+    expect(cancelResponse.body.data.cancelledBy).toBe(
+      receptionist.user._id.toString()
+    );
+    expect(cancelResponse.body.data.cancelledAt).toBeTruthy();
+    expect(cancelResponse.body.data.statusHistory[0].reason).toBe(
+      "Patient requested cancellation"
+    );
 
     const auditLog = await AuditLog.findOne({
       action: "APPOINTMENT_CANCELLED",
@@ -239,6 +323,21 @@ describe("Appointments API", () => {
 
     expect(reversal.status).toBe(400);
     expect(reversal.body.code).toBe("INVALID_STATUS_TRANSITION");
+  });
+
+  test("requires a cancellation reason", async () => {
+    const appointment = await createSavedAppointment();
+
+    const response = await request(app)
+      .delete(`/api/appointments/${appointment._id}`)
+      .set("Authorization", receptionist.authHeader)
+      .send({});
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("VALIDATION_ERROR");
+    expect((await Appointment.findById(appointment._id)).status).toBe(
+      "scheduled"
+    );
   });
 
   test("resets the reminder flag when an appointment is rescheduled", async () => {
@@ -313,6 +412,18 @@ describe("Appointments API", () => {
       .send({ status: "checked_in" });
     expect(checkInRes.status).toBe(200);
     expect(checkInRes.body.data.status).toBe("checked_in");
+    expect(checkInRes.body.data.checkedInBy).toBe(
+      receptionist.user._id.toString()
+    );
+    expect(checkInRes.body.data.checkedInAt).toBeTruthy();
+    expect(checkInRes.body.data.statusHistory).toHaveLength(2);
+
+    const duplicateCheckIn = await request(app)
+      .patch(`/api/appointments/${appointment._id}`)
+      .set("Authorization", receptionist.authHeader)
+      .send({ status: "checked_in" });
+    expect(duplicateCheckIn.status).toBe(400);
+    expect(duplicateCheckIn.body.code).toBe("INVALID_STATUS_TRANSITION");
 
     // Reverting checked_in to scheduled is rejected
     const revertRes = await request(app)
@@ -334,7 +445,7 @@ describe("Appointments API", () => {
     expect(docConfirmRes.status).toBe(403);
     expect(docConfirmRes.body.code).toBe("FORBIDDEN");
 
-    // Doctor can transition confirmed -> in_progress, but receptionist cannot complete clinical encounters
+    // Doctors must start examinations through the visit workflow.
     await request(app)
       .patch(`/api/appointments/${appointment._id}`)
       .set("Authorization", receptionist.authHeader)
@@ -343,15 +454,45 @@ describe("Appointments API", () => {
     await request(app)
       .patch(`/api/appointments/${appointment._id}`)
       .set("Authorization", doctorUser.authHeader)
-      .send({ status: "in_progress" });
+      .send({ status: "in_progress" })
+      .expect(400);
 
-    // Receptionist cannot complete an in_progress clinical encounter
+    const inProgressAppointment = await createSavedAppointment({
+      status: "in_progress",
+    });
+    await Visit.create({
+      appointment: inProgressAppointment._id,
+      patient: patient._id,
+      doctor: doctor._id,
+      chiefComplaint: "Completion permission test",
+      createdBy: doctorUser.user._id,
+    });
     const recCompleteRes = await request(app)
-      .patch(`/api/appointments/${appointment._id}`)
+      .patch(`/api/appointments/${inProgressAppointment._id}`)
       .set("Authorization", receptionist.authHeader)
       .send({ status: "completed" });
     expect(recCompleteRes.status).toBe(403);
     expect(recCompleteRes.body.code).toBe("FORBIDDEN");
+  });
+
+  test("requires visits to be started through the assigned doctor's workflow", async () => {
+    const appointment = await createSavedAppointment();
+    await request(app)
+      .patch(`/api/appointments/${appointment._id}`)
+      .set("Authorization", receptionist.authHeader)
+      .send({ status: "checked_in" })
+      .expect(200);
+
+    const response = await request(app)
+      .patch(`/api/appointments/${appointment._id}`)
+      .set("Authorization", doctorUser.authHeader)
+      .send({ status: "in_progress" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("VISIT_WORKFLOW_REQUIRED");
+    expect((await Appointment.findById(appointment._id)).status).toBe(
+      "checked_in"
+    );
   });
 
   test("prevents completing an appointment before a visit is recorded", async () => {
@@ -359,13 +500,105 @@ describe("Appointments API", () => {
 
     const response = await request(app)
       .patch(`/api/appointments/${appointment._id}`)
-      .set("Authorization", admin.authHeader)
+      .set("Authorization", doctorUser.authHeader)
       .send({ status: "completed" });
 
     expect(response.status).toBe(400);
     expect(response.body.code).toBe("VISIT_REQUIRED_FOR_COMPLETION");
     expect((await Appointment.findById(appointment._id)).status).toBe(
       "in_progress"
+    );
+  });
+
+  test("prevents completing an appointment while its visit is still in progress", async () => {
+    const appointment = await createSavedAppointment({ status: "in_progress" });
+    await Visit.create({
+      appointment: appointment._id,
+      patient: patient._id,
+      doctor: doctor._id,
+      chiefComplaint: "Unfinished visit",
+      status: "in_progress",
+      createdBy: doctorUser.user._id,
+    });
+
+    const response = await request(app)
+      .patch(`/api/appointments/${appointment._id}`)
+      .set("Authorization", doctorUser.authHeader)
+      .send({ status: "completed" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("VISIT_NOT_COMPLETED");
+    expect((await Appointment.findById(appointment._id)).status).toBe(
+      "in_progress"
+    );
+  });
+
+  test("rejects manual no-show before the configured grace period", async () => {
+    const appointment = await createSavedAppointment({
+      status: "confirmed",
+      appointmentDate: new Date(Date.now() - 10 * 60 * 1000),
+    });
+
+    const response = await request(app)
+      .patch(`/api/appointments/${appointment._id}`)
+      .set("Authorization", receptionist.authHeader)
+      .send({ status: "no-show" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("NO_SHOW_TOO_EARLY");
+    expect((await Appointment.findById(appointment._id)).status).toBe(
+      "confirmed"
+    );
+  });
+
+  test("does not allow a checked-in appointment to become a no-show", async () => {
+    const appointment = await createSavedAppointment({
+      status: "checked_in",
+      checkedInAt: new Date(Date.now() - 30 * 60 * 1000),
+    });
+
+    const response = await request(app)
+      .patch(`/api/appointments/${appointment._id}`)
+      .set("Authorization", receptionist.authHeader)
+      .send({ status: "no-show" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("INVALID_STATUS_TRANSITION");
+    expect((await Appointment.findById(appointment._id)).status).toBe(
+      "checked_in"
+    );
+  });
+
+  test("records an eligible manual no-show with actor and history", async () => {
+    const appointment = await createSavedAppointment({
+      status: "confirmed",
+      appointmentDate: new Date(Date.now() - 20 * 60 * 1000),
+    });
+
+    const response = await request(app)
+      .patch(`/api/appointments/${appointment._id}`)
+      .set("Authorization", receptionist.authHeader)
+      .send({ status: "no-show" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.status).toBe("no-show");
+    expect(response.body.data.noShowBy).toBe(receptionist.user._id.toString());
+    expect(response.body.data.noShowMethod).toBe("manual");
+    expect(response.body.data.statusHistory.at(-1).to).toBe("no-show");
+  });
+
+  test("does not allow administrators to change appointment status", async () => {
+    const appointment = await createSavedAppointment();
+
+    const response = await request(app)
+      .patch(`/api/appointments/${appointment._id}`)
+      .set("Authorization", admin.authHeader)
+      .send({ status: "confirmed" });
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe("FORBIDDEN");
+    expect((await Appointment.findById(appointment._id)).status).toBe(
+      "scheduled"
     );
   });
 

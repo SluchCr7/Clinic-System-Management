@@ -6,6 +6,7 @@ const Doctor = require("../Doctor/doctor.model");
 const auditLogService = require("../AuditLog/auditLog.service");
 
 const { AppError } = require("../../middlewares/errorHandler");
+const { assertVisitInProgress } = require("../../utils/visitLifecycle");
 
 const { paginateQuery } = require("../../utils/pagination");
 const {
@@ -101,7 +102,7 @@ const validateVisit = async (
     );
   }
 
-  return visit;
+  return assertVisitInProgress(visit);
 };
 
 const validateTests = (tests) => {

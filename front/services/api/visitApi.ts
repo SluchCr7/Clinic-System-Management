@@ -60,6 +60,19 @@ export const visitApi = baseApi.injectEndpoints({
         { type: "Visit", id: "LIST" },
       ],
     }),
+
+    completeVisit: builder.mutation<ApiResponse<Visit>, string>({
+      query: (id) => ({
+        url: `/visits/${id}/complete`,
+        method: "POST",
+      }),
+      invalidatesTags: (_result, _error, id) => [
+        { type: "Visit", id },
+        { type: "Visit", id: "LIST" },
+        { type: "Appointment", id: "LIST" },
+        { type: "Dashboard", id: "OVERVIEW" },
+      ],
+    }),
   }),
 });
 
@@ -68,4 +81,5 @@ export const {
   useGetVisitByIdQuery,
   useCreateVisitMutation,
   useUpdateVisitMutation,
+  useCompleteVisitMutation,
 } = visitApi;

@@ -41,6 +41,7 @@ describe("Prescriptions API", () => {
       doctor: doctor._id,
       chiefComplaint: "Persistent cough",
       symptoms: ["cough", "sore throat"],
+      status: "in_progress",
       createdBy: receptionist.user._id,
     });
   });

@@ -41,8 +41,45 @@ export default function DashboardPage() {
       skip: role !== "admin",
     });
 
-  const { data: recentAppointments, isLoading: isAppointmentsLoading } =
-    useGetAppointmentsQuery({ limit: 5, sortBy: "appointmentDate", sortOrder: "desc" });
+  const [now] = React.useState(() => new Date());
+  const actionableAppointmentQuery = {
+    dateFrom: now.toISOString(),
+    limit: 5,
+    sortBy: "appointmentDate",
+    sortOrder: "asc" as const,
+  };
+  const { data: scheduledAppointments, isLoading: isScheduledLoading } =
+    useGetAppointmentsQuery({ ...actionableAppointmentQuery, status: "scheduled" });
+  const { data: confirmedAppointments, isLoading: isConfirmedLoading } =
+    useGetAppointmentsQuery({ ...actionableAppointmentQuery, status: "confirmed" });
+  const { data: checkedInAppointments, isLoading: isCheckedInLoading } =
+    useGetAppointmentsQuery({ ...actionableAppointmentQuery, status: "checked_in" });
+  const { data: inProgressAppointments, isLoading: isInProgressLoading } =
+    useGetAppointmentsQuery({ ...actionableAppointmentQuery, status: "in_progress" });
+
+  const actionableAppointmentResults = [
+    scheduledAppointments,
+    confirmedAppointments,
+    checkedInAppointments,
+    inProgressAppointments,
+  ];
+  const isAppointmentsLoading = [
+    isScheduledLoading,
+    isConfirmedLoading,
+    isCheckedInLoading,
+    isInProgressLoading,
+  ].some(Boolean);
+  const actionableAppointmentCount = actionableAppointmentResults.reduce(
+    (total, result) => total + (result?.pagination?.total ?? 0),
+    0
+  );
+  const upcomingAppointments = actionableAppointmentResults
+    .flatMap((result) => result?.data ?? [])
+    .sort(
+      (a, b) =>
+        new Date(a.appointmentDate).getTime() - new Date(b.appointmentDate).getTime()
+    )
+    .slice(0, 5);
 
   const { data: recentPatients, isLoading: isPatientsLoading } =
     useGetPatientsQuery({ limit: 5, sortBy: "createdAt", sortOrder: "desc" });
@@ -150,8 +187,24 @@ export default function DashboardPage() {
                 value: overview?.appointments?.today?.completed ?? 0,
               },
               {
+                label: t("dashboard.confirmed"),
+                value: overview?.appointments?.today?.confirmed ?? 0,
+              },
+              {
+                label: t("dashboard.checkedIn"),
+                value: overview?.appointments?.today?.checkedIn ?? 0,
+              },
+              {
+                label: t("dashboard.inProgress"),
+                value: overview?.appointments?.today?.inProgress ?? 0,
+              },
+              {
                 label: t("dashboard.cancelled"),
                 value: overview?.appointments?.today?.cancelled ?? 0,
+              },
+              {
+                label: t("dashboard.noShow"),
+                value: overview?.appointments?.today?.noShow ?? 0,
               },
             ]}
           />
@@ -226,7 +279,7 @@ export default function DashboardPage() {
           <StatCard
             highlight
             title={t("dashboard.appointmentsScheduled")}
-            value={isAppointmentsLoading ? "..." : recentAppointments?.pagination?.total ?? 0}
+            value={isAppointmentsLoading ? "..." : actionableAppointmentCount}
             subtitle={t("dashboard.appointmentsScheduledSubtitle")}
             icon={<LuCalendar className="w-4 h-4" />}
           />
@@ -251,7 +304,7 @@ export default function DashboardPage() {
           <StatCard
             highlight
             title={t("dashboard.appointmentsQueue")}
-            value={isAppointmentsLoading ? "..." : recentAppointments?.pagination?.total ?? 0}
+            value={isAppointmentsLoading ? "..." : actionableAppointmentCount}
             subtitle={t("dashboard.appointmentsQueueSubtitle")}
             icon={<LuCalendar className="w-4 h-4" />}
           />
@@ -292,13 +345,13 @@ export default function DashboardPage() {
                 <Skeleton className="h-10 w-full" />
                 <Skeleton className="h-10 w-full" />
               </div>
-            ) : recentAppointments?.data?.length === 0 ? (
+            ) : upcomingAppointments.length === 0 ? (
               <p className="p-6 text-xs text-slate-muted text-center">
                 {t("dashboard.noAppointmentsToday")}
               </p>
             ) : (
               <div className="divide-y divide-border-subtle/70">
-                {recentAppointments?.data?.slice(0, 5).map((apt) => {
+                {upcomingAppointments.map((apt) => {
                   const patientName =
                     typeof apt.patient === "object" && apt.patient
                       ? `${apt.patient.firstName} ${apt.patient.lastName}`
@@ -312,8 +365,9 @@ export default function DashboardPage() {
                       : t("common.doctor");
 
                   const aptDate = new Date(apt.appointmentDate).toLocaleString(
-                    "en-US",
+                    locale,
                     {
+                      timeZone: "Africa/Cairo",
                       month: "short",
                       day: "numeric",
                       hour: "numeric",

@@ -4,6 +4,7 @@ const appointmentController = require("./appointment.controller");
 const {
     createAppointmentSchema,
     updateAppointmentSchema,
+    cancelAppointmentSchema,
     appointmentListQuerySchema
 } = require("./appointment.validation");
 
@@ -14,7 +15,7 @@ const authorize = require("../../middlewares/authorize");
 router.post(
     "/",
     protect,
-    authorize("admin", "receptionist"),
+    authorize("admin", "doctor", "receptionist"),
     validate(createAppointmentSchema),
     appointmentController.createAppointment
 );
@@ -47,8 +48,9 @@ router.patch(
 router.delete(
     "/:id",
     protect,
-    authorize("admin", "receptionist"),
+    authorize("receptionist"),
     validateId("id", "appointment ID"),
+    validate(cancelAppointmentSchema),
     appointmentController.cancelAppointment
 );
 

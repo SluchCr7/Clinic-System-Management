@@ -71,9 +71,31 @@ const updateVisit = asyncHandler(async (req, res) => {
   });
 });
 
+const completeVisit = asyncHandler(async (req, res) => {
+  const visit = await visitService.completeVisit(
+    req.params.id,
+    req.user
+  );
+
+  if (!visit) {
+    throw new AppError(
+      "Visit not found",
+      404,
+      "VISIT_NOT_FOUND"
+    );
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "Visit completed successfully",
+    data: visit,
+  });
+});
+
 module.exports = {
   createVisit,
   getVisits,
   getVisitById,
   updateVisit,
+  completeVisit,
 };

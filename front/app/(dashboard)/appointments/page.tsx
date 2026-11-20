@@ -23,7 +23,6 @@ import {
   Input,
   Textarea,
   Modal,
-  ConfirmDialog,
   StatusBadge,
   toast,
   type Column,
@@ -103,9 +102,8 @@ export default function AppointmentsPage() {
   };
 
   const handleStartVisit = async (id: string) => {
-    if (await handleStatusTransition(id, "in_progress")) {
-      router.push(`/visits/new?appointmentId=${id}`);
-    }
+    setActiveMenuId(null);
+    router.push(`/visits/new?appointmentId=${id}`);
   };
 
   // Booking Modal State
@@ -122,6 +120,20 @@ export default function AppointmentsPage() {
 
   // Cancellation Dialog State
   const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelReasonError, setCancelReasonError] = useState<string | undefined>();
+
+  const handleOpenCancelDialog = (id: string) => {
+    setCancelReason("");
+    setCancelReasonError(undefined);
+    setCancelTargetId(id);
+  };
+
+  const handleCloseCancelDialog = () => {
+    setCancelTargetId(null);
+    setCancelReason("");
+    setCancelReasonError(undefined);
+  };
 
   const formatClinicDateTimeForInput = (date: Date) => {
     const formatter = new Intl.DateTimeFormat("sv-SE", {
@@ -163,12 +175,23 @@ export default function AppointmentsPage() {
       return;
     }
 
+    if (bookingForm.appointmentDate < formatClinicDateTimeForInput(new Date())) {
+      setBookingError(t("appointments.errors.pastDate"));
+      return;
+    }
+
+    const duration = Number(bookingForm.duration);
+    if (!Number.isInteger(duration) || duration < 5 || duration > 240) {
+      setBookingError(t("appointments.errors.invalidDuration"));
+      return;
+    }
+
     try {
       const payload = {
         patient: bookingForm.patient,
         doctor: bookingForm.doctor,
         appointmentDate: bookingForm.appointmentDate,
-        duration: Number(bookingForm.duration) || 30,
+        duration,
         reason: bookingForm.reason.trim() || undefined,
         notes: bookingForm.notes.trim() || undefined,
       };
@@ -185,12 +208,20 @@ export default function AppointmentsPage() {
     }
   };
 
-  const handleConfirmCancel = async () => {
+  const handleConfirmCancel = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
     if (!cancelTargetId) return;
+
+    const cancellationReason = cancelReason.trim();
+    if (!cancellationReason) {
+      setCancelReasonError(t("appointments.errors.cancellationReasonRequired"));
+      return;
+    }
+
     try {
-      await cancelAppointment(cancelTargetId).unwrap();
+      await cancelAppointment({ id: cancelTargetId, cancellationReason }).unwrap();
       toast.success(t("appointments.success.cancelled"));
-      setCancelTargetId(null);
+      handleCloseCancelDialog();
     } catch (err) {
       const extracted = extractApiError(err);
       toast.error(extracted.message || t("appointments.errors.cancelFailed"));
@@ -289,7 +320,16 @@ export default function AppointmentsPage() {
       align: "right",
       className: "w-[80px] min-w-[80px] overflow-visible whitespace-nowrap relative",
       render: (apt) => {
-        if (!canEditAppointment || apt.status === "cancelled" || apt.status === "completed") {
+        const canOpenMenu =
+          (role === "receptionist" && canEditAppointment) ||
+          (role === "doctor" &&
+            ["checked_in", "in_progress"].includes(apt.status));
+
+        if (
+          !canOpenMenu ||
+          apt.status === "cancelled" ||
+          apt.status === "completed"
+        ) {
           return null;
         }
 
@@ -320,7 +360,7 @@ export default function AppointmentsPage() {
                 handleStatusTransition={handleStatusTransition}
                 handleStartVisit={handleStartVisit}
                 setActiveMenuId={setActiveMenuId}
-                setCancelTargetId={setCancelTargetId}
+                setCancelTargetId={handleOpenCancelDialog}
                 anchorRef={menuButtonRef}
                 t={t}
               />
@@ -550,6 +590,7 @@ export default function AppointmentsPage() {
             <Input
               label={t("appointments.bookModal.dateTime")}
               type="datetime-local"
+              min={formatClinicDateTimeForInput(new Date())}
               required
               value={bookingForm.appointmentDate}
               onChange={(e) =>
@@ -557,8 +598,13 @@ export default function AppointmentsPage() {
               }
             />
 
-            <Select
+            <Input
               label={t("appointments.bookModal.duration")}
+              type="number"
+              min={5}
+              max={240}
+              step={1}
+              required
               value={bookingForm.duration}
               onChange={(e) =>
                 setBookingForm({
@@ -566,12 +612,6 @@ export default function AppointmentsPage() {
                   duration: Number(e.target.value),
                 })
               }
-              options={[
-                { value: 15, label: t("appointments.durationMinutes", { count: 15 }) },
-                { value: 30, label: t("appointments.durationMinutes", { count: 30 }) },
-                { value: 45, label: t("appointments.durationMinutes", { count: 45 }) },
-                { value: 60, label: t("appointments.durationMinutes", { count: 60 }) },
-              ]}
             />
           </div>
 
@@ -615,16 +655,49 @@ export default function AppointmentsPage() {
       </Modal>
 
       {/* Cancellation Confirmation Dialog */}
-      <ConfirmDialog
+      <Modal
         isOpen={Boolean(cancelTargetId)}
-        onClose={() => setCancelTargetId(null)}
-        onConfirm={handleConfirmCancel}
+        onClose={handleCloseCancelDialog}
         title={t("appointments.cancelDialog.title")}
-        message={t("appointments.cancelDialog.message")}
-        confirmText={t("appointments.cancelDialog.confirm")}
-        variant="danger"
-        isLoading={isCancelling}
-      />
+        size="sm"
+      >
+        <form onSubmit={handleConfirmCancel} className="flex flex-col gap-4">
+          <p className="text-xs text-slate-muted leading-relaxed">
+            {t("appointments.cancelDialog.message")}
+          </p>
+          <Textarea
+            label={t("appointments.cancelDialog.reason")}
+            placeholder={t("appointments.cancelDialog.reasonPlaceholder")}
+            value={cancelReason}
+            onChange={(e) => {
+              setCancelReason(e.target.value);
+              setCancelReasonError(undefined);
+            }}
+            error={cancelReasonError}
+            required
+            rows={3}
+          />
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border-subtle">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={handleCloseCancelDialog}
+              disabled={isCancelling}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              type="submit"
+              variant="danger"
+              size="sm"
+              isLoading={isCancelling}
+            >
+              {t("appointments.cancelDialog.confirm")}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

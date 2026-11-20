@@ -5,6 +5,7 @@ const Doctor = require("../Doctor/doctor.model");
 const MedicalService = require("../medicalService/medicalService.model");
 const Invoice = require("../Invoice/invoice.model");
 const { AppError } = require("../../middlewares/errorHandler");
+const { assertVisitInProgress } = require("../../utils/visitLifecycle");
 const auditLogService = require("../AuditLog/auditLog.service");
 const { paginateQuery } = require("../../utils/pagination");
 const {
@@ -91,7 +92,7 @@ const validateVisit = async (visitId, patientId, doctorId) => {
     );
   }
 
-  return visit;
+  return assertVisitInProgress(visit);
 };
 
 const validateMedicalService = async (serviceId) => {
