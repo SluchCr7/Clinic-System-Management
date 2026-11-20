@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const User = require("../modules/User/user.model");
 const Patient = require("../modules/Patient/patient.model");
 const Doctor = require("../modules/Doctor/doctor.model");
+const DoctorAssignment = require("../modules/DoctorAssignment/doctorAssignment.model");
 const Schedule = require("../modules/Schedule/schedule.model");
 const {
   generateAccessToken,
@@ -45,19 +46,6 @@ const createTestUser = async ({
   };
 };
 
-const createTestPatient = async (createdBy, overrides = {}) =>
-  Patient.create({
-    firstName: "Taylor",
-    lastName: "Patient",
-    dateOfBirth: new Date("1990-01-01"),
-    gender: "female",
-    phone: `555-0101-${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}`,
-    createdBy: createdBy._id,
-    ...overrides,
-  });
-
 const createTestDoctor = async (createdBy) => {
   const doctorUser = await createTestUser({
     role: "doctor",
@@ -75,6 +63,52 @@ const createTestDoctor = async (createdBy) => {
   });
 
   return { doctor, doctorUser };
+};
+
+const assignTestDoctor = async (receptionistUser, doctor, adminUser) => {
+  return DoctorAssignment.findOneAndUpdate(
+    {
+      doctor: doctor._id || doctor,
+      receptionist: receptionistUser._id || receptionistUser,
+    },
+    {
+      doctor: doctor._id || doctor,
+      receptionist: receptionistUser._id || receptionistUser,
+      assignedBy: adminUser?._id || receptionistUser._id || receptionistUser,
+      isActive: true,
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+};
+
+const createTestPatient = async (createdBy, overrides = {}) => {
+  let doctorId = overrides.doctor;
+  if (!doctorId) {
+    let defaultDoctor = await Doctor.findOne({ isActive: true });
+    if (!defaultDoctor) {
+      const { doctor } = await createTestDoctor(createdBy);
+      defaultDoctor = doctor;
+    }
+    doctorId = defaultDoctor._id;
+  }
+
+  // If createdBy is receptionist, automatically assign the receptionist to the doctor for convenience in tests
+  if (createdBy && createdBy.role === "receptionist") {
+    await assignTestDoctor(createdBy, { _id: doctorId }, createdBy);
+  }
+
+  return Patient.create({
+    firstName: "Taylor",
+    lastName: "Patient",
+    dateOfBirth: new Date("1990-01-01"),
+    gender: "female",
+    phone: `555-0101-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`,
+    doctor: doctorId,
+    createdBy: createdBy._id,
+    ...overrides,
+  });
 };
 
 const getClinicDayOfWeek = (date) => {
@@ -115,6 +149,7 @@ module.exports = {
   createTestUser,
   createTestPatient,
   createTestDoctor,
+  assignTestDoctor,
   createTestSchedule,
   getFutureAppointmentDate,
 };

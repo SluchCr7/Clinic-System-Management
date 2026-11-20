@@ -24,6 +24,11 @@ const {
   applyDoctorScope,
   getDoctorScopeId,
 } = require("../../utils/listQuery");
+const {
+  assertDoctorAccess,
+  applyClinicScope,
+  getAuthorizedDoctorIds,
+} = require("../../utils/accessControl");
 
 // ---------------------------------------------
 // Helpers
@@ -138,6 +143,10 @@ const createInvoiceAttempt = async (data, currentUser) => {
         404,
         "VISIT_NOT_FOUND"
       );
+    }
+
+    if (currentUser) {
+      await assertDoctorAccess(currentUser, visit.doctor);
     }
 
     // -----------------------------------------
@@ -460,9 +469,35 @@ const createInvoice = async (data, currentUser) => {
   }
 };
 
-const getEligibleVisits = async (query = {}) => {
+const getEligibleVisits = async (query = {}, currentUser = null) => {
   const pagination = getPagination(query.page, query.limit);
+
+  const initialMatch = {};
+  if (currentUser) {
+    if (currentUser.role === "doctor") {
+      const doctorId = await getDoctorScopeId(currentUser, Doctor);
+      initialMatch.doctor = doctorId || new mongoose.Types.ObjectId();
+    } else if (currentUser.role === "receptionist") {
+      const authorizedDoctorIds = await getAuthorizedDoctorIds(currentUser);
+      if (query.doctor) {
+        const isAllowed = (authorizedDoctorIds || []).some(
+          (id) => id.toString() === query.doctor.toString()
+        );
+        initialMatch.doctor = isAllowed
+          ? new mongoose.Types.ObjectId(query.doctor)
+          : new mongoose.Types.ObjectId();
+      } else {
+        initialMatch.doctor = {
+          $in: (authorizedDoctorIds || []).map((id) => new mongoose.Types.ObjectId(id)),
+        };
+      }
+    } else if (currentUser.role === "admin" && query.doctor) {
+      initialMatch.doctor = new mongoose.Types.ObjectId(query.doctor);
+    }
+  }
+
   const pipeline = [
+    ...(Object.keys(initialMatch).length ? [{ $match: initialMatch }] : []),
     {
       $lookup: {
         from: Appointment.collection.name,
@@ -572,7 +607,7 @@ const getInvoices = async (query = {}, currentUser = null) => {
   }
 
   applyCairoDateRange(filter, "issuedAt", query);
-  await applyDoctorScope(filter, query, currentUser, Doctor);
+  await applyClinicScope(filter, query, currentUser, "doctor");
 
   return paginateQuery(
     Invoice.find(filter)
@@ -617,14 +652,7 @@ const getInvoices = async (query = {}, currentUser = null) => {
 // ---------------------------------------------
 
 const getInvoiceById = async (id, currentUser = null) => {
-  const filter = { _id: id };
-  if (currentUser?.role === "doctor") {
-    const doctorId = await getDoctorScopeId(currentUser, Doctor);
-    if (!doctorId) return null;
-    filter.doctor = doctorId;
-  }
-
-  return await Invoice.findOne(filter)
+  const invoice = await Invoice.findById(id)
     .populate(
       "patient",
       "firstName lastName phone email dateOfBirth gender"
@@ -645,6 +673,32 @@ const getInvoiceById = async (id, currentUser = null) => {
       "items.performedService",
       "serviceName serviceCode price quantity discount performedAt"
     );
+
+  if (!invoice) {
+    return null;
+  }
+
+  if (currentUser) {
+    if (currentUser.role === "doctor") {
+      const authorizedDoctorIds = await getAuthorizedDoctorIds(currentUser);
+      const invDoctorId = (
+        invoice.doctor?._id || invoice.doctor
+      ).toString();
+      if (
+        !authorizedDoctorIds ||
+        !authorizedDoctorIds.some((id) => id.toString() === invDoctorId)
+      ) {
+        return null;
+      }
+    } else {
+      await assertDoctorAccess(
+        currentUser,
+        invoice.doctor?._id || invoice.doctor
+      );
+    }
+  }
+
+  return invoice;
 };
 
 // ---------------------------------------------
@@ -656,6 +710,10 @@ const updateInvoice = async (id, data, currentUser) => {
 
   if (!invoice) {
     return null;
+  }
+
+  if (currentUser) {
+    await assertDoctorAccess(currentUser, invoice.doctor);
   }
 
   // -------------------------------------------
@@ -792,6 +850,10 @@ const cancelInvoice = async (id, currentUser) => {
 
   if (!invoice) {
     return null;
+  }
+
+  if (currentUser) {
+    await assertDoctorAccess(currentUser, invoice.doctor);
   }
 
   if (invoice.status === "cancelled") {

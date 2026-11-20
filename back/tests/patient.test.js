@@ -2,11 +2,16 @@ const request = require("supertest");
 const app = require("../index");
 const Patient = require("../modules/Patient/patient.model");
 const AuditLog = require("../modules/AuditLog/auditLog.model");
-const { createTestUser } = require("./testHelper");
+const {
+  createTestUser,
+  createTestDoctor,
+  assignTestDoctor,
+} = require("./testHelper");
 
 describe("Patients API", () => {
   let admin;
   let receptionist;
+  let doctorUser;
   let doctor;
 
   beforeAll(async () => {
@@ -16,12 +21,14 @@ describe("Patients API", () => {
   beforeEach(async () => {
     admin = await createTestUser({ role: "admin" });
     receptionist = await createTestUser({ role: "receptionist" });
-    doctor = await createTestUser({ role: "doctor" });
+    ({ doctor, doctorUser } = await createTestDoctor(admin.user));
+    await assignTestDoctor(receptionist.user, doctor, admin.user);
   });
 
   const newPatient = (overrides = {}) => {
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     return {
+      doctor: doctor._id.toString(),
       firstName: "Jordan",
       lastName: "Patient",
       dateOfBirth: "1985-07-13",
@@ -46,6 +53,7 @@ describe("Patients API", () => {
     expect(response.body.success).toBe(true);
     expect(response.body.data.firstName).toBe(payload.firstName);
     expect(response.body.data.createdBy).toBe(receptionist.user._id.toString());
+    expect(response.body.data.doctor._id.toString()).toBe(doctor._id.toString());
 
     const [savedPatient, auditLog] = await Promise.all([
       Patient.findById(response.body.data._id),
@@ -61,9 +69,20 @@ describe("Patients API", () => {
     expect(auditLog.actor.toString()).toBe(receptionist.user._id.toString());
   });
 
+  test("strictly forbids admin from creating a patient profile", async () => {
+    const response = await request(app)
+      .post("/api/patients")
+      .set("Authorization", admin.authHeader)
+      .send(newPatient());
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe("FORBIDDEN");
+  });
+
   test("retrieves a patient profile", async () => {
     const patient = await Patient.create({
       ...newPatient(),
+      doctor: doctor._id,
       createdBy: receptionist.user._id,
     });
 
@@ -83,12 +102,13 @@ describe("Patients API", () => {
   ])("rejects a duplicate patient %s", async (field, value) => {
     await Patient.create({
       ...newPatient({ [field]: value }),
+      doctor: doctor._id,
       createdBy: receptionist.user._id,
     });
 
     const response = await request(app)
       .post("/api/patients")
-      .set("Authorization", admin.authHeader)
+      .set("Authorization", receptionist.authHeader)
       .send(newPatient({ [field]: value }));
 
     expect(response.status).toBe(409);
@@ -99,6 +119,7 @@ describe("Patients API", () => {
   test("updates patient medical records and records the updater", async () => {
     const patient = await Patient.create({
       ...newPatient(),
+      doctor: doctor._id,
       createdBy: receptionist.user._id,
     });
 
@@ -138,6 +159,7 @@ describe("Patients API", () => {
           phone: "555-search-1",
           email: "searchable.one@example.com",
         }),
+        doctor: doctor._id,
         createdBy: receptionist.user._id,
       },
       {
@@ -146,6 +168,7 @@ describe("Patients API", () => {
           phone: "555-search-2",
           email: "searchable.two@example.com",
         }),
+        doctor: doctor._id,
         createdBy: receptionist.user._id,
       },
       {
@@ -154,6 +177,7 @@ describe("Patients API", () => {
           phone: "555-search-3",
           email: "different@example.com",
         }),
+        doctor: doctor._id,
         createdBy: receptionist.user._id,
       },
     ]);
@@ -183,7 +207,7 @@ describe("Patients API", () => {
 
     const forbidden = await request(app)
       .post("/api/patients")
-      .set("Authorization", doctor.authHeader)
+      .set("Authorization", doctorUser.authHeader)
       .send(newPatient());
 
     expect(forbidden.status).toBe(403);

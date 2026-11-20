@@ -4,6 +4,10 @@ const { AppError } = require("../../middlewares/errorHandler");
 const auditLogService = require("../AuditLog/auditLog.service");
 const { paginateQuery } = require("../../utils/pagination");
 const { getSearchRegex, getSort } = require("../../utils/listQuery");
+const {
+  getAuthorizedDoctorIds,
+  assertDoctorAccess,
+} = require("../../utils/accessControl");
 
 const createDoctor = async (data, currentUser) => {
   const user = await User.findById(data.user);
@@ -69,7 +73,7 @@ const createDoctor = async (data, currentUser) => {
   return doctor;
 };
 
-const getDoctors = async (query = {}) => {
+const getDoctors = async (query = {}, currentUser = null) => {
   const filter = {
     isActive:
       query.isActive === true || query.isActive === "true"
@@ -78,6 +82,18 @@ const getDoctors = async (query = {}) => {
           ? false
           : true,
   };
+
+  if (currentUser) {
+    if (currentUser.role === "receptionist") {
+      const authorizedDoctorIds = await getAuthorizedDoctorIds(currentUser);
+      filter._id = { $in: authorizedDoctorIds || [] };
+    } else if (currentUser.role === "doctor") {
+      const myDoctor = await Doctor.findOne({ user: currentUser._id })
+        .select("_id")
+        .lean();
+      filter._id = myDoctor ? myDoctor._id : { $in: [] };
+    }
+  }
 
   if (query.specialization) {
     filter.specialization = query.specialization;
@@ -117,11 +133,21 @@ const getDoctors = async (query = {}) => {
   );
 };
 
-const getDoctorById = async (id) => {
-  return await Doctor.findById(id).populate(
+const getDoctorById = async (id, currentUser = null) => {
+  const doctor = await Doctor.findById(id).populate(
     "user",
     "firstName lastName email phone role"
   );
+
+  if (!doctor) {
+    return null;
+  }
+
+  if (currentUser) {
+    await assertDoctorAccess(currentUser, doctor._id);
+  }
+
+  return doctor;
 };
 
 const updateDoctor = async (id, data, currentUser) => {

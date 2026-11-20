@@ -12,6 +12,9 @@ const {
   uploadToCloudinary,
   deleteFromCloudinary,
 } = require("../../utils/cloudinary");
+const {
+  assertPatientAccess,
+} = require("../../utils/accessControl");
 
 const auditLogService = require("../AuditLog/auditLog.service");
 const { paginateQuery } = require("../../utils/pagination");
@@ -101,7 +104,10 @@ const createMedicalAttachment = async (
   // 1. Validate Patient
   // -------------------------------------------
 
-  await validatePatient(patientId);
+  const patient = await validatePatient(patientId);
+  if (currentUser) {
+    await assertPatientAccess(currentUser, patient);
+  }
 
   // -------------------------------------------
   // 2. Validate Visit
@@ -192,7 +198,10 @@ const getPatientAttachments = async (
   query = {},
   currentUser = null
 ) => {
-  await validatePatient(patientId);
+  const patient = await validatePatient(patientId);
+  if (currentUser) {
+    await assertPatientAccess(currentUser, patient);
+  }
 
   const filter = {
     patient: patientId,
@@ -286,31 +295,8 @@ const getMedicalAttachmentById = async (id, currentUser = null) => {
     return null;
   }
 
-  if (currentUser?.role === "doctor") {
-    const doctor = await Doctor.findOne({
-      user: currentUser._id,
-    })
-      .select("_id")
-      .lean()
-      .exec();
-
-    if (!doctor) {
-      throw new AppError("Access denied", 403, "FORBIDDEN");
-    }
-
-    const patientId = attachment.patient?._id || attachment.patient;
-    const hasVisit = await Visit.exists({
-      doctor: doctor._id,
-      patient: patientId,
-    });
-
-    if (!hasVisit) {
-      throw new AppError(
-        "You are not authorized to view this patient's medical attachment",
-        403,
-        "FORBIDDEN"
-      );
-    }
+  if (currentUser) {
+    await assertPatientAccess(currentUser, attachment.patient);
   }
 
   return attachment;

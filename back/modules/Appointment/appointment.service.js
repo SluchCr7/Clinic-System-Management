@@ -13,6 +13,11 @@ const {
   applyDoctorScope,
   getDoctorScopeId,
 } = require("../../utils/listQuery");
+const {
+  assertDoctorAccess,
+  applyClinicScope,
+  getAuthorizedDoctorIds,
+} = require("../../utils/accessControl");
 
 const CLINIC_TIMEZONE = "Africa/Cairo";
 
@@ -130,7 +135,7 @@ const getTimeInMinutes = (date) => {
 
 const toClinicDate = (date) => normalizeClinicDate(date);
 
-const validatePatient = async (patientId, session = null) => {
+const validatePatient = async (patientId, session = null, doctorId = null) => {
   const patient = await Patient.findById(patientId).session(session);
 
   if (!patient) {
@@ -146,6 +151,14 @@ const validatePatient = async (patientId, session = null) => {
       "Patient is inactive",
       400,
       "PATIENT_INACTIVE"
+    );
+  }
+
+  if (doctorId && patient.doctor && patient.doctor.toString() !== doctorId.toString()) {
+    throw new AppError(
+      "Patient belongs to a different doctor's clinic workspace",
+      400,
+      "PATIENT_DOCTOR_MISMATCH"
     );
   }
 
@@ -383,9 +396,13 @@ const createAppointment = async (data, currentUser) => {
     );
   }
 
+  if (currentUser) {
+    await assertDoctorAccess(currentUser, doctor);
+  }
+
   return withAppointmentTransaction(async (session) => {
     await lockDoctorAppointmentBookings(doctor, session);
-    await validatePatient(patient, session);
+    await validatePatient(patient, session, doctor);
     await validateDoctor(doctor, session);
 
     const schedule = await getDoctorSchedule(doctor, appointmentDate, session);
@@ -453,7 +470,7 @@ const getAppointments = async (query = {}, currentUser = null) => {
   if (query.status) filter.status = query.status;
 
   applyCairoDateRange(filter, "appointmentDate", query);
-  await applyDoctorScope(filter, query, currentUser, Doctor);
+  await applyClinicScope(filter, query, currentUser, "doctor");
 
   return paginateQuery(
     Appointment.find(filter)
@@ -481,14 +498,7 @@ const getAppointments = async (query = {}, currentUser = null) => {
 };
 
 const getAppointmentById = async (id, currentUser = null) => {
-  const filter = { _id: id };
-  if (currentUser?.role === "doctor") {
-    const doctorId = await getDoctorScopeId(currentUser, Doctor);
-    if (!doctorId) return null;
-    filter.doctor = doctorId;
-  }
-
-  return await Appointment.findOne(filter)
+  const appointment = await Appointment.findById(id)
     .populate("patient", "firstName lastName phone email dateOfBirth gender")
     .populate({
       path: "doctor",
@@ -498,6 +508,28 @@ const getAppointmentById = async (id, currentUser = null) => {
         select: "firstName lastName email phone",
       },
     });
+
+  if (!appointment) return null;
+
+  if (currentUser) {
+    if (currentUser.role === "doctor") {
+      const authorizedDoctorIds = await getAuthorizedDoctorIds(currentUser);
+      const appDoctorId = (appointment.doctor?._id || appointment.doctor).toString();
+      if (
+        !authorizedDoctorIds ||
+        !authorizedDoctorIds.some((docId) => docId.toString() === appDoctorId)
+      ) {
+        return null;
+      }
+    } else {
+      await assertDoctorAccess(
+        currentUser,
+        appointment.doctor?._id || appointment.doctor
+      );
+    }
+  }
+
+  return appointment;
 };
 
 const lockDoctorAppointmentBookings = async (doctorId, session) => {
@@ -548,15 +580,8 @@ const updateAppointment = async (id, data, currentUser) => {
     const newDuration = data.duration || appointment.duration;
     const newStatus = data.status || appointment.status;
 
-    if (currentUser?.role === "doctor") {
-      const doctorId = await getDoctorScopeId(currentUser, Doctor);
-      if (!doctorId || appointment.doctor.toString() !== doctorId.toString()) {
-        throw new AppError(
-          "You are not authorized to update another doctor's appointment",
-          403,
-          "FORBIDDEN"
-        );
-      }
+    if (currentUser) {
+      await assertDoctorAccess(currentUser, appointment.doctor);
     }
 
     const allowedTransitions = {
@@ -809,6 +834,10 @@ const cancelAppointment = async (id, cancellationReason, currentUser) => {
 
   if (!appointment) {
     return null;
+  }
+
+  if (currentUser) {
+    await assertDoctorAccess(currentUser, appointment.doctor);
   }
 
   if (appointment.status === "completed") {

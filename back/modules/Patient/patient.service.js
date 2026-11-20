@@ -1,15 +1,68 @@
 const Patient = require("./patient.model");
-const Appointment = require("../Appointment/appointment.model");
 const Doctor = require("../Doctor/doctor.model");
-const Visit = require("../Visit/visit.model");
 const { AppError } = require("../../middlewares/errorHandler");
 const auditLogService = require("../AuditLog/auditLog.service");
 const { paginateQuery } = require("../../utils/pagination");
 const { getSearchRegex, getSort } = require("../../utils/listQuery");
+const {
+  getAuthorizedDoctorIds,
+  isDoctorAuthorizedForUser,
+  assertPatientAccess,
+  applyClinicScope,
+} = require("../../utils/accessControl");
 
 const createPatient = async (data, user) => {
+  if (!user || user.role !== "receptionist") {
+    throw new AppError(
+      "Only receptionists have permission to create patient profiles",
+      403,
+      "FORBIDDEN"
+    );
+  }
+
+  let targetDoctorId = data.doctor;
+
+  if (targetDoctorId) {
+    const isAuthorized = await isDoctorAuthorizedForUser(user, targetDoctorId);
+    if (!isAuthorized) {
+      throw new AppError(
+        "You are not authorized to assign patients to this doctor",
+        403,
+        "FORBIDDEN"
+      );
+    }
+
+    const doctorExists = await Doctor.findOne({
+      _id: targetDoctorId,
+      isActive: true,
+    });
+    if (!doctorExists) {
+      throw new AppError("Assigned doctor is not active", 400, "DOCTOR_INACTIVE");
+    }
+  } else {
+    const authorizedDoctorIds = await getAuthorizedDoctorIds(user);
+    if (!authorizedDoctorIds || authorizedDoctorIds.length === 0) {
+      throw new AppError(
+        "You are not assigned to any active doctor. Please contact an administrator.",
+        403,
+        "NO_ASSIGNED_DOCTORS"
+      );
+    }
+
+    if (authorizedDoctorIds.length === 1) {
+      targetDoctorId = authorizedDoctorIds[0];
+    } else {
+      throw new AppError(
+        "Please select a doctor from your assigned doctors",
+        400,
+        "DOCTOR_SELECTION_REQUIRED"
+      );
+    }
+  }
+
   const patient = await Patient.create({
     ...data,
+    doctor: targetDoctorId,
     createdBy: user._id,
   });
 
@@ -20,6 +73,7 @@ const createPatient = async (data, user) => {
       resource: "Patient",
       resourceId: patient._id,
       details: {
+        doctor: patient.doctor,
         firstName: patient.firstName,
         lastName: patient.lastName,
         dateOfBirth: patient.dateOfBirth,
@@ -32,7 +86,11 @@ const createPatient = async (data, user) => {
     });
   }
 
-  return patient;
+  return await Patient.findById(patient._id).populate({
+    path: "doctor",
+    select: "user specialization licenseNumber consultationFee",
+    populate: { path: "user", select: "firstName lastName email" },
+  });
 };
 
 const getPatients = async (query = {}, currentUser = null) => {
@@ -50,18 +108,20 @@ const getPatients = async (query = {}, currentUser = null) => {
   // -------------------------
   // Active status
   // -------------------------
-
   if (isActive !== undefined) {
-    filter.isActive =
-      isActive === true || isActive === "true";
+    filter.isActive = isActive === true || isActive === "true";
   } else {
     filter.isActive = true;
   }
 
   // -------------------------
+  // Multi-Clinic Scoping
+  // -------------------------
+  await applyClinicScope(filter, query, currentUser, "doctor");
+
+  // -------------------------
   // Search
   // -------------------------
-
   if (search?.trim()) {
     const searchRegex = getSearchRegex(search);
 
@@ -76,7 +136,6 @@ const getPatients = async (query = {}, currentUser = null) => {
   // -------------------------
   // Filters
   // -------------------------
-
   if (gender) {
     filter.gender = gender;
   }
@@ -88,7 +147,6 @@ const getPatients = async (query = {}, currentUser = null) => {
   // -------------------------
   // Sorting
   // -------------------------
-
   const allowedSortFields = [
     "firstName",
     "lastName",
@@ -103,28 +161,14 @@ const getPatients = async (query = {}, currentUser = null) => {
     "createdAt"
   );
 
-  // -------------------------
-  // Pagination
-  // -------------------------
-
-  if (currentUser?.role === "doctor") {
-    const doctor = await Doctor.findOne({
-      user: currentUser._id,
-    })
-      .select("_id")
-      .lean()
-      .exec();
-    const patientIds = doctor
-      ? await Appointment.distinct("patient", {
-          doctor: doctor._id,
-        })
-      : [];
-
-    filter._id = { $in: patientIds };
-  }
-
   return paginateQuery(
-    Patient.find(filter).sort(sort),
+    Patient.find(filter)
+      .populate({
+        path: "doctor",
+        select: "user specialization licenseNumber consultationFee",
+        populate: { path: "user", select: "firstName lastName email" },
+      })
+      .sort(sort),
     Patient.countDocuments(filter),
     query.page,
     query.limit
@@ -132,36 +176,18 @@ const getPatients = async (query = {}, currentUser = null) => {
 };
 
 const getPatientById = async (id, currentUser = null) => {
-  const patient = await Patient.findById(id);
+  const patient = await Patient.findById(id).populate({
+    path: "doctor",
+    select: "user specialization licenseNumber consultationFee",
+    populate: { path: "user", select: "firstName lastName email" },
+  });
 
   if (!patient) {
     return null;
   }
 
-  if (currentUser?.role === "doctor") {
-    const doctor = await Doctor.findOne({
-      user: currentUser._id,
-    })
-      .select("_id")
-      .lean()
-      .exec();
-
-    if (!doctor) {
-      throw new AppError("Access denied", 403, "FORBIDDEN");
-    }
-
-    const [hasAppointment, hasVisit] = await Promise.all([
-      Appointment.exists({ doctor: doctor._id, patient: patient._id }),
-      Visit.exists({ doctor: doctor._id, patient: patient._id }),
-    ]);
-
-    if (!hasAppointment && !hasVisit) {
-      throw new AppError(
-        "You are not authorized to access this patient's medical record",
-        403,
-        "FORBIDDEN"
-      );
-    }
+  if (currentUser) {
+    await assertPatientAccess(currentUser, patient);
   }
 
   return patient;
@@ -172,6 +198,10 @@ const updatePatient = async (id, data, user) => {
 
   if (!patient) {
     return null;
+  }
+
+  if (user) {
+    await assertPatientAccess(user, patient);
   }
 
   const previousValues = {
@@ -233,7 +263,11 @@ const updatePatient = async (id, data, user) => {
     });
   }
 
-  return patient;
+  return await Patient.findById(patient._id).populate({
+    path: "doctor",
+    select: "user specialization licenseNumber consultationFee",
+    populate: { path: "user", select: "firstName lastName email" },
+  });
 };
 
 const deletePatient = async (id, user) => {
@@ -241,6 +275,10 @@ const deletePatient = async (id, user) => {
 
   if (!patient) {
     return null;
+  }
+
+  if (user) {
+    await assertPatientAccess(user, patient);
   }
 
   const previousIsActive = patient.isActive;

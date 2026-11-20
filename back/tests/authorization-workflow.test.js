@@ -9,6 +9,7 @@ const {
   createTestUser,
   createTestDoctor,
   createTestPatient,
+  assignTestDoctor,
   createTestSchedule,
   getFutureAppointmentDate,
 } = require("./testHelper");
@@ -30,7 +31,10 @@ describe("Authorization and Clinical Workflow Integrity API", () => {
     ({ doctorUser, doctor: doctorRecord } = await createTestDoctor(admin.user));
     ({ doctorUser: otherDoctorUser, doctor: otherDoctorRecord } =
       await createTestDoctor(admin.user));
-    patient = await createTestPatient(admin.user);
+    await assignTestDoctor(receptionist.user, doctorRecord, admin.user);
+    patient = await createTestPatient(admin.user, {
+      doctor: doctorRecord._id,
+    });
 
     appointmentDate = getFutureAppointmentDate(2);
     await createTestSchedule(doctorRecord, admin.user, appointmentDate);

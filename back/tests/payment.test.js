@@ -9,6 +9,7 @@ const {
   createTestUser,
   createTestPatient,
   createTestDoctor,
+  assignTestDoctor,
 } = require("./testHelper");
 
 describe("Payments API", () => {
@@ -27,8 +28,9 @@ describe("Payments API", () => {
   beforeEach(async () => {
     admin = await createTestUser({ role: "admin" });
     receptionist = await createTestUser({ role: "receptionist" });
-    patient = await createTestPatient(admin.user);
     ({ doctor, doctorUser } = await createTestDoctor(admin.user));
+    await assignTestDoctor(receptionist.user, doctor, admin.user);
+    patient = await createTestPatient(receptionist.user, { doctor: doctor._id });
 
     invoice = await Invoice.create({
       invoiceNumber: `INV-${Date.now()}-${Math.random()

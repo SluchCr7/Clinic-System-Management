@@ -14,14 +14,16 @@ const { validate, validateQuery, validateId } = require("../../middlewares/valid
 const protect = require("../../middlewares/auth");
 const authorize = require("../../middlewares/authorize");
 
+// ONLY Receptionists can create patient profiles
 router.post(
   "/",
   protect,
-  authorize("admin", "receptionist"),
+  authorize("receptionist"),
   validate(createPatientSchema),
   patientController.createPatient
 );
 
+// Admin, Doctor, Receptionist can list patients (scoped by clinic)
 router.get(
   "/",
   protect,
@@ -30,6 +32,7 @@ router.get(
   patientController.getPatients
 );
 
+// Admin, Doctor, Receptionist can get patient by ID (scoped by clinic)
 router.get(
   "/:id",
   protect,
@@ -38,15 +41,17 @@ router.get(
   patientController.getPatientById
 );
 
+// Receptionist can update their authorized patients (Admin has administrative oversight)
 router.patch(
   "/:id",
   protect,
-  authorize("admin", "receptionist"),
+  authorize("receptionist", "admin"),
   validateId("id", "patient ID"),
   validate(updatePatientSchema),
   patientController.updatePatient
 );
 
+// Deactivate patient
 router.delete(
   "/:id",
   protect,

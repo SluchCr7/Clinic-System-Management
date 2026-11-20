@@ -8,6 +8,7 @@ export type Permission =
   | "patients.delete"
   | "doctors.view"
   | "doctors.manage"
+  | "assignments.manage"
   | "appointments.view"
   | "appointments.create"
   | "appointments.edit"
@@ -31,20 +32,17 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   admin: [
     "dashboard.view",
     "patients.view",
-    "patients.create",
     "patients.edit",
     "patients.delete",
     "doctors.view",
     "doctors.manage",
+    "assignments.manage",
     "appointments.view",
     "appointments.create",
     "appointments.edit",
     "visits.view",
-    "visits.create",
     "prescriptions.view",
-    "prescriptions.create",
     "laboratory.view",
-    "laboratory.create",
     "laboratory.manage",
     "billing.view",
     "billing.manage",
@@ -92,6 +90,7 @@ export function getRequiredRoutePermission(pathname: string): Permission | null 
   if (pathname === "/dashboard") return "dashboard.view";
   if (pathname === "/patients/new") return "patients.create";
   if (pathname.startsWith("/patients")) return "patients.view";
+  if (pathname.startsWith("/assignments")) return "assignments.manage";
   if (pathname.startsWith("/doctors")) return "doctors.view";
   if (pathname.startsWith("/appointments")) return "appointments.view";
   if (pathname === "/visits/new") return "visits.create";

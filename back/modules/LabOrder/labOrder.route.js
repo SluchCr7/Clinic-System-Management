@@ -1,11 +1,8 @@
 const router = require("express").Router();
 
 const labOrderController = require("./labOrder.controller");
-
 const protect = require("../../middlewares/auth");
-
 const authorize = require("../../middlewares/authorize");
-
 const validate = require("../../middlewares/validation");
 
 const {
@@ -15,22 +12,16 @@ const {
 } = require("./labOrder.validation");
 const { validateQuery, validateId } = validate;
 
-// ---------------------------------------------
-// Create
-// ---------------------------------------------
-
+// Create - Doctor Only
 router.post(
   "/",
   protect,
-  authorize("admin", "doctor"),
+  authorize("doctor"),
   validate(createLabOrderSchema),
   labOrderController.createLabOrder
 );
 
-// ---------------------------------------------
-// Get All
-// ---------------------------------------------
-
+// Get All - Doctor (own clinic) & Admin (oversight)
 router.get(
   "/",
   protect,
@@ -39,10 +30,7 @@ router.get(
   labOrderController.getLabOrders
 );
 
-// ---------------------------------------------
-// Get By ID
-// ---------------------------------------------
-
+// Get By ID - Doctor (own clinic) & Admin (oversight)
 router.get(
   "/:id",
   protect,
@@ -51,10 +39,7 @@ router.get(
   labOrderController.getLabOrderById
 );
 
-// ---------------------------------------------
-// Update
-// ---------------------------------------------
-
+// Update - Doctor & Admin
 router.patch(
   "/:id",
   protect,

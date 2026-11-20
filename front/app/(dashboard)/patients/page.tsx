@@ -101,6 +101,25 @@ export default function PatientsPage() {
         ),
     },
     {
+      key: "doctor",
+      header: t("patients.doctorClinic", "Clinic / Doctor"),
+      render: (p) => {
+        if (!p.doctor) return <span className="text-slate-light">-</span>;
+        const docObj = typeof p.doctor === "object" ? p.doctor : null;
+        const userObj = docObj && typeof docObj.user === "object" ? docObj.user : null;
+        const name = userObj
+          ? `Dr. ${userObj.firstName} ${userObj.lastName}`
+          : docObj?.specialization
+          ? `Dr. (${docObj.specialization})`
+          : "Assigned";
+        return (
+          <span className="text-xs font-medium text-teal-dark bg-mint/50 px-2 py-0.5 rounded border border-teal-subtle">
+            {name}
+          </span>
+        );
+      },
+    },
+    {
       key: "status",
       header: t("patients.status"),
       render: (p) => (

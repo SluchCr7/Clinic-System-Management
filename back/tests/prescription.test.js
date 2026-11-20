@@ -8,6 +8,7 @@ const {
   createTestUser,
   createTestDoctor,
   createTestPatient,
+  assignTestDoctor,
   getFutureAppointmentDate,
 } = require("./testHelper");
 
@@ -22,8 +23,9 @@ describe("Prescriptions API", () => {
   beforeEach(async () => {
     admin = await createTestUser({ role: "admin" });
     receptionist = await createTestUser({ role: "receptionist" });
-    patient = await createTestPatient(receptionist.user);
-    ({ doctor, doctorUser } = await createTestDoctor(receptionist.user));
+    ({ doctor, doctorUser } = await createTestDoctor(admin.user));
+    await assignTestDoctor(receptionist.user, doctor, admin.user);
+    patient = await createTestPatient(receptionist.user, { doctor: doctor._id });
 
     const appointment = await Appointment.create({
       patient: patient._id,
@@ -152,7 +154,7 @@ describe("Prescriptions API", () => {
   test("validates medication payloads and returns 404 for missing prescriptions", async () => {
     const invalid = await request(app)
       .post("/api/prescriptions")
-      .set("Authorization", admin.authHeader)
+      .set("Authorization", doctorUser.authHeader)
       .send(prescriptionPayload({ medications: [] }));
 
     expect(invalid.status).toBe(400);

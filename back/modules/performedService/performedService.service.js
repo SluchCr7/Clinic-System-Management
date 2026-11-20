@@ -14,6 +14,11 @@ const {
   applyDoctorScope,
   getDoctorScopeId,
 } = require("../../utils/listQuery");
+const {
+  assertDoctorAccess,
+  applyClinicScope,
+  getAuthorizedDoctorIds,
+} = require("../../utils/accessControl");
 
 const validatePatient = async (patientId) => {
   const patient = await Patient.findById(patientId);
@@ -124,6 +129,14 @@ const validateDiscount = (price, quantity, discount) => {
 };
 
 const createPerformedService = async (data, currentUser) => {
+  if (!currentUser || currentUser.role !== "doctor") {
+    throw new AppError(
+      "Only doctors have permission to record performed services",
+      403,
+      "FORBIDDEN"
+    );
+  }
+
   const {
     visit,
     patient,
@@ -135,15 +148,13 @@ const createPerformedService = async (data, currentUser) => {
     performedAt,
   } = data;
 
-  if (currentUser?.role === "doctor") {
-    const doctorId = await getDoctorScopeId(currentUser, Doctor);
-    if (!doctorId || doctorId.toString() !== doctor.toString()) {
-      throw new AppError(
-        "Doctors can only create performed services for their own visits",
-        403,
-        "FORBIDDEN"
-      );
-    }
+  const doctorId = await getDoctorScopeId(currentUser, Doctor);
+  if (!doctorId || doctorId.toString() !== doctor.toString()) {
+    throw new AppError(
+      "Doctors can only create performed services for their own visits",
+      403,
+      "FORBIDDEN"
+    );
   }
 
   const [patientData, doctorData, visitData, medicalService, existingInvoice] = await Promise.all([
@@ -153,6 +164,14 @@ const createPerformedService = async (data, currentUser) => {
     validateMedicalService(service),
     Invoice.findOne({ visit, status: { $ne: "cancelled" } }),
   ]);
+
+  if (patientData.doctor && patientData.doctor.toString() !== doctor.toString()) {
+    throw new AppError(
+      "Patient does not belong to this doctor's clinic",
+      400,
+      "PATIENT_DOCTOR_MISMATCH"
+    );
+  }
 
   if (existingInvoice) {
     throw new AppError(
@@ -231,7 +250,7 @@ const getPerformedServices = async (query = {}, currentUser = null) => {
   }
 
   applyCairoDateRange(filter, "performedAt", query);
-  await applyDoctorScope(filter, query, currentUser, Doctor);
+  await applyClinicScope(filter, query, currentUser, "doctor");
 
   return paginateQuery(
     PerformedService.find(filter)
@@ -270,14 +289,7 @@ const getPerformedServices = async (query = {}, currentUser = null) => {
 };
 
 const getPerformedServiceById = async (id, currentUser = null) => {
-  const filter = { _id: id };
-  if (currentUser?.role === "doctor") {
-    const doctorId = await getDoctorScopeId(currentUser, Doctor);
-    if (!doctorId) return null;
-    filter.doctor = doctorId;
-  }
-
-  return await PerformedService.findOne(filter)
+  const performedService = await PerformedService.findById(id)
     .populate("patient", "firstName lastName phone email dateOfBirth gender bloodType")
     .populate({
       path: "doctor",
@@ -292,9 +304,43 @@ const getPerformedServiceById = async (id, currentUser = null) => {
       path: "visit",
       select: "chiefComplaint diagnosis followUpDate createdAt",
     });
+
+  if (!performedService) {
+    return null;
+  }
+
+  if (currentUser) {
+    if (currentUser.role === "doctor") {
+      const authorizedDoctorIds = await getAuthorizedDoctorIds(currentUser);
+      const perfDoctorId = (
+        performedService.doctor?._id || performedService.doctor
+      ).toString();
+      if (
+        !authorizedDoctorIds ||
+        !authorizedDoctorIds.some((d) => d.toString() === perfDoctorId)
+      ) {
+        return null;
+      }
+    } else {
+      await assertDoctorAccess(
+        currentUser,
+        performedService.doctor?._id || performedService.doctor
+      );
+    }
+  }
+
+  return performedService;
 };
 
 const updatePerformedService = async (id, data, currentUser) => {
+  if (!currentUser || currentUser.role !== "doctor") {
+    throw new AppError(
+      "Only doctors have permission to update performed services",
+      403,
+      "FORBIDDEN"
+    );
+  }
+
   const filter = { _id: id };
   if (currentUser?.role === "doctor") {
     const doctorId = await getDoctorScopeId(currentUser, Doctor);

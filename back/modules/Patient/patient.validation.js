@@ -1,7 +1,12 @@
-const Joi = require("joi")
-const { createListQuerySchema } = require("../../utils/listQuery");
+const Joi = require("joi");
+const { createListQuerySchema, objectId } = require("../../utils/listQuery");
 
 const createPatientSchema = Joi.object({
+  doctor: objectId.optional().messages({
+    "string.length": "Invalid doctor ID",
+    "string.hex": "Invalid doctor ID",
+  }),
+
   firstName: Joi.string().min(2).max(50).trim().required(),
 
   lastName: Joi.string().min(2).max(50).trim().required(),
@@ -41,7 +46,6 @@ const createPatientSchema = Joi.object({
     relationship: Joi.string().trim(),
   }).optional(),
 });
-
 
 const updatePatientSchema = Joi.object({
   firstName: Joi.string()
@@ -108,6 +112,7 @@ const patientListQuerySchema = createListQuerySchema({
     "updatedAt",
   ],
   filters: {
+    doctor: objectId,
     gender: Joi.string().valid("male", "female"),
     bloodType: Joi.string().valid(
       "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"

@@ -13,6 +13,10 @@ const {
   applyCairoDateRange,
   getDoctorScopeId,
 } = require("../../utils/listQuery");
+const {
+  assertDoctorAccess,
+  getAuthorizedDoctorIds,
+} = require("../../utils/accessControl");
 
 // ---------------------------------------------
 // Helpers
@@ -113,6 +117,10 @@ const createPayment = async (data, currentUser) => {
       invoiceId,
       session
     );
+
+    if (currentUser) {
+      await assertDoctorAccess(currentUser, invoice.doctor);
+    }
 
     // -----------------------------------------
     // 2. Validate patient
@@ -357,6 +365,18 @@ const getPayments = async (query = {}, currentUser = null) => {
       )
         ? { $in: [] }
         : { $in: invoiceIds };
+  } else if (currentUser?.role === "receptionist") {
+    const authorizedDoctorIds = await getAuthorizedDoctorIds(currentUser);
+    const invoiceIds = authorizedDoctorIds?.length
+      ? await Invoice.distinct("_id", { doctor: { $in: authorizedDoctorIds } })
+      : [];
+
+    filter.invoice =
+      query.invoice && !invoiceIds.some(
+        (invoiceId) => invoiceId.toString() === query.invoice
+      )
+        ? { $in: [] }
+        : { $in: invoiceIds };
   }
 
   return paginateQuery(
@@ -391,29 +411,43 @@ const getPayments = async (query = {}, currentUser = null) => {
 // ---------------------------------------------
 
 const getPaymentById = async (id, currentUser = null) => {
-  const filter = { _id: id };
-  if (currentUser?.role === "doctor") {
-    const doctorId = await getDoctorScopeId(currentUser, Doctor);
-    if (!doctorId) return null;
-    const invoiceIds = await Invoice.distinct("_id", {
-      doctor: doctorId,
-    });
-    filter.invoice = { $in: invoiceIds };
-  }
-
-  return await Payment.findOne(filter)
+  const payment = await Payment.findById(id)
     .populate(
       "patient",
       "firstName lastName phone email"
     )
     .populate(
       "invoice",
-      "invoiceNumber total paidAmount remainingAmount status issuedAt"
+      "invoiceNumber total paidAmount remainingAmount status issuedAt doctor"
     )
     .populate(
       "createdBy",
       "firstName lastName email role"
     );
+
+  if (!payment) return null;
+
+  if (currentUser) {
+    const invoice = await Invoice.findById(payment.invoice?._id || payment.invoice)
+      .select("doctor")
+      .lean();
+    if (invoice?.doctor) {
+      if (currentUser.role === "doctor") {
+        const authorizedDoctorIds = await getAuthorizedDoctorIds(currentUser);
+        const invDoctorId = invoice.doctor.toString();
+        if (
+          !authorizedDoctorIds ||
+          !authorizedDoctorIds.some((id) => id.toString() === invDoctorId)
+        ) {
+          return null;
+        }
+      } else {
+        await assertDoctorAccess(currentUser, invoice.doctor);
+      }
+    }
+  }
+
+  return payment;
 };
 
 module.exports = {

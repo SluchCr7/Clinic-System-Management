@@ -26,19 +26,20 @@ const createAppointmentFixtures = async (appointmentDate) => {
     password: "testpassword",
     role: "doctor",
   });
+  const doctor = await Doctor.create({
+    user: doctorUser._id,
+    specialization: "Family Medicine",
+    licenseNumber: "DOC-REMINDER-1",
+    consultationFee: 50,
+    createdBy: receptionist._id,
+  });
   const patient = await Patient.create({
     firstName: "Pat",
     lastName: "Patient",
     dateOfBirth: new Date("1990-01-01"),
     gender: "female",
     phone: "555-0100",
-    createdBy: receptionist._id,
-  });
-  const doctor = await Doctor.create({
-    user: doctorUser._id,
-    specialization: "Family Medicine",
-    licenseNumber: "DOC-REMINDER-1",
-    consultationFee: 50,
+    doctor: doctor._id,
     createdBy: receptionist._id,
   });
   const appointment = await Appointment.create({

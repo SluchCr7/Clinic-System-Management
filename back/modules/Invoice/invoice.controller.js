@@ -40,7 +40,8 @@ const getInvoices = asyncHandler(async (req, res) => {
 const getEligibleVisits = asyncHandler(async (req, res) => {
   const { data: visits, pagination } =
     await invoiceService.getEligibleVisits(
-      req.validatedQuery
+      req.validatedQuery,
+      req.user
     );
 
   res.status(200).json({

@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useCreatePatientMutation } from "@/services/api/patientApi";
+import { useGetMyDoctorsQuery } from "@/services/api/doctorAssignmentApi";
 import type { BloodType, Gender } from "@/types/patient";
 import {
   PageHeader,
@@ -25,8 +26,11 @@ export default function NewPatientPage() {
   const router = useRouter();
   const { t } = useTranslation();
   const [createPatient, { isLoading }] = useCreatePatientMutation();
+  const { data: myDoctorsData, isLoading: isLoadingDoctors } = useGetMyDoctorsQuery();
+  const assignedDoctors = myDoctorsData?.data || [];
 
   const [formData, setFormData] = useState({
+    doctor: "",
     firstName: "",
     lastName: "",
     dateOfBirth: "",
@@ -50,6 +54,12 @@ export default function NewPatientPage() {
 
   const [formError, setFormError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (assignedDoctors.length === 1 && !formData.doctor) {
+      setFormData((prev) => ({ ...prev, doctor: assignedDoctors[0]._id }));
+    }
+  }, [assignedDoctors, formData.doctor]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -59,8 +69,16 @@ export default function NewPatientPage() {
       return;
     }
 
+    if (!formData.doctor) {
+      setFormError(
+        t("patientForm.selectDoctorRequired", "Please select a doctor for this patient")
+      );
+      return;
+    }
+
     try {
       const payload = {
+        doctor: formData.doctor,
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
         dateOfBirth: formData.dateOfBirth,
@@ -137,6 +155,56 @@ export default function NewPatientPage() {
           {formError}
         </div>
       )}
+
+      {/* Clinic Workspace & Assigned Doctor */}
+      <Card>
+        <CardHeader
+          title={t("patientForm.clinicWorkspaceTitle", "Clinic Workspace Assignment")}
+          subtitle={t(
+            "patientForm.clinicWorkspaceSubtitle",
+            "Select the doctor clinic workspace this patient belongs to."
+          )}
+        />
+        <CardContent>
+          {assignedDoctors.length === 0 && !isLoadingDoctors ? (
+            <div className="p-3.5 rounded-lg bg-status-warning-bg border border-status-warning/20 text-xs text-status-warning leading-relaxed">
+              {t(
+                "patientForm.noAssignedDoctors",
+                "You are not assigned to any active doctor clinic. Please contact an administrator to assign you to a doctor before creating patients."
+              )}
+            </div>
+          ) : (
+            <Select
+              label={t("patientForm.assignedDoctor", "Doctor Clinic")}
+              required
+              disabled={assignedDoctors.length === 1}
+              value={formData.doctor}
+              onChange={(e) => setFormData({ ...formData, doctor: e.target.value })}
+              options={[
+                {
+                  value: "",
+                  label: t("patientForm.selectDoctorPlaceholder", "Select a doctor..."),
+                },
+                ...assignedDoctors.map((doc) => {
+                  const userObj = typeof doc.user === "object" ? doc.user : null;
+                  const name = userObj
+                    ? `Dr. ${userObj.firstName} ${userObj.lastName}`
+                    : `Doctor (${doc.specialization})`;
+                  return {
+                    value: doc._id,
+                    label: `${name} — ${doc.specialization}`,
+                  };
+                }),
+              ]}
+              helperText={
+                assignedDoctors.length === 1
+                  ? t("patientForm.singleDoctorAssigned", "Auto-assigned to your clinic doctor.")
+                  : undefined
+              }
+            />
+          )}
+        </CardContent>
+      </Card>
 
       {/* 1. Personal Identity */}
       <Card>

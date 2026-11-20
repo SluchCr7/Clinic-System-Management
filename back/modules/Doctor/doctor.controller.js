@@ -18,7 +18,7 @@ const createDoctor = asyncHandler(async (req, res) => {
 
 const getDoctors = asyncHandler(async (req, res) => {
   const { data: doctors, pagination } =
-    await doctorService.getDoctors(req.validatedQuery);
+    await doctorService.getDoctors(req.validatedQuery, req.user);
 
   res.status(200).json({
     success: true,
@@ -29,7 +29,8 @@ const getDoctors = asyncHandler(async (req, res) => {
 
 const getDoctorById = asyncHandler(async (req, res) => {
   const doctor = await doctorService.getDoctorById(
-    req.params.id
+    req.params.id,
+    req.user
   );
 
   if (!doctor) {

@@ -8,6 +8,7 @@ const {
   createTestUser,
   createTestDoctor,
   createTestPatient,
+  assignTestDoctor,
   createTestSchedule,
   getFutureAppointmentDate,
 } = require("./testHelper");
@@ -23,8 +24,9 @@ describe("Appointments API", () => {
   beforeEach(async () => {
     admin = await createTestUser({ role: "admin" });
     receptionist = await createTestUser({ role: "receptionist" });
-    patient = await createTestPatient(receptionist.user);
-    ({ doctor, doctorUser } = await createTestDoctor(receptionist.user));
+    ({ doctor, doctorUser } = await createTestDoctor(admin.user));
+    await assignTestDoctor(receptionist.user, doctor, admin.user);
+    patient = await createTestPatient(receptionist.user, { doctor: doctor._id });
     appointmentDate = getFutureAppointmentDate();
     await createTestSchedule(doctor, receptionist.user, appointmentDate);
   });
@@ -75,7 +77,8 @@ describe("Appointments API", () => {
   });
 
   test("accepts a booked slot near midnight when the clinic date must stay on the same weekday", async () => {
-    const clinicDate = new Date("2026-11-10T12:00:00+02:00");
+    const clinicDate = getFutureAppointmentDate(7);
+    const dateStr = clinicDate.toISOString().split("T")[0];
     await Schedule.deleteMany({ doctor: doctor._id });
     await createTestSchedule(doctor, receptionist.user, clinicDate);
 
@@ -85,7 +88,7 @@ describe("Appointments API", () => {
       .send({
         patient: patient._id.toString(),
         doctor: doctor._id.toString(),
-        appointmentDate: "2026-11-10T23:30",
+        appointmentDate: `${dateStr}T23:30`,
         duration: 30,
         reason: "Late evening checkup",
       });
@@ -96,9 +99,11 @@ describe("Appointments API", () => {
   });
 
   test("rejects a doctor who is not scheduled for the selected clinic day", async () => {
-    const clinicDate = new Date("2026-11-10T12:00:00+02:00");
+    const clinicDate = getFutureAppointmentDate(7);
+    const otherDate = new Date(clinicDate.getTime() + 24 * 60 * 60 * 1000);
+    const dateStr = clinicDate.toISOString().split("T")[0];
     await Schedule.deleteMany({ doctor: doctor._id });
-    await createTestSchedule(doctor, receptionist.user, new Date("2026-11-11T12:00:00+02:00"));
+    await createTestSchedule(doctor, receptionist.user, otherDate);
 
     const response = await request(app)
       .post("/api/appointments")
@@ -106,7 +111,7 @@ describe("Appointments API", () => {
       .send({
         patient: patient._id.toString(),
         doctor: doctor._id.toString(),
-        appointmentDate: "2026-11-10T23:30",
+        appointmentDate: `${dateStr}T23:30`,
         duration: 30,
         reason: "Outside working day",
       });

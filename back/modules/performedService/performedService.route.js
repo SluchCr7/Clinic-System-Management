@@ -14,11 +14,11 @@ const {
   performedServiceListQuerySchema,
 } = require("./performedService.validation");
 
-// Create performed service
+// Create performed service - Doctor Only
 router.post(
   "/",
   protect,
-  authorize("admin", "doctor"),
+  authorize("doctor"),
   validate(createPerformedServiceSchema),
   performedServiceController.createPerformedService
 );
@@ -41,11 +41,11 @@ router.get(
   performedServiceController.getPerformedServiceById
 );
 
-// Update performed service
+// Update performed service - Doctor Only
 router.patch(
   "/:id",
   protect,
-  authorize("admin", "doctor"),
+  authorize("doctor"),
   validateId("id", "performed service ID"),
   validate(updatePerformedServiceSchema),
   performedServiceController.updatePerformedService

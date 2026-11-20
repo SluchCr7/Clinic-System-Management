@@ -12,6 +12,7 @@ const {
   createTestUser,
   createTestDoctor,
   createTestPatient,
+  assignTestDoctor,
   getFutureAppointmentDate,
 } = require("./testHelper");
 
@@ -26,8 +27,9 @@ describe("Invoices API", () => {
   beforeEach(async () => {
     admin = await createTestUser({ role: "admin" });
     receptionist = await createTestUser({ role: "receptionist" });
-    patient = await createTestPatient(receptionist.user);
-    ({ doctor, doctorUser } = await createTestDoctor(receptionist.user));
+    ({ doctor, doctorUser } = await createTestDoctor(admin.user));
+    await assignTestDoctor(receptionist.user, doctor, admin.user);
+    patient = await createTestPatient(receptionist.user, { doctor: doctor._id });
 
     const appointment = await Appointment.create({
       patient: patient._id,

@@ -2,6 +2,8 @@ const crypto = require("crypto");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const User = require("../User/user.model");
+const Doctor = require("../Doctor/doctor.model");
+const DoctorAssignment = require("../DoctorAssignment/doctorAssignment.model");
 const { AppError } = require("../../middlewares/errorHandler");
 const {
   generateRefreshToken,
@@ -88,7 +90,26 @@ const getMe = async (userId) => {
     );
   }
 
-  return user;
+  const userObj = user.toJSON();
+
+  if (user.role === "doctor") {
+    const doctorProfile = await Doctor.findOne({ user: user._id }).lean();
+    userObj.doctorProfile = doctorProfile || null;
+  } else if (user.role === "receptionist") {
+    const doctorAssignments = await DoctorAssignment.find({
+      receptionist: user._id,
+      isActive: true,
+    })
+      .populate({
+        path: "doctor",
+        select: "user specialization licenseNumber consultationFee",
+        populate: { path: "user", select: "firstName lastName email" },
+      })
+      .lean();
+    userObj.assignedDoctors = doctorAssignments.map((a) => a.doctor).filter(Boolean);
+  }
+
+  return userObj;
 };
 
 const refreshAccessToken = async (refreshToken, requestInfo = {}) => {

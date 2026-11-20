@@ -8,6 +8,11 @@ const {
   applyDoctorScope,
   getDoctorScopeId,
 } = require("../../utils/listQuery");
+const {
+  assertDoctorAccess,
+  applyClinicScope,
+  getAuthorizedDoctorIds,
+} = require("../../utils/accessControl");
 
 const timeToMinutes = (time) => {
   const [hours, minutes] = time.split(":").map(Number);
@@ -182,7 +187,7 @@ const getSchedules = async (query = {}, currentUser = null) => {
   if (query.dayOfWeek !== undefined) {
     filter.dayOfWeek = Number(query.dayOfWeek);
   }
-  await applyDoctorScope(filter, query, currentUser, Doctor);
+  await applyClinicScope(filter, query, currentUser, "doctor");
 
   return paginateQuery(
     Schedule.find(filter)
@@ -211,17 +216,34 @@ const getSchedules = async (query = {}, currentUser = null) => {
 };
 
 const getScheduleById = async (id, currentUser = null) => {
-  const filter = { _id: id };
-  if (currentUser?.role === "doctor") {
-    const doctorId = await getDoctorScopeId(currentUser, Doctor);
-    if (!doctorId) return null;
-    filter.doctor = doctorId;
-  }
-
-  return await Schedule.findOne(filter).populate(
+  const schedule = await Schedule.findById(id).populate(
     "doctor",
     "specialization licenseNumber consultationFee profilePhoto"
   );
+
+  if (!schedule) return null;
+
+  if (currentUser) {
+    if (currentUser.role === "doctor") {
+      const authorizedDoctorIds = await getAuthorizedDoctorIds(currentUser);
+      const schedDoctorId = (
+        schedule.doctor?._id || schedule.doctor
+      ).toString();
+      if (
+        !authorizedDoctorIds ||
+        !authorizedDoctorIds.some((d) => d.toString() === schedDoctorId)
+      ) {
+        return null;
+      }
+    } else {
+      await assertDoctorAccess(
+        currentUser,
+        schedule.doctor?._id || schedule.doctor
+      );
+    }
+  }
+
+  return schedule;
 };
 
 const updateSchedule = async (id, data, currentUser) => {

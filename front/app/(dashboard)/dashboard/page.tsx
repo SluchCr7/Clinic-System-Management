@@ -66,12 +66,12 @@ export default function DashboardPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title={t("dashboard.welcome", {
-          name: `Dr. ${user?.lastName || user?.firstName || t("dashboard.staffFallback")}`,
+          name: `${user?.role === "doctor" ? "Dr. " : ""}${user?.lastName || user?.firstName || t("dashboard.staffFallback")}`,
         })}
         subtitle={t("dashboard.overviewWithDate", { date: todayStr })}
         badge={<StatusBadge status={role || "staff"} size="sm" />}
         actions={
-          role === "receptionist" || role === "admin" ? (
+          role === "receptionist" ? (
             <div className="flex items-center gap-2">
               <Link href="/patients/new">
                 <Button
@@ -80,6 +80,27 @@ export default function DashboardPage() {
                   leftIcon={<LuPlus className="w-3.5 h-3.5" />}
                 >
                   {t("dashboard.newPatient")}
+                </Button>
+              </Link>
+              <Link href="/appointments">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  leftIcon={<LuCalendar className="w-3.5 h-3.5" />}
+                >
+                  {t("dashboard.bookAppointment")}
+                </Button>
+              </Link>
+            </div>
+          ) : role === "admin" ? (
+            <div className="flex items-center gap-2">
+              <Link href="/assignments">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<LuUsers className="w-3.5 h-3.5" />}
+                >
+                  {t("nav.doctorAssignments", "Doctor Assignments")}
                 </Button>
               </Link>
               <Link href="/appointments">

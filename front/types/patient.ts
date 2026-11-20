@@ -17,6 +17,7 @@ export interface EmergencyContact {
 
 export interface Patient {
   _id: string;
+  doctor?: any;
   firstName: string;
   lastName: string;
   dateOfBirth: string;
@@ -34,6 +35,7 @@ export interface Patient {
 }
 
 export interface CreatePatientRequest {
+  doctor?: string;
   firstName: string;
   lastName: string;
   dateOfBirth: string;
@@ -63,6 +65,7 @@ export interface UpdatePatientRequest {
 }
 
 export interface PatientQueryParams extends BaseListQueryParams {
+  doctor?: string;
   gender?: Gender;
   bloodType?: BloodType;
   isActive?: boolean;

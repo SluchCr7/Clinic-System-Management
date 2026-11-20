@@ -21,6 +21,7 @@ import {
   LuActivity,
   LuChartBar,
   LuShieldCheck,
+  LuUserCheck,
   LuScrollText,
   LuBell,
   LuSettings,
@@ -155,6 +156,12 @@ export default function Sidebar({
           label: t("nav.staffUsers"),
           href: "/users",
           icon: <LuShieldCheck className="w-4 h-4" />,
+          roles: ["admin"],
+        },
+        {
+          label: t("nav.doctorAssignments"),
+          href: "/assignments",
+          icon: <LuUserCheck className="w-4 h-4" />,
           roles: ["admin"],
         },
         {

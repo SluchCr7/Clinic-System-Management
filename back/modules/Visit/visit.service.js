@@ -66,7 +66,7 @@ const validateAppointment = async (appointmentId, patientId, doctorId) => {
     );
   }
 
-  if (appointment.patient.toString() !== patientId) {
+  if (appointment.patient.toString() !== patientId.toString()) {
     throw new AppError(
       "Appointment does not belong to this patient",
       400,
@@ -74,7 +74,7 @@ const validateAppointment = async (appointmentId, patientId, doctorId) => {
     );
   }
 
-  if (appointment.doctor.toString() !== doctorId) {
+  if (appointment.doctor.toString() !== doctorId.toString()) {
     throw new AppError(
       "Appointment does not belong to this doctor",
       400,
@@ -100,22 +100,35 @@ const validateAppointment = async (appointmentId, patientId, doctorId) => {
 const createVisit = async (data, currentUser) => {
   const { appointment, patient, doctor } = data;
 
-  if (currentUser?.role === "doctor") {
-    const doctorRecord = await Doctor.findOne({ user: currentUser._id })
-      .select("_id")
-      .lean()
-      .exec();
-
-    if (!doctorRecord || doctorRecord._id.toString() !== doctor.toString()) {
-      throw new AppError(
-        "Doctors can only create visits for themselves",
-        403,
-        "FORBIDDEN"
-      );
-    }
+  if (!currentUser || currentUser.role !== "doctor") {
+    throw new AppError(
+      "Only doctors have permission to conduct and record clinical visits",
+      403,
+      "FORBIDDEN"
+    );
   }
 
-  await validatePatient(patient);
+  const doctorRecord = await Doctor.findOne({ user: currentUser._id, isActive: true })
+    .select("_id")
+    .lean()
+    .exec();
+
+  if (!doctorRecord || doctorRecord._id.toString() !== doctor.toString()) {
+    throw new AppError(
+      "Doctors can only create visits for themselves",
+      403,
+      "FORBIDDEN"
+    );
+  }
+
+  const patientRecord = await validatePatient(patient);
+  if (patientRecord.doctor && patientRecord.doctor.toString() !== doctor.toString()) {
+    throw new AppError(
+      "Patient does not belong to this doctor's clinic",
+      400,
+      "PATIENT_DOCTOR_MISMATCH"
+    );
+  }
   await validateDoctor(doctor);
 
   const session = await mongoose.startSession();
@@ -270,17 +283,23 @@ const updateVisit = async (id, data, currentUser) => {
     return null;
   }
 
-  if (currentUser?.role === "doctor") {
-    const doctor = await Doctor.findOne({
-      user: currentUser._id,
-    })
-      .select("_id")
-      .lean()
-      .exec();
+  if (!currentUser || currentUser.role !== "doctor") {
+    throw new AppError(
+      "Only doctors have permission to update clinical records",
+      403,
+      "FORBIDDEN"
+    );
+  }
 
-    if (!doctor || doctor._id.toString() !== visit.doctor.toString()) {
-      return null;
-    }
+  const doctor = await Doctor.findOne({
+    user: currentUser._id,
+  })
+    .select("_id")
+    .lean()
+    .exec();
+
+  if (!doctor || doctor._id.toString() !== visit.doctor.toString()) {
+    return null;
   }
 
   const previousValues = {

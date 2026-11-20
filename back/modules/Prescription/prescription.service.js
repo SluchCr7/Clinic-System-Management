@@ -5,10 +5,11 @@ const Doctor = require("../Doctor/doctor.model");
 const { AppError } = require("../../middlewares/errorHandler");
 const auditLogService = require("../AuditLog/auditLog.service");
 const { paginateQuery } = require("../../utils/pagination");
+const { getSort } = require("../../utils/listQuery");
 const {
-  getSort,
-  applyDoctorScope,
-} = require("../../utils/listQuery");
+  assertDoctorAccess,
+  applyClinicScope,
+} = require("../../utils/accessControl");
 
 const validatePatient = async (patientId) => {
   const patient = await Patient.findById(patientId);
@@ -87,24 +88,37 @@ const validateVisit = async (visitId, patientId, doctorId) => {
 const createPrescription = async (data, currentUser) => {
   const { visit, patient, doctor } = data;
 
-  if (currentUser?.role === "doctor") {
-    const doctorRecord = await Doctor.findOne({ user: currentUser._id })
-      .select("_id")
-      .lean()
-      .exec();
-
-    if (!doctorRecord || doctorRecord._id.toString() !== doctor.toString()) {
-      throw new AppError(
-        "Doctors can only create prescriptions for themselves",
-        403,
-        "FORBIDDEN"
-      );
-    }
+  if (!currentUser || currentUser.role !== "doctor") {
+    throw new AppError(
+      "Only doctors have permission to create prescriptions",
+      403,
+      "FORBIDDEN"
+    );
   }
 
-  await validatePatient(patient);
-  await validateDoctor(doctor);
+  const doctorRecord = await Doctor.findOne({ user: currentUser._id, isActive: true })
+    .select("_id")
+    .lean()
+    .exec();
 
+  if (!doctorRecord || doctorRecord._id.toString() !== doctor.toString()) {
+    throw new AppError(
+      "Doctors can only create prescriptions for themselves",
+      403,
+      "FORBIDDEN"
+    );
+  }
+
+  const patientRecord = await validatePatient(patient);
+  if (patientRecord.doctor && patientRecord.doctor.toString() !== doctor.toString()) {
+    throw new AppError(
+      "Patient does not belong to this doctor's clinic",
+      400,
+      "PATIENT_DOCTOR_MISMATCH"
+    );
+  }
+
+  await validateDoctor(doctor);
   await validateVisit(visit, patient, doctor);
 
   const existingPrescription = await Prescription.findOne({ visit });
@@ -146,7 +160,7 @@ const getPrescriptions = async (query = {}, currentUser = null) => {
   if (query.patient) filter.patient = query.patient;
   if (query.doctor) filter.doctor = query.doctor;
   if (query.visit) filter.visit = query.visit;
-  await applyDoctorScope(filter, query, currentUser, Doctor);
+  await applyClinicScope(filter, query, currentUser, "doctor");
 
   return paginateQuery(
     Prescription.find(filter)
@@ -198,22 +212,11 @@ const getPrescriptionById = async (id, currentUser = null) => {
     return null;
   }
 
-  if (currentUser?.role === "doctor") {
-    const doctor = await Doctor.findOne({
-      user: currentUser._id,
-    })
-      .select("_id")
-      .lean()
-      .exec();
-
-    const prescDoctorId = prescription.doctor?._id || prescription.doctor;
-    if (!doctor || doctor._id.toString() !== prescDoctorId.toString()) {
-      throw new AppError(
-        "You are not authorized to access this prescription",
-        403,
-        "FORBIDDEN"
-      );
-    }
+  if (currentUser) {
+    await assertDoctorAccess(
+      currentUser,
+      prescription.doctor?._id || prescription.doctor
+    );
   }
 
   return prescription;
@@ -226,21 +229,28 @@ const updatePrescription = async (id, data, currentUser) => {
     return null;
   }
 
-  if (currentUser?.role === "doctor") {
-    const doctor = await Doctor.findOne({
-      user: currentUser._id,
-    })
-      .select("_id")
-      .lean()
-      .exec();
+  if (!currentUser || currentUser.role !== "doctor") {
+    throw new AppError(
+      "Only doctors have permission to update prescriptions",
+      403,
+      "FORBIDDEN"
+    );
+  }
 
-    if (!doctor || doctor._id.toString() !== prescription.doctor.toString()) {
-      throw new AppError(
-        "You are not authorized to update this prescription",
-        403,
-        "FORBIDDEN"
-      );
-    }
+  const doctor = await Doctor.findOne({
+    user: currentUser._id,
+    isActive: true,
+  })
+    .select("_id")
+    .lean()
+    .exec();
+
+  if (!doctor || doctor._id.toString() !== prescription.doctor.toString()) {
+    throw new AppError(
+      "You are not authorized to update this prescription",
+      403,
+      "FORBIDDEN"
+    );
   }
 
   const previousMedicationCount = prescription.medications?.length || 0;

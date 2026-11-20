@@ -36,3 +36,31 @@ export interface DoctorQueryParams extends BaseListQueryParams {
   specialization?: string;
   isActive?: boolean;
 }
+
+export interface DoctorAssignment {
+  _id: string;
+  doctor: Doctor | string;
+  receptionist: User | string;
+  assignedBy?: User | string;
+  notes?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateDoctorAssignmentRequest {
+  doctor: string;
+  receptionist: string;
+  notes?: string;
+}
+
+export interface UpdateDoctorAssignmentRequest {
+  isActive?: boolean;
+  notes?: string;
+}
+
+export interface DoctorAssignmentQueryParams extends BaseListQueryParams {
+  doctor?: string;
+  receptionist?: string;
+  isActive?: boolean;
+}

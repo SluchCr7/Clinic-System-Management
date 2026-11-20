@@ -6,21 +6,20 @@ const {
     visitListQuerySchema,
 } = require("./visit.validation")
 
-
 const { validate, validateQuery, validateId } = require("../../middlewares/validation");
 const protect = require("../../middlewares/auth");
 const authorize = require("../../middlewares/authorize");
 
-// Create Visit
+// Create Visit - Clinical Operation: Doctor Only
 router.post(
   "/",
   protect,
-  authorize("admin", "doctor"),
+  authorize("doctor"),
   validate(createVisitSchema),
   visitController.createVisit
 );
 
-// Get all Visits
+// Get all Visits - Doctor (own clinic) & Admin (clinical oversight)
 router.get(
   "/",
   protect,
@@ -38,11 +37,11 @@ router.get(
   visitController.getVisitById
 );
 
-// Update Visit
+// Update Visit - Clinical Operation: Doctor Only
 router.patch(
   "/:id",
   protect,
-  authorize("admin", "doctor"),
+  authorize("doctor"),
   validateId("id", "visit ID"),
   validate(updateVisitSchema),
   visitController.updateVisit

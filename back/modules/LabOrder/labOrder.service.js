@@ -139,6 +139,14 @@ const createLabOrder = async (
   data,
   currentUser
 ) => {
+  if (!currentUser || currentUser.role !== "doctor") {
+    throw new AppError(
+      "Only doctors have permission to create lab orders",
+      403,
+      "FORBIDDEN"
+    );
+  }
+
   const {
     visit,
     patient,
@@ -150,21 +158,27 @@ const createLabOrder = async (
     orderedAt,
   } = data;
 
-  if (currentUser?.role === "doctor") {
-    const doctorId = await getDoctorScopeId(currentUser, Doctor);
-    if (!doctorId || doctorId.toString() !== doctor.toString()) {
-      throw new AppError(
-        "Doctors can only create lab orders for their own visits",
-        403,
-        "FORBIDDEN"
-      );
-    }
+  const doctorId = await getDoctorScopeId(currentUser, Doctor);
+  if (!doctorId || doctorId.toString() !== doctor.toString()) {
+    throw new AppError(
+      "Doctors can only create lab orders for their own visits",
+      403,
+      "FORBIDDEN"
+    );
   }
 
-  await Promise.all([
+  const [patientRecord] = await Promise.all([
     validatePatient(patient),
     validateDoctor(doctor),
   ]);
+
+  if (patientRecord.doctor && patientRecord.doctor.toString() !== doctor.toString()) {
+    throw new AppError(
+      "Patient does not belong to this doctor's clinic",
+      400,
+      "PATIENT_DOCTOR_MISMATCH"
+    );
+  }
 
   await validateVisit(
     visit,
@@ -362,6 +376,14 @@ const updateLabOrder = async (
   data,
   currentUser
 ) => {
+  if (!currentUser || !["admin", "doctor"].includes(currentUser.role)) {
+    throw new AppError(
+      "You do not have permission to update lab orders",
+      403,
+      "FORBIDDEN"
+    );
+  }
+
   const filter = { _id: id };
   if (currentUser?.role === "doctor") {
     const doctorId = await getDoctorScopeId(currentUser, Doctor);

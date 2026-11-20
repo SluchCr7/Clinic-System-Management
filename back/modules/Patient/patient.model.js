@@ -2,6 +2,14 @@ const mongoose = require("mongoose");
 
 const PatientSchema = new mongoose.Schema(
   {
+    // Clinic / Doctor workspace ownership
+    doctor: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Doctor",
+      required: true,
+      index: true,
+    },
+
     // Basic Information
     firstName: {
       type: String,
@@ -102,16 +110,16 @@ const PatientSchema = new mongoose.Schema(
       default: true,
     },
 
-    // Who created the patient
+    // Who created the patient (Receptionist)
     createdBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        required: true,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
     updatedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-    }
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
   },
   {
     timestamps: true,
@@ -119,13 +127,19 @@ const PatientSchema = new mongoose.Schema(
 );
 
 PatientSchema.index({
+  doctor: 1,
   isActive: 1,
   createdAt: -1,
 });
 
-PatientSchema.index({ phone: 1 }, { unique: true });
+PatientSchema.index({
+  isActive: 1,
+  createdAt: -1,
+});
+
+PatientSchema.index({ doctor: 1, phone: 1 }, { unique: true });
 PatientSchema.index(
-  { email: 1 },
+  { doctor: 1, email: 1 },
   {
     unique: true,
     partialFilterExpression: {

@@ -83,6 +83,7 @@
     "medicalServices": "Medical Services",
     "reports": "Reports",
     "staffUsers": "Staff & Users",
+    "doctorAssignments": "Doctor Assignments",
     "auditLogs": "Audit Logs",
     "notifications": "Notifications",
     "settings": "Settings"

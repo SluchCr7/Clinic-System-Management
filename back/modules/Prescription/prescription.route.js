@@ -14,16 +14,16 @@ const {
   prescriptionListQuerySchema,
 } = require("./prescription.validation");
 
-// Create Prescription
+// Create Prescription - Doctor Only
 router.post(
   "/",
   protect,
-  authorize("admin", "doctor"),
+  authorize("doctor"),
   validate(createPrescriptionSchema),
   prescriptionController.createPrescription
 );
 
-// Get all Prescriptions
+// Get all Prescriptions - Doctor, Receptionist (assigned clinics), Admin
 router.get(
   "/",
   protect,
@@ -41,11 +41,11 @@ router.get(
   prescriptionController.getPrescriptionById
 );
 
-// Update Prescription
+// Update Prescription - Doctor Only
 router.patch(
   "/:id",
   protect,
-  authorize("admin", "doctor"),
+  authorize("doctor"),
   validateId("id", "prescription ID"),
   validate(updatePrescriptionSchema),
   prescriptionController.updatePrescription

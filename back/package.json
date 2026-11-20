@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "jest --runInBand --detectOpenHandles",
+    "migrate:clinic-isolation": "node scripts/migrateClinicIsolation.js",
     "start": "nodemon index.js",
     "dev": "nodemon index.js"
   },

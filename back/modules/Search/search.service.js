@@ -5,6 +5,7 @@ const Appointment = require("../Appointment/appointment.model");
 const Invoice = require("../Invoice/invoice.model");
 const MedicalService = require("../medicalService/medicalService.model");
 const Visit = require("../Visit/visit.model");
+const { getAuthorizedDoctorIds } = require("../../utils/accessControl");
 
 const escapeRegex = (value) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -44,11 +45,10 @@ const globalSearch = async ({ q, limit = 5 }, currentUser) => {
     return user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() : "";
   };
 
-  let currentDoctor = null;
-  let allowedPatientIds = null;
+  let authorizedDoctorIds = null;
 
   if (currentUser.role === "doctor") {
-    currentDoctor = await Doctor.findOne({
+    const currentDoctor = await Doctor.findOne({
       user: currentUser._id,
       isActive: true,
     })
@@ -68,17 +68,22 @@ const globalSearch = async ({ q, limit = 5 }, currentUser) => {
         total: 0,
       };
     }
-
-    const [appointmentPatientIds, visitPatientIds] = await Promise.all([
-      Appointment.distinct("patient", { doctor: currentDoctor._id }),
-      Visit.distinct("patient", { doctor: currentDoctor._id }),
-    ]);
-
-    allowedPatientIds = [
-      ...new Set(
-        [...appointmentPatientIds, ...visitPatientIds].map(String)
-      ),
-    ];
+    authorizedDoctorIds = [currentDoctor._id];
+  } else if (currentUser.role === "receptionist") {
+    authorizedDoctorIds = await getAuthorizedDoctorIds(currentUser);
+    if (!authorizedDoctorIds || !authorizedDoctorIds.length) {
+      return {
+        query: q,
+        results: {
+          patients: [],
+          doctors: [],
+          appointments: [],
+          invoices: [],
+          services: [],
+        },
+        total: 0,
+      };
+    }
   }
 
   const patientFilter = {
@@ -91,8 +96,8 @@ const globalSearch = async ({ q, limit = 5 }, currentUser) => {
     ],
   };
 
-  if (allowedPatientIds) {
-    patientFilter._id = { $in: allowedPatientIds };
+  if (authorizedDoctorIds) {
+    patientFilter.doctor = { $in: authorizedDoctorIds };
   }
 
   const doctorFilter = {
@@ -105,6 +110,10 @@ const globalSearch = async ({ q, limit = 5 }, currentUser) => {
         : []),
     ],
   };
+
+  if (authorizedDoctorIds) {
+    doctorFilter._id = { $in: authorizedDoctorIds };
+  }
 
   const [patients, doctors, services] = await Promise.all([
     Patient.find(patientFilter)
@@ -146,8 +155,8 @@ const globalSearch = async ({ q, limit = 5 }, currentUser) => {
   ];
 
   const appointmentFilter = { $or: appointmentOr };
-  if (currentUser.role === "doctor") {
-    appointmentFilter.doctor = currentDoctor._id;
+  if (authorizedDoctorIds) {
+    appointmentFilter.doctor = { $in: authorizedDoctorIds };
   }
 
   const invoiceOr = [
@@ -161,8 +170,8 @@ const globalSearch = async ({ q, limit = 5 }, currentUser) => {
   ];
 
   const invoiceFilter = { $or: invoiceOr };
-  if (currentUser.role === "doctor") {
-    invoiceFilter.doctor = currentDoctor._id;
+  if (authorizedDoctorIds) {
+    invoiceFilter.doctor = { $in: authorizedDoctorIds };
   }
 
   const [appointments, invoices] = await Promise.all([
