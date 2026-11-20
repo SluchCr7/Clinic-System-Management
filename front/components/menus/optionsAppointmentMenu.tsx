@@ -1,4 +1,5 @@
-import React from 'react'
+import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { LuCheck, LuCircleX, LuStethoscope, LuUserCheck, LuUserX } from 'react-icons/lu';
 import { AppointmentStatus } from '@/types';
 interface Appointment {
@@ -15,15 +16,84 @@ interface OptionsAppointmentMenuProps {
     handleStartVisit: (id: string) => void | Promise<void>;
     setActiveMenuId: (id: string | null) => void;
     setCancelTargetId: (id: string) => void;
+    anchorRef: React.RefObject<HTMLButtonElement | null>;
     t: (key: string) => string;
 }
 
-const OptionsAppointmentMenu = ({ apt, role, isRtl, isUpdating, handleStatusTransition, handleStartVisit, setActiveMenuId, setCancelTargetId , t } : OptionsAppointmentMenuProps) => {
-  return (
-    <div 
-        className={`absolute top-full mt-1 w-48 bg-surface border border-border-subtle rounded-lg shadow-lg py-1.5 z-50 flex flex-col ${
-        isRtl ? "left-0" : "right-0"
-        }`}
+const OptionsAppointmentMenu = ({
+  apt,
+  role,
+  isRtl,
+  isUpdating,
+  handleStatusTransition,
+  handleStartVisit,
+  setActiveMenuId,
+  setCancelTargetId,
+  anchorRef,
+  t,
+}: OptionsAppointmentMenuProps) => {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  const portalRoot =
+    typeof document === "undefined" ? null : document.body;
+
+  useEffect(() => {
+    const updatePosition = () => {
+      const anchor = anchorRef.current;
+      const menu = menuRef.current;
+      if (!anchor || !menu) return;
+
+      const anchorRect = anchor.getBoundingClientRect();
+      const menuRect = menu.getBoundingClientRect();
+      const gap = 4;
+      const viewportPadding = 8;
+      const belowSpace = window.innerHeight - anchorRect.bottom - gap;
+      const aboveSpace = anchorRect.top - gap;
+      const openAbove = menuRect.height > belowSpace && aboveSpace > belowSpace;
+      const maxTop = Math.max(
+        viewportPadding,
+        window.innerHeight - menuRect.height - viewportPadding
+      );
+      const top = openAbove
+        ? Math.max(viewportPadding, anchorRect.top - menuRect.height - gap)
+        : Math.min(anchorRect.bottom + gap, maxTop);
+      const preferredLeft = isRtl
+        ? anchorRect.left
+        : anchorRect.right - menuRect.width;
+      const maxLeft = Math.max(
+        viewportPadding,
+        window.innerWidth - menuRect.width - viewportPadding
+      );
+      const left = Math.min(Math.max(preferredLeft, viewportPadding), maxLeft);
+
+      setPosition({ top, left });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [anchorRef, isRtl, portalRoot]);
+
+  if (!portalRoot) return null;
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      onClick={(event) => event.stopPropagation()}
+      style={{
+        position: "fixed",
+        top: position?.top ?? 0,
+        left: position?.left ?? 0,
+        visibility: position ? "visible" : "hidden",
+        maxHeight: "calc(100vh - 16px)",
+        maxWidth: "calc(100vw - 16px)",
+        overflowY: "auto",
+      }}
+      className="w-48 bg-surface border border-border-subtle rounded-lg shadow-lg py-1.5 z-[1000] flex flex-col"
     >
         {/* Scheduled -> Confirm */}
         {apt.status === "scheduled" && (role === "admin" || role === "receptionist") && (
@@ -103,7 +173,8 @@ const OptionsAppointmentMenu = ({ apt, role, isRtl, isUpdating, handleStatusTran
         <LuCircleX className="w-4 h-4 shrink-0" />
         <span>{t("appointments.cancelAppointment")}</span>
         </button>
-    </div>
+    </div>,
+    portalRoot
   )
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useGetAppointmentsQuery,
@@ -49,6 +49,7 @@ export default function AppointmentsPage() {
   const canCreateAppointment = hasPermission(role, "appointments.create");
   const canEditAppointment = hasPermission(role, "appointments.edit");
   const [viewMode, setViewMode] = useState<"list" | "agenda">("list");
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   
   // State for active dropdown menu in table rows
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -297,6 +298,7 @@ export default function AppointmentsPage() {
         return (
           <div className="relative flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
             <Button
+              ref={isOpen ? menuButtonRef : null}
               variant="ghost"
               size="sm"
               onClick={(e) => {
@@ -319,6 +321,7 @@ export default function AppointmentsPage() {
                 handleStartVisit={handleStartVisit}
                 setActiveMenuId={setActiveMenuId}
                 setCancelTargetId={setCancelTargetId}
+                anchorRef={menuButtonRef}
                 t={t}
               />
             )}

@@ -127,7 +127,7 @@ export default function LoginPage() {
             </div>
           </form>
 
-          <div className="mt-6 pt-5 border-t border-border-subtle/80">
+          {/* <div className="mt-6 pt-5 border-t border-border-subtle/80">
             <p className="text-[11px] font-medium text-slate-muted mb-2 text-center">
               {t("auth.login.quickCredentials")}
             </p>
@@ -154,7 +154,7 @@ export default function LoginPage() {
                 {t("auth.login.quickFillReceptionist")}
               </button>
             </div>
-          </div>
+          </div> */}
         </div>
 
         <div className="mt-6 flex items-center justify-center gap-2 text-[11px] text-slate-muted">
