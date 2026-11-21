@@ -3,6 +3,7 @@ const request = require("supertest");
 const app = require("../index");
 const Doctor = require("../modules/Doctor/doctor.model");
 const AuditLog = require("../modules/AuditLog/auditLog.model");
+const Clinic = require("../modules/Clinic/clinic.model");
 const {
   createTestUser,
   createTestDoctor,
@@ -13,6 +14,10 @@ describe("Doctors API", () => {
 
   beforeEach(async () => {
     admin = await createTestUser({ role: "admin" });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   const createDoctorPayload = (userId, overrides = {}) => ({
@@ -50,6 +55,14 @@ describe("Doctors API", () => {
     const savedDoctor = await Doctor.findById(response.body.data._id);
 
     expect(savedDoctor).not.toBeNull();
+    expect(savedDoctor.clinic).toBeTruthy();
+    const savedClinic = await Clinic.findById(savedDoctor.clinic);
+    expect(savedClinic).not.toBeNull();
+    expect(savedClinic.owner_doctor_id.toString()).toBe(savedDoctor._id.toString());
+    expect(savedClinic.name).toBe("عيادة د. Mona Hassan");
+    expect(savedClinic.slot_duration_minutes).toBe(15);
+    expect(savedClinic.currency).toBe("USD");
+    expect(savedClinic.license_number).toBeNull();
     expect(savedDoctor.createdBy.toString()).toBe(
       admin.user._id.toString()
     );
@@ -63,6 +76,26 @@ describe("Doctors API", () => {
     expect(auditLog.actor.toString()).toBe(
       admin.user._id.toString()
     );
+  });
+
+  test("rolls back doctor creation when clinic creation fails", async () => {
+    const doctorUser = await createTestUser({
+      role: "doctor",
+      firstName: "Rollback",
+      lastName: "Doctor",
+    });
+    jest.spyOn(Clinic, "create").mockRejectedValueOnce(
+      new Error("Clinic creation failed")
+    );
+
+    const response = await request(app)
+      .post("/api/doctors")
+      .set("Authorization", admin.authHeader)
+      .send(createDoctorPayload(doctorUser.user._id));
+
+    expect(response.status).toBe(500);
+    expect(await Doctor.countDocuments()).toBe(0);
+    expect(await Clinic.countDocuments()).toBe(0);
   });
 
   test("rejects doctor creation by a receptionist", async () => {
@@ -230,6 +263,8 @@ describe("Doctors API", () => {
     expect(savedDoctor.updatedBy.toString()).toBe(
       admin.user._id.toString()
     );
+    const savedClinic = await Clinic.findById(savedDoctor.clinic);
+    expect(savedClinic.isActive).toBe(false);
 
     const listResponse = await request(app)
       .get("/api/doctors")

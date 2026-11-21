@@ -8,6 +8,8 @@ const Notification = require("../modules/Notification/notification.model");
 const ReminderSettings = require("../modules/Notification/reminderSettings.model");
 const Patient = require("../modules/Patient/patient.model");
 const User = require("../modules/User/user.model");
+const Clinic = require("../modules/Clinic/clinic.model");
+const mongoose = require("mongoose");
 const notificationService = require("../modules/Notification/notification.service");
 const { runAppointmentReminders } = require("../utils/reminder");
 
@@ -26,12 +28,23 @@ const createAppointmentFixtures = async (appointmentDate) => {
     password: "testpassword",
     role: "doctor",
   });
+  const doctorId = new mongoose.Types.ObjectId();
+  const clinicId = new mongoose.Types.ObjectId();
   const doctor = await Doctor.create({
+    _id: doctorId,
     user: doctorUser._id,
+    clinic: clinicId,
     specialization: "Family Medicine",
     licenseNumber: "DOC-REMINDER-1",
     consultationFee: 50,
     createdBy: receptionist._id,
+  });
+  await Clinic.create({
+    _id: clinicId,
+    name: "عيادة د. Dana Doctor",
+    slot_duration_minutes: 15,
+    currency: "USD",
+    owner_doctor_id: doctorId,
   });
   const patient = await Patient.create({
     firstName: "Pat",

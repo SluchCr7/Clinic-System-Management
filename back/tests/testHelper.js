@@ -4,6 +4,8 @@ const User = require("../modules/User/user.model");
 const Patient = require("../modules/Patient/patient.model");
 const Doctor = require("../modules/Doctor/doctor.model");
 const DoctorAssignment = require("../modules/DoctorAssignment/doctorAssignment.model");
+const Clinic = require("../modules/Clinic/clinic.model");
+const mongoose = require("mongoose");
 const Schedule = require("../modules/Schedule/schedule.model");
 const {
   generateAccessToken,
@@ -52,15 +54,60 @@ const createTestDoctor = async (createdBy) => {
     firstName: "Morgan",
     lastName: "Doctor",
   });
-  const doctor = await Doctor.create({
-    user: doctorUser.user._id,
-    specialization: "Family Medicine",
-    licenseNumber: `LIC-${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}`,
-    consultationFee: 100,
-    createdBy: createdBy._id,
-  });
+  const session = await mongoose.startSession();
+  let doctor;
+
+  try {
+    await session.withTransaction(async () => {
+      const doctorId = new mongoose.Types.ObjectId();
+      const clinicId = new mongoose.Types.ObjectId();
+
+      [doctor] = await Doctor.create(
+        [
+          {
+            _id: doctorId,
+            user: doctorUser.user._id,
+            clinic: clinicId,
+            specialization: "Family Medicine",
+            licenseNumber: `LIC-${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(2, 8)}`,
+            consultationFee: 100,
+            createdBy: createdBy._id,
+          },
+        ],
+        { session }
+      );
+
+      const [clinic] = await Clinic.create(
+        [
+          {
+            _id: clinicId,
+            name: "عيادة د. Morgan Doctor",
+            slot_duration_minutes: 15,
+            currency: "USD",
+            working_hours: {
+              sunday: { closed: false, emergency: true },
+              monday: { open: "08:00", close: "18:00", closed: false, emergency: false },
+              tuesday: { open: "08:00", close: "18:00", closed: false, emergency: false },
+              wednesday: { open: "08:00", close: "18:00", closed: false, emergency: false },
+              thursday: { open: "08:00", close: "18:00", closed: false, emergency: false },
+              friday: { open: "08:00", close: "18:00", closed: false, emergency: false },
+              saturday: { open: "09:00", close: "14:00", closed: false, emergency: false },
+            },
+            owner_doctor_id: doctorId,
+            isActive: true,
+          },
+        ],
+        { session }
+      );
+
+      doctorUser.user.clinic = clinic._id;
+      await doctorUser.user.save({ session });
+    });
+  } finally {
+    await session.endSession();
+  }
 
   return { doctor, doctorUser };
 };

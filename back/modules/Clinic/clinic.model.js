@@ -34,7 +34,8 @@ const ClinicSchema = new mongoose.Schema(
       type: String,
       trim: true,
       maxlength: 100,
-      default: null,
+      unique: true,
+      sparse: true,
     },
     slot_duration_minutes: {
       type: Number,
@@ -70,6 +71,10 @@ const ClinicSchema = new mongoose.Schema(
       ref: "Doctor",
       required: true,
       unique: true,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
     },
   },
   { timestamps: true }

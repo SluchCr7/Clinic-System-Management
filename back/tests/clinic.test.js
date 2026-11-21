@@ -6,6 +6,7 @@ const {
   createTestDoctor,
   assignTestDoctor,
 } = require("./testHelper");
+const { ensureOwnClinicForDoctor } = require("../scripts/migrateClinicData");
 
 describe("Clinic configuration API", () => {
   let ownerUser;
@@ -19,13 +20,13 @@ describe("Clinic configuration API", () => {
       await createTestDoctor(admin.user));
     receptionist = await createTestUser({ role: "receptionist" });
 
-    clinic = await Clinic.create({
-      name: "Aegis Precision Clinic",
-      license_number: "MOH-CLN-88319",
-      slot_duration_minutes: 15,
-      currency: "USD",
-      tax_note: "Zero-Rated Clinical Tax",
-      working_hours: {
+    clinic = await Clinic.findById(ownerDoctor.clinic);
+    clinic.name = "Aegis Precision Clinic";
+    clinic.license_number = "MOH-CLN-88319";
+    clinic.slot_duration_minutes = 15;
+    clinic.currency = "USD";
+    clinic.tax_note = "Zero-Rated Clinical Tax";
+    clinic.working_hours = {
         sunday: { open: null, close: null, closed: false, emergency: true },
         monday: { open: "08:00", close: "18:00", closed: false, emergency: false },
         tuesday: { open: "08:00", close: "18:00", closed: false, emergency: false },
@@ -33,12 +34,8 @@ describe("Clinic configuration API", () => {
         thursday: { open: "08:00", close: "18:00", closed: false, emergency: false },
         friday: { open: "08:00", close: "18:00", closed: false, emergency: false },
         saturday: { open: "09:00", close: "14:00", closed: false, emergency: false },
-      },
-      owner_doctor_id: ownerDoctor._id,
-    });
-
-    ownerDoctor.clinic = clinic._id;
-    await ownerDoctor.save();
+      };
+    await clinic.save();
     receptionist.user.clinic = clinic._id;
     await receptionist.user.save();
     await assignTestDoctor(receptionist.user, ownerDoctor, admin.user);
@@ -94,9 +91,7 @@ describe("Clinic configuration API", () => {
   });
 
   test("doctor from another clinic cannot update clinic data", async () => {
-    const admin = await createTestUser({ role: "admin" });
-    const { doctorUser: otherDoctorUser } =
-      await createTestDoctor(admin.user);
+    const otherDoctorUser = await createTestUser({ role: "doctor" });
 
     const response = await request(app)
       .patch("/api/clinics/me")
@@ -105,6 +100,29 @@ describe("Clinic configuration API", () => {
 
     expect(response.status).toBe(403);
     expect(response.body.code).toBe("FORBIDDEN");
+  });
+
+  test("admin cannot update clinic data", async () => {
+    const admin = await createTestUser({ role: "admin" });
+    const response = await request(app)
+      .patch("/api/clinics/me")
+      .set("Authorization", admin.authHeader)
+      .send({ name: "Unauthorized Change" });
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe("FORBIDDEN");
+  });
+
+  test("migration is idempotent and creates only one clinic per doctor", async () => {
+    const admin = await createTestUser({ role: "admin" });
+    const { doctor } = await createTestDoctor(admin.user);
+    await ensureOwnClinicForDoctor(doctor);
+    await ensureOwnClinicForDoctor(doctor);
+
+    const ownedClinics = await Clinic.countDocuments({
+      owner_doctor_id: doctor._id,
+    });
+    expect(ownedClinics).toBe(1);
   });
 
   test("rejects invalid clinic values", async () => {
