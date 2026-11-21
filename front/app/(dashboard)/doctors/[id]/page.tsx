@@ -25,6 +25,7 @@ import {
   LuStethoscope,
   LuDollarSign,
   LuAward,
+  LuBuilding2,
 } from "react-icons/lu";
 
 export default function DoctorProfilePage() {
@@ -102,6 +103,12 @@ export default function DoctorProfilePage() {
               <p className="text-xs text-slate-muted mt-1 font-mono">
                 License: {doctor.licenseNumber}
               </p>
+              {doctor.clinic && typeof doctor.clinic === "object" && (
+                <p className="text-xs text-teal-primary mt-1 flex items-center gap-1">
+                  <LuBuilding2 className="w-3.5 h-3.5" />
+                  {doctor.clinic.name}
+                </p>
+              )}
             </div>
           </div>
 

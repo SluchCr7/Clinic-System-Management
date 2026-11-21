@@ -160,6 +160,7 @@ app.use("/api/auth", authLimiter, require("./modules/Auth/auth.route"));
 app.use("/api/users", require("./modules/User/user.routes"));
 app.use("/api/patients", require("./modules/Patient/patient.route"));
 app.use("/api/doctors", require("./modules/Doctor/doctor.route"));
+app.use("/api/clinics", require("./modules/Clinic/clinic.route"));
 app.use("/api/doctor-assignments", require("./modules/DoctorAssignment/doctorAssignment.route"));
 app.use("/api/schedules", require("./modules/Schedule/schedule.route"));
 app.use("/api/appointments", require("./modules/Appointment/appointment.route"));

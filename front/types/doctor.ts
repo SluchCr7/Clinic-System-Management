@@ -4,6 +4,7 @@ import { User } from "./auth";
 export interface Doctor {
   _id: string;
   user: User | string;
+  clinic?: { _id: string; name: string } | null;
   specialization: string;
   licenseNumber: string;
   consultationFee: number;

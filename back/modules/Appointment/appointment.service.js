@@ -771,12 +771,13 @@ const getAppointments = async (query = {}, currentUser = null) => {
       .populate("patient", "firstName lastName phone email dateOfBirth gender")
       .populate({
         path: "doctor",
-        select: "user specialization licenseNumber consultationFee profilePhoto",
+        select: "user specialization licenseNumber consultationFee profilePhoto clinic",
         populate: {
           path: "user",
           select: "firstName lastName email phone",
         },
       })
+      .populate("doctor.clinic", "name")
       .sort(
         getSort(
           query,
@@ -807,12 +808,13 @@ const getAppointmentById = async (id, currentUser = null) => {
     .populate("patient", "firstName lastName phone email dateOfBirth gender")
     .populate({
       path: "doctor",
-      select: "user specialization licenseNumber consultationFee profilePhoto",
+      select: "user specialization licenseNumber consultationFee profilePhoto clinic",
       populate: {
         path: "user",
         select: "firstName lastName email phone",
       },
     })
+    .populate("doctor.clinic", "name")
     .populate(
       "statusHistory.changedBy confirmedBy checkedInBy startedBy completedBy cancelledBy noShowBy",
       "firstName lastName role"

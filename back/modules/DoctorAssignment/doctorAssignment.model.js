@@ -2,6 +2,13 @@ const mongoose = require("mongoose");
 
 const DoctorAssignmentSchema = new mongoose.Schema(
   {
+    clinic: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Clinic",
+      default: null,
+      index: true,
+    },
+
     doctor: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Doctor",

@@ -45,6 +45,13 @@ const UserSchema = new mongoose.Schema(
       required: true,
     },
 
+    clinic: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Clinic",
+      default: null,
+      index: true,
+    },
+
     isActive: {
       type: Boolean,
       default: true,

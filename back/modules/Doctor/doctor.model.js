@@ -2,6 +2,13 @@ const mongoose = require("mongoose");
 
 const DoctorSchema = new mongoose.Schema(
   {
+    clinic: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Clinic",
+      default: null,
+      index: true,
+    },
+
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

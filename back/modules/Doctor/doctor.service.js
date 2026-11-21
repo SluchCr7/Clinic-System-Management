@@ -113,6 +113,7 @@ const getDoctors = async (query = {}, currentUser = null) => {
         "user",
         "firstName lastName email phone role"
       )
+      .populate("clinic", "name")
       .sort(
         getSort(
           query,
@@ -134,10 +135,12 @@ const getDoctors = async (query = {}, currentUser = null) => {
 };
 
 const getDoctorById = async (id, currentUser = null) => {
-  const doctor = await Doctor.findById(id).populate(
-    "user",
-    "firstName lastName email phone role"
-  );
+  const doctor = await Doctor.findById(id)
+    .populate(
+      "user",
+      "firstName lastName email phone role"
+    )
+    .populate("clinic", "name");
 
   if (!doctor) {
     return null;

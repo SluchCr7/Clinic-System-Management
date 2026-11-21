@@ -30,6 +30,14 @@ import {
 import { extractApiError } from "@/services/api/baseQuery";
 import DoctorScheduleSettings from "@/components/settings/DoctorScheduleSettings";
 import {
+  useGetMyClinicQuery,
+  useUpdateMyClinicMutation,
+} from "@/services/api/clinicApi";
+import type {
+  OwnerClinicView,
+  ClinicWorkingHoursDay,
+} from "@/types/clinic";
+import {
   LuUser,
   LuShield,
   LuBuilding2,
@@ -45,6 +53,98 @@ import {
   LuBell,
   LuCalendarClock,
 } from "react-icons/lu";
+
+function ClinicConfigurationForm({ clinic }: { clinic: OwnerClinicView }) {
+  const { t } = useTranslation();
+  const [updateMyClinic, { isLoading }] = useUpdateMyClinicMutation();
+  const [clinicName, setClinicName] = useState(clinic.name);
+  const [clinicLicense, setClinicLicense] = useState(clinic.license_number || "");
+  const [slotDuration, setSlotDuration] = useState(clinic.slot_duration_minutes);
+  const [clinicCurrency, setClinicCurrency] = useState(clinic.currency);
+  const [taxNote, setTaxNote] = useState(clinic.tax_note || "");
+  const [workingHours, setWorkingHours] = useState<Record<string, ClinicWorkingHoursDay>>(
+    clinic.working_hours
+  );
+
+  const handleSaveClinic = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      await updateMyClinic({
+        name: clinicName.trim(),
+        license_number: clinicLicense.trim() || null,
+        slot_duration_minutes: Number(slotDuration),
+        currency: clinicCurrency,
+        tax_note: taxNote.trim() || null,
+        working_hours: workingHours,
+      }).unwrap();
+      toast.success(t("settings.clinicSaved", "Clinic configuration saved"));
+    } catch (err) {
+      const extracted = extractApiError(err);
+      toast.error(
+        extracted.message ||
+          t("settings.clinicSaveFailed", "Failed to save clinic configuration")
+      );
+    }
+  };
+
+  return (
+    <form onSubmit={handleSaveClinic} className="flex flex-col gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Input label={t("settings.clinicFacilityName", "Clinic Name")} value={clinicName} onChange={(event) => setClinicName(event.target.value)} required />
+        <Input label={t("settings.institutionalLicense", "License Number")} value={clinicLicense} onChange={(event) => setClinicLicense(event.target.value)} />
+        <Input label={t("settings.standardSlotDuration", "Slot Duration (minutes)")} type="number" min="1" value={slotDuration} onChange={(event) => setSlotDuration(Number(event.target.value))} required />
+        <Select
+          label={t("settings.billingCurrency", "Billing Currency")}
+          value={clinicCurrency}
+          onChange={(event) => setClinicCurrency(event.target.value)}
+          options={[
+            { value: "USD", label: "USD" },
+            { value: "EGP", label: "EGP" },
+            { value: "EUR", label: "EUR" },
+            { value: "SAR", label: "SAR" },
+            { value: "AED", label: "AED" },
+            { value: "GBP", label: "GBP" },
+          ]}
+        />
+      </div>
+
+      <Input label={t("settings.taxNote", "Tax Note")} value={taxNote} onChange={(event) => setTaxNote(event.target.value)} />
+
+      <div className="flex flex-col gap-3">
+        <span className="text-xs font-semibold text-ink">{t("settings.operationalHours", "Operational Hours")}</span>
+        {["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].map((day) => {
+          const dayHours = workingHours[day] || { open: null, close: null, closed: false, emergency: false };
+          const updateDay = (patch: Partial<ClinicWorkingHoursDay>) =>
+            setWorkingHours((current) => ({
+              ...current,
+              [day]: { ...dayHours, ...patch },
+            }));
+          return (
+            <div key={day} className="grid grid-cols-2 sm:grid-cols-[120px_1fr_1fr_90px_90px] items-end gap-2">
+              <span className="text-xs font-medium text-ink capitalize py-2">{day}</span>
+              <Input label="Open" type="time" value={dayHours.open || ""} disabled={dayHours.closed || dayHours.emergency} onChange={(event) => updateDay({ open: event.target.value || null })} />
+              <Input label="Close" type="time" value={dayHours.close || ""} disabled={dayHours.closed || dayHours.emergency} onChange={(event) => updateDay({ close: event.target.value || null })} />
+              <label className="flex items-center gap-2 text-xs text-slate-muted pb-2">
+                <input type="checkbox" checked={dayHours.closed} onChange={(event) => updateDay({ closed: event.target.checked })} />
+                Closed
+              </label>
+              <label className="flex items-center gap-2 text-xs text-slate-muted pb-2">
+                <input type="checkbox" checked={dayHours.emergency} onChange={(event) => updateDay({ emergency: event.target.checked })} />
+                Emergency
+              </label>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex justify-end border-t border-border-subtle pt-4">
+        <Button type="submit" variant="primary" size="sm" isLoading={isLoading}>
+          {t("settings.saveClinic", "Save Clinic")}
+        </Button>
+      </div>
+    </form>
+  );
+}
 
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
@@ -78,6 +178,20 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const isAdmin = currentUser?.role === "admin";
+  const canQueryClinic =
+    currentUser?.role === "doctor";
+  const {
+    data: clinicResponse,
+    isLoading: isClinicLoading,
+    isError: isClinicError,
+    refetch: refetchClinic,
+  } = useGetMyClinicQuery(undefined, { skip: !canQueryClinic });
+  const clinicData =
+    clinicResponse?.data &&
+    "license_number" in clinicResponse.data
+      ? (clinicResponse.data as OwnerClinicView)
+      : null;
+  const isOwnerDoctor = Boolean(clinicData);
   const {
     data: reminderSettingsResponse,
     isLoading: isLoadingReminderSettings,
@@ -213,7 +327,9 @@ export default function SettingsPage() {
     { id: "profile", label: t("settings.profileTab", "Profile"), icon: <LuUser className="w-4 h-4" /> },
     { id: "security", label: t("settings.securityTab", "Security"), icon: <LuShield className="w-4 h-4" /> },
     { id: "appearance", label: t("settings.appearanceTab", "Appearance"), icon: <LuPalette className="w-4 h-4" /> },
-    { id: "clinic", label: t("settings.clinicTab", "Clinic"), icon: <LuBuilding2 className="w-4 h-4" /> },
+    ...(isOwnerDoctor
+      ? [{ id: "clinic", label: t("settings.clinicTab", "Clinic"), icon: <LuBuilding2 className="w-4 h-4" /> }]
+      : []),
     ...(currentUser?.role === "doctor"
       ? [
           {
@@ -583,46 +699,28 @@ export default function SettingsPage() {
       {/* Tab: Clinic Configuration */}
       {activeTab === "clinic" && (
         <div className="flex flex-col gap-5">
-          {
-            !isAdmin && (
-              <Card>
-                <CardHeader
-                  title={t("settings.clinicTitle", "Clinic Profile & Institutional Parameters")}
-                  subtitle={t("settings.clinicSubtitle", "Global clinical operational guidelines and institutional identifiers")}
-                />
-                <CardContent>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                    <div className="p-3 bg-paper rounded-lg border border-border-subtle">
-                      <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.clinicFacilityName", "Clinic Name")}</span>
-                      <p className="font-bold text-ink mt-0.5">Aegis Precision Clinic</p>
-                    </div>
-
-                    <div className="p-3 bg-paper rounded-lg border border-border-subtle">
-                      <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.institutionalLicense", "License Number")}</span>
-                      <p className="font-mono font-semibold text-teal-dark mt-0.5">MOH-CLN-88319</p>
-                    </div>
-
-                    <div className="p-3 bg-paper rounded-lg border border-border-subtle">
-                      <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.standardSlotDuration", "Slot Duration")}</span>
-                      <p className="font-medium text-ink mt-0.5">15 Minutes per Consultation</p>
-                    </div>
-
-                    <div className="p-3 bg-paper rounded-lg border border-border-subtle">
-                      <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.billingCurrency", "Billing Currency")}</span>
-                      <p className="font-medium text-ink mt-0.5">USD ($) • Zero-Rated Clinical Tax</p>
-                    </div>
-
-                    <div className="p-3 bg-paper rounded-lg border border-border-subtle col-span-2">
-                      <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.operationalHours", "Operational Hours")}</span>
-                      <p className="font-medium text-ink mt-0.5">
-                        Monday – Friday: 08:00 AM – 06:00 PM • Saturday: 09:00 AM – 02:00 PM • Sunday: Urgent Care Only
-                      </p>
-                    </div>
+          {!isAdmin && isOwnerDoctor && clinicData && (
+            <Card>
+              <CardHeader
+                title={t("settings.clinicTitle", "Clinic Configuration")}
+                subtitle={t("settings.clinicSubtitle", "Update clinic identity and operating parameters")}
+              />
+              <CardContent>
+                {isClinicLoading ? (
+                  <p className="text-xs text-slate-muted">{t("common.loading", "Loading...")}</p>
+                ) : isClinicError ? (
+                  <div className="flex items-center gap-3">
+                    <p className="text-xs text-status-error">{t("settings.clinicLoadFailed", "Could not load clinic configuration")}</p>
+                    <Button type="button" variant="secondary" size="sm" onClick={() => refetchClinic()}>
+                      {t("common.retry", "Retry")}
+                    </Button>
                   </div>
-                </CardContent>
-              </Card>
-            )
-          }
+                ) : (
+                  <ClinicConfigurationForm clinic={clinicData} />
+                )}
+              </CardContent>
+            </Card>
+          )}
           {isAdmin && (
             <Card>
               <CardHeader

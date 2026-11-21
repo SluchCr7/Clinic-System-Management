@@ -9,6 +9,10 @@ import UserMenu from "./UserMenu";
 import ThemeSwitcher from "./ThemeSwitcher";
 import { LuMenu, LuBell, LuX, LuArrowRight } from "react-icons/lu";
 import { CiSearch } from "react-icons/ci";
+import { useAppSelector } from "@/redux/hooks";
+import { selectCurrentUser } from "@/features/auth/authSelectors";
+import { useGetMyClinicQuery } from "@/services/api/clinicApi";
+import type { StaffClinicView } from "@/types/clinic";
 
 interface HeaderProps {
   onOpenMobileSidebar: () => void;
@@ -22,6 +26,14 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps) {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const currentUser = useAppSelector(selectCurrentUser);
+  const { data: clinicResponse } = useGetMyClinicQuery(undefined, {
+    skip: currentUser?.role !== "receptionist",
+  });
+  const staffClinic =
+    currentUser?.role === "receptionist"
+      ? (clinicResponse?.data as StaffClinicView | undefined)
+      : undefined;
 
   const { data: unreadData } = useGetUnreadCountQuery(undefined, {
     pollingInterval: 60000,
@@ -106,6 +118,12 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps) {
             </React.Fragment>
           ))}
         </nav>
+        {staffClinic?.name && (
+          <span className="hidden xl:block text-[11px] text-slate-muted border-s border-border-subtle ps-3">
+            تعمل في عيادة {staffClinic.name}
+            {staffClinic.doctor?.name ? ` مع د. ${staffClinic.doctor.name}` : ""}
+          </span>
+        )}
       </div>
 
       {/* حقل البحث المتمدد (Expandable Search Bar) */}

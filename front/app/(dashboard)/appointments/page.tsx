@@ -288,6 +288,11 @@ export default function AppointmentsPage() {
             <p className="truncate text-[11px] text-teal-primary font-medium">
               {doc?.specialization || t("appointments.general")}
             </p>
+            {doc?.clinic && typeof doc.clinic === "object" && (
+              <p className="truncate text-[10px] text-slate-muted">
+                {doc.clinic.name}
+              </p>
+            )}
           </div>
         );
       },
@@ -518,6 +523,11 @@ export default function AppointmentsPage() {
                     <p className="text-xs text-slate-muted mt-0.5 truncate">
                       {t("appointments.physician")}: {u ? `Dr. ${u.lastName}` : t("common.doctor")}
                     </p>
+                    {doc?.clinic && typeof doc.clinic === "object" && (
+                      <p className="text-[11px] text-slate-muted mt-0.5 truncate">
+                        {t("settings.clinicTab", "Clinic")}: {doc.clinic.name}
+                      </p>
+                    )}
 
                     {apt.reason && (
                       <p className="text-xs text-slate-muted bg-paper p-2 rounded-md mt-2 leading-relaxed truncate">

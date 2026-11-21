@@ -4,6 +4,7 @@ export * from "./authApi";
 export * from "./userApi";
 export * from "./patientApi";
 export * from "./doctorApi";
+export * from "./clinicApi";
 export * from "./doctorAssignmentApi";
 export * from "./scheduleApi";
 export * from "./appointmentApi";

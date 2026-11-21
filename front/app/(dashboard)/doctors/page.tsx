@@ -159,6 +159,16 @@ export default function DoctorsPage() {
       ),
     },
     {
+      key: "clinic",
+      header: t("settings.clinicTab", "Clinic"),
+      render: (d) =>
+        d.clinic && typeof d.clinic === "object" ? (
+          <span className="text-xs font-medium text-ink">{d.clinic.name}</span>
+        ) : (
+          <span className="text-xs text-slate-muted">-</span>
+        ),
+    },
+    {
       key: "licenseNumber",
       header: t("doctors.table.license"),
       render: (d) => <span className="font-mono text-slate-dark text-xs">{d.licenseNumber}</span>,

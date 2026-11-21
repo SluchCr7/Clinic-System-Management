@@ -113,15 +113,22 @@ const createAssignment = async (data, adminUser) => {
     assignment.isActive = true;
     if (notes !== undefined) assignment.notes = notes;
     assignment.assignedBy = adminUser._id;
+    if (doctor.clinic) assignment.clinic = doctor.clinic;
     await assignment.save();
   } else {
     assignment = await DoctorAssignment.create({
       doctor: doctorId,
       receptionist: receptionistId,
+      clinic: doctor.clinic || null,
       assignedBy: adminUser._id,
       notes,
       isActive: true,
     });
+  }
+
+  if (receptionist && doctor.clinic) {
+    receptionist.clinic = doctor.clinic;
+    await receptionist.save();
   }
 
   if (adminUser?._id) {
