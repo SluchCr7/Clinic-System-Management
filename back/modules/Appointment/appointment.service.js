@@ -15,6 +15,7 @@ const {
   assertDoctorAccess,
   applyClinicScope,
   getAuthorizedDoctorIds,
+  getAuthorizedReceptionistIds,
 } = require("../../utils/accessControl");
 const {
   createInitialStatusHistory,
@@ -434,6 +435,188 @@ const validateFollowUpReferences = async ({
   return sourceAppointment?._id || followUpOf || null;
 };
 
+const getNotificationRecipients = async (appointment, currentUser) => {
+  let recipients = [];
+
+  if (currentUser?.role === "doctor") {
+    recipients = await getAuthorizedReceptionistIds(appointment.doctor);
+  } else {
+    const doctor = await Doctor.findById(appointment.doctor)
+      .select("user")
+      .lean();
+    if (doctor?.user) recipients = [doctor.user];
+  }
+
+  const creatorId = currentUser?._id?.toString();
+  const recipientIds = new Set();
+
+  return recipients.reduce((uniqueRecipients, recipient) => {
+    if (!recipient) return uniqueRecipients;
+
+    const recipientId = recipient.toString();
+    if (
+      recipientId === creatorId ||
+      recipientIds.has(recipientId)
+    ) {
+      return uniqueRecipients;
+    }
+
+    recipientIds.add(recipientId);
+    uniqueRecipients.push(recipient);
+    return uniqueRecipients;
+  }, []);
+};
+
+const notifyAppointmentCreated = async (appointment, currentUser) => {
+  try {
+    const patient = await Patient.findById(appointment.patient)
+      .select("firstName lastName")
+      .lean();
+
+    const patientName =
+      patient
+        ? `${patient.firstName || ""} ${patient.lastName || ""}`.trim()
+        : "غير متوفر";
+    const creatorName =
+      `${currentUser?.firstName || ""} ${currentUser?.lastName || ""}`.trim() ||
+      "المستخدم";
+    const appointmentDate = new Intl.DateTimeFormat("ar-EG", {
+      timeZone: CLINIC_TIMEZONE,
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(new Date(appointment.appointmentDate));
+    const title = appointment.isFollowUp
+      ? "تم إنشاء موعد متابعة جديد"
+      : "تم إنشاء موعد جديد";
+    const message = appointment.isFollowUp
+      ? `أنشأ الدكتور ${creatorName} موعد متابعة للمريض ${patientName} بتاريخ ${appointmentDate}.`
+      : `أنشأ ${creatorName} موعداً للمريض ${patientName} بتاريخ ${appointmentDate}.`;
+
+    const recipients = await getNotificationRecipients(
+      appointment,
+      currentUser
+    );
+    if (!recipients.length) return;
+
+    const notificationService = require("../Notification/notification.service");
+    const recipientResults = await Promise.allSettled(
+      recipients.map((recipient) =>
+        notificationService.createNotification(
+          {
+            recipient,
+            type: "appointment",
+            title,
+            message,
+            relatedModel: "Appointment",
+            relatedId: appointment._id,
+            eventKey: `appointment-created:${appointment._id}:${recipient.toString()}`,
+          },
+          currentUser
+        )
+      )
+    );
+
+    recipientResults.forEach((result) => {
+      if (result.status === "rejected") {
+        console.error(
+          "Failed to send appointment-created notification:",
+          result.reason
+        );
+      }
+    });
+  } catch (error) {
+    console.error("Failed to prepare appointment-created notification:", error);
+  }
+};
+
+const notifyAppointmentUpdated = async (
+  appointment,
+  currentUser,
+  data = {}
+) => {
+  try {
+    const patient = await Patient.findById(appointment.patient)
+      .select("firstName lastName")
+      .lean();
+
+    const patientName =
+      patient
+        ? `${patient.firstName || ""} ${patient.lastName || ""}`.trim()
+        : "غير متوفر";
+    const creatorName =
+      `${currentUser?.firstName || ""} ${currentUser?.lastName || ""}`.trim() ||
+      "المستخدم";
+    const appointmentDate = new Intl.DateTimeFormat("ar-EG", {
+      timeZone: CLINIC_TIMEZONE,
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(new Date(appointment.appointmentDate));
+
+    let action = "updated";
+    let title = "تم تحديث الموعد";
+    let message = `تم تحديث موعد المريض ${patientName} بتاريخ ${appointmentDate} بواسطة ${creatorName}.`;
+
+    if (data.status === "cancelled") {
+      action = "cancelled";
+      title = "تم إلغاء الموعد";
+      message = `تم إلغاء موعد المريض ${patientName} بتاريخ ${appointmentDate} بواسطة ${creatorName}.`;
+    } else if (data.appointmentDate !== undefined) {
+      action = `rescheduled-${new Date(
+        appointment.appointmentDate
+      ).getTime()}`;
+      title = "تم إعادة جدولة الموعد";
+      message = `تمت إعادة جدولة موعد المريض ${patientName} إلى ${appointmentDate} بواسطة ${creatorName}.`;
+    } else if (data.status !== undefined) {
+      action = `status-${data.status}`;
+      title = "تم تحديث حالة الموعد";
+      message = `تم تحديث حالة موعد المريض ${patientName} بتاريخ ${appointmentDate} بواسطة ${creatorName}.`;
+    }
+
+    const recipients = await getNotificationRecipients(
+      appointment,
+      currentUser
+    );
+    if (!recipients.length) return;
+
+    const notificationService = require("../Notification/notification.service");
+    const recipientResults = await Promise.allSettled(
+      recipients.map((recipient) =>
+        notificationService.createNotification(
+          {
+            recipient,
+            type: "appointment",
+            title,
+            message,
+            relatedModel: "Appointment",
+            relatedId: appointment._id,
+            eventKey: `appointment-${action}:${appointment._id}:${recipient.toString()}`,
+          },
+          currentUser
+        )
+      )
+    );
+
+    recipientResults.forEach((result) => {
+      if (result.status === "rejected") {
+        console.error(
+          "Failed to send appointment-updated notification:",
+          result.reason
+        );
+      }
+    });
+  } catch (error) {
+    console.error("Failed to prepare appointment-updated notification:", error);
+  }
+};
+
 const createAppointment = async (data, currentUser) => {
   const {
     patient,
@@ -499,7 +682,7 @@ const createAppointment = async (data, currentUser) => {
     await assertDoctorAccess(currentUser, doctor);
   }
 
-  return withAppointmentTransaction(async (session) => {
+  const created = await withAppointmentTransaction(async (session) => {
     await lockDoctorAppointmentBookings(doctor, session);
     await validatePatient(patient, session, doctor);
     await validateDoctor(doctor, session);
@@ -562,6 +745,9 @@ const createAppointment = async (data, currentUser) => {
 
     return newAppointment;
   });
+
+  await notifyAppointmentCreated(created, currentUser);
+  return created;
 };
 
 const getAppointments = async (query = {}, currentUser = null) => {
@@ -682,7 +868,7 @@ const withAppointmentTransaction = async (callback) => {
 };
 
 const updateAppointment = async (id, data, currentUser) => {
-  return withAppointmentTransaction(async (session) => {
+  const updated = await withAppointmentTransaction(async (session) => {
     const appointment = await Appointment.findById(id).session(session);
 
     if (!appointment) {
@@ -897,6 +1083,12 @@ const updateAppointment = async (id, data, currentUser) => {
 
     return appointment;
   });
+
+  if (updated) {
+    await notifyAppointmentUpdated(updated, currentUser, data);
+  }
+
+  return updated;
 };
 
 const cancelAppointment = async (id, cancellationReason, currentUser) => {
@@ -909,6 +1101,9 @@ const cancelAppointment = async (id, cancellationReason, currentUser) => {
 
 module.exports = {
   createAppointment,
+  getNotificationRecipients,
+  notifyAppointmentCreated,
+  notifyAppointmentUpdated,
   getAppointments,
   getAppointmentById,
   updateAppointment,

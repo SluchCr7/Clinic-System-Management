@@ -1,5 +1,6 @@
 const DoctorAssignment = require("../modules/DoctorAssignment/doctorAssignment.model");
 const Doctor = require("../modules/Doctor/doctor.model");
+const User = require("../modules/User/user.model");
 const Patient = require("../modules/Patient/patient.model");
 const { AppError } = require("../middlewares/errorHandler");
 
@@ -45,6 +46,32 @@ const getAuthorizedDoctorIds = async (user) => {
   }
 
   return [];
+};
+
+const getAuthorizedReceptionistIds = async (doctorId) => {
+  if (!doctorId) return [];
+
+  const assignments = await DoctorAssignment.find({
+    doctor: doctorId,
+    isActive: true,
+  })
+    .select("receptionist")
+    .lean();
+
+  const receptionistIds = assignments.map(
+    (assignment) => assignment.receptionist
+  );
+  if (!receptionistIds.length) return [];
+
+  const receptionists = await User.find({
+    _id: { $in: receptionistIds },
+    role: "receptionist",
+    isActive: true,
+  })
+    .select("_id")
+    .lean();
+
+  return receptionists.map((receptionist) => receptionist._id);
 };
 
 /**
@@ -176,6 +203,7 @@ const applyClinicScope = async (
 
 module.exports = {
   getAuthorizedDoctorIds,
+  getAuthorizedReceptionistIds,
   isDoctorAuthorizedForUser,
   assertDoctorAccess,
   assertPatientAccess,

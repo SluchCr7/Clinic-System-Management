@@ -4,6 +4,9 @@ const Appointment = require("../modules/Appointment/appointment.model");
 const Schedule = require("../modules/Schedule/schedule.model");
 const Visit = require("../modules/Visit/visit.model");
 const AuditLog = require("../modules/AuditLog/auditLog.model");
+const Notification = require("../modules/Notification/notification.model");
+const notificationService = require("../modules/Notification/notification.service");
+const appointmentService = require("../modules/Appointment/appointment.service");
 const {
   createTestUser,
   createTestDoctor,
@@ -47,6 +50,165 @@ describe("Appointments API", () => {
       createdBy: receptionist.user._id,
       ...overrides,
     });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test("notifies the assigned doctor when a receptionist creates an appointment", async () => {
+    const response = await request(app)
+      .post("/api/appointments")
+      .set("Authorization", receptionist.authHeader)
+      .send(createAppointmentPayload());
+
+    expect(response.status).toBe(201);
+
+    const notifications = await Notification.find({
+      relatedId: response.body.data._id,
+    }).lean();
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].recipient.toString()).toBe(
+      doctorUser.user._id.toString()
+    );
+    expect(notifications[0].recipient.toString()).not.toBe(
+      receptionist.user._id.toString()
+    );
+  });
+
+  test("notifies only authorized receptionists when a doctor creates a follow-up", async () => {
+    const sourceAppointment = await createSavedAppointment({
+      status: "completed",
+    });
+    const sourceVisit = await Visit.create({
+      appointment: sourceAppointment._id,
+      patient: patient._id,
+      doctor: doctor._id,
+      chiefComplaint: "Authorized follow-up",
+      createdBy: doctorUser.user._id,
+    });
+    const unauthorizedReceptionist =
+      await createTestUser({ role: "receptionist" });
+    const followUpDate = getFutureAppointmentDate(5);
+    await createTestSchedule(doctor, receptionist.user, followUpDate);
+
+    const response = await request(app)
+      .post("/api/appointments")
+      .set("Authorization", doctorUser.authHeader)
+      .send(
+        createAppointmentPayload({
+          appointmentDate: followUpDate.toISOString(),
+          isFollowUp: true,
+          originatingVisit: sourceVisit._id.toString(),
+        })
+      );
+
+    expect(response.status).toBe(201);
+
+    const notifications = await Notification.find({
+      relatedId: response.body.data._id,
+    }).lean();
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].recipient.toString()).toBe(
+      receptionist.user._id.toString()
+    );
+    expect(notifications[0].recipient.toString()).not.toBe(
+      doctorUser.user._id.toString()
+    );
+    expect(notifications[0].recipient.toString()).not.toBe(
+      unauthorizedReceptionist.user._id.toString()
+    );
+  });
+
+  test("does not return unauthorized receptionists as notification recipients", async () => {
+    const unauthorizedReceptionist =
+      await createTestUser({ role: "receptionist" });
+    const appointment = await createSavedAppointment();
+
+    const recipients = await appointmentService.getNotificationRecipients(
+      appointment,
+      doctorUser.user
+    );
+    const recipientIds = recipients.map((recipient) => recipient.toString());
+
+    expect(recipientIds).toContain(receptionist.user._id.toString());
+    expect(recipientIds).not.toContain(
+      unauthorizedReceptionist.user._id.toString()
+    );
+  });
+
+  test("createNotification failure does not fail appointment creation", async () => {
+    jest
+      .spyOn(notificationService, "createNotification")
+      .mockRejectedValueOnce(new Error("Notification delivery failed"));
+
+    const response = await request(app)
+      .post("/api/appointments")
+      .set("Authorization", receptionist.authHeader)
+      .send(createAppointmentPayload());
+
+    expect(response.status).toBe(201);
+    expect(response.body.data._id).toBeTruthy();
+  });
+
+  test("does not send notifications for appointment conflicts", async () => {
+    await createSavedAppointment();
+
+    const response = await request(app)
+      .post("/api/appointments")
+      .set("Authorization", receptionist.authHeader)
+      .send(createAppointmentPayload());
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe("APPOINTMENT_CONFLICT");
+    expect(await Notification.countDocuments()).toBe(0);
+  });
+
+  test("notifies the doctor when a receptionist reschedules an appointment", async () => {
+    const appointment = await createSavedAppointment();
+    const rescheduledDate = getFutureAppointmentDate(4);
+    await createTestSchedule(doctor, receptionist.user, rescheduledDate);
+
+    const response = await request(app)
+      .patch(`/api/appointments/${appointment._id}`)
+      .set("Authorization", receptionist.authHeader)
+      .send({ appointmentDate: rescheduledDate.toISOString() });
+
+    expect(response.status).toBe(200);
+    expect(await Notification.findOne({
+      eventKey: `appointment-rescheduled-${rescheduledDate.getTime()}:${appointment._id}:${doctorUser.user._id}`,
+    })).not.toBeNull();
+  });
+
+  test("notifies the doctor when a receptionist cancels an appointment", async () => {
+    const appointment = await createSavedAppointment();
+
+    const response = await request(app)
+      .delete(`/api/appointments/${appointment._id}`)
+      .set("Authorization", receptionist.authHeader)
+      .send({ cancellationReason: "Patient requested cancellation" });
+
+    expect(response.status).toBe(200);
+    expect(await Notification.findOne({
+      eventKey: `appointment-cancelled:${appointment._id}:${doctorUser.user._id}`,
+    })).not.toBeNull();
+  });
+
+  test("calling appointment-created notification twice is idempotent", async () => {
+    const appointment = await createSavedAppointment();
+
+    await appointmentService.notifyAppointmentCreated(
+      appointment,
+      receptionist.user
+    );
+    await appointmentService.notifyAppointmentCreated(
+      appointment,
+      receptionist.user
+    );
+
+    expect(await Notification.countDocuments({
+      eventKey: `appointment-created:${appointment._id}:${doctorUser.user._id}`,
+    })).toBe(1);
+  });
 
   test("schedules an appointment and records an audit log", async () => {
     const response = await request(app)

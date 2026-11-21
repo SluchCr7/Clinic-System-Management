@@ -583,43 +583,46 @@ export default function SettingsPage() {
       {/* Tab: Clinic Configuration */}
       {activeTab === "clinic" && (
         <div className="flex flex-col gap-5">
-          <Card>
-            <CardHeader
-              title={t("settings.clinicTitle", "Clinic Profile & Institutional Parameters")}
-              subtitle={t("settings.clinicSubtitle", "Global clinical operational guidelines and institutional identifiers")}
-            />
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div className="p-3 bg-paper rounded-lg border border-border-subtle">
-                  <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.clinicFacilityName", "Clinic Name")}</span>
-                  <p className="font-bold text-ink mt-0.5">Aegis Precision Clinic</p>
-                </div>
+          {
+            !isAdmin && (
+              <Card>
+                <CardHeader
+                  title={t("settings.clinicTitle", "Clinic Profile & Institutional Parameters")}
+                  subtitle={t("settings.clinicSubtitle", "Global clinical operational guidelines and institutional identifiers")}
+                />
+                <CardContent>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                    <div className="p-3 bg-paper rounded-lg border border-border-subtle">
+                      <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.clinicFacilityName", "Clinic Name")}</span>
+                      <p className="font-bold text-ink mt-0.5">Aegis Precision Clinic</p>
+                    </div>
 
-                <div className="p-3 bg-paper rounded-lg border border-border-subtle">
-                  <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.institutionalLicense", "License Number")}</span>
-                  <p className="font-mono font-semibold text-teal-dark mt-0.5">MOH-CLN-88319</p>
-                </div>
+                    <div className="p-3 bg-paper rounded-lg border border-border-subtle">
+                      <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.institutionalLicense", "License Number")}</span>
+                      <p className="font-mono font-semibold text-teal-dark mt-0.5">MOH-CLN-88319</p>
+                    </div>
 
-                <div className="p-3 bg-paper rounded-lg border border-border-subtle">
-                  <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.standardSlotDuration", "Slot Duration")}</span>
-                  <p className="font-medium text-ink mt-0.5">15 Minutes per Consultation</p>
-                </div>
+                    <div className="p-3 bg-paper rounded-lg border border-border-subtle">
+                      <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.standardSlotDuration", "Slot Duration")}</span>
+                      <p className="font-medium text-ink mt-0.5">15 Minutes per Consultation</p>
+                    </div>
 
-                <div className="p-3 bg-paper rounded-lg border border-border-subtle">
-                  <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.billingCurrency", "Billing Currency")}</span>
-                  <p className="font-medium text-ink mt-0.5">USD ($) • Zero-Rated Clinical Tax</p>
-                </div>
+                    <div className="p-3 bg-paper rounded-lg border border-border-subtle">
+                      <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.billingCurrency", "Billing Currency")}</span>
+                      <p className="font-medium text-ink mt-0.5">USD ($) • Zero-Rated Clinical Tax</p>
+                    </div>
 
-                <div className="p-3 bg-paper rounded-lg border border-border-subtle col-span-2">
-                  <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.operationalHours", "Operational Hours")}</span>
-                  <p className="font-medium text-ink mt-0.5">
-                    Monday – Friday: 08:00 AM – 06:00 PM • Saturday: 09:00 AM – 02:00 PM • Sunday: Urgent Care Only
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
+                    <div className="p-3 bg-paper rounded-lg border border-border-subtle col-span-2">
+                      <span className="text-[10px] uppercase font-semibold text-slate-muted">{t("settings.operationalHours", "Operational Hours")}</span>
+                      <p className="font-medium text-ink mt-0.5">
+                        Monday – Friday: 08:00 AM – 06:00 PM • Saturday: 09:00 AM – 02:00 PM • Sunday: Urgent Care Only
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          }
           {isAdmin && (
             <Card>
               <CardHeader
