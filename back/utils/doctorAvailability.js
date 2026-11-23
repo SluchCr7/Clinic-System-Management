@@ -3,6 +3,7 @@ const Visit = require("../modules/Visit/visit.model");
 const Schedule = require("../modules/Schedule/schedule.model");
 const Doctor = require("../modules/Doctor/doctor.model");
 const Patient = require("../modules/Patient/patient.model");
+const Clinic = require("../modules/Clinic/clinic.model");
 const { AppError } = require("../middlewares/errorHandler");
 
 const CLINIC_TIMEZONE = "Africa/Cairo";
@@ -152,7 +153,7 @@ const checkDoctorAvailability = async ({
     throw new AppError("Start and end times must be valid", 400, "INVALID_APPOINTMENT_TIME");
   }
 
-  const doctor = await Doctor.findById(doctorId).select("_id isActive").session(session);
+  const doctor = await Doctor.findById(doctorId).select("_id isActive clinic").session(session);
   if (!doctor || !doctor.isActive) {
     throw new AppError("Doctor is unavailable", 404, "DOCTOR_NOT_FOUND");
   }
@@ -169,6 +170,38 @@ const checkDoctorAvailability = async ({
   const conflicts = checkWorkingHours
     ? getScheduleConflicts(schedule, startDate, endDate)
     : [];
+
+  if (checkWorkingHours) {
+    let clinic = null;
+    if (doctor.clinic) {
+      clinic = await Clinic.findById(doctor.clinic).session(session);
+    }
+    if (!clinic) {
+      clinic = await Clinic.findOne({ owner_doctor_id: doctorId }).session(session);
+    }
+    if (clinic?.working_hours) {
+      const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      const dayName = dayNames[dayOfWeek];
+      const clinicDay = clinic.working_hours[dayName];
+      if (clinicDay?.closed) {
+        conflicts.push({
+          type: "CLINIC_CLOSED",
+          id: clinic._id,
+          start: startDate,
+          end: endDate,
+          patientDisplay: "العيادة مغلقة",
+        });
+      } else if (clinicDay?.emergency && !clinicDay?.open) {
+        conflicts.push({
+          type: "CLINIC_CLOSED",
+          id: clinic._id,
+          start: startDate,
+          end: endDate,
+          patientDisplay: "العيادة للطوارئ فقط",
+        });
+      }
+    }
+  }
 
   const appointmentQuery = {
     doctor: doctorId,
@@ -328,6 +361,9 @@ const throwAvailabilityConflict = (availability) => {
   if (hasVisit) {
     code = "DOCTOR_BUSY";
     message = "Doctor is in a current visit during this time";
+  } else if (availability.conflicts.some(({ type }) => type === "CLINIC_CLOSED")) {
+    code = "CLINIC_CLOSED";
+    message = "Clinic is closed at the selected appointment time";
   } else if (availability.conflicts.some(({ type }) => type === "APPOINTMENT")) {
     code = "APPOINTMENT_CONFLICT";
     message = "Doctor already has an appointment during this time";

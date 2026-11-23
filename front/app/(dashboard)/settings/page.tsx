@@ -62,6 +62,7 @@ function ClinicConfigurationForm({ clinic }: { clinic: OwnerClinicView }) {
   const [slotDuration, setSlotDuration] = useState(clinic.slot_duration_minutes);
   const [clinicCurrency, setClinicCurrency] = useState(clinic.currency);
   const [taxNote, setTaxNote] = useState(clinic.tax_note || "");
+  const [syncDoctorSchedule, setSyncDoctorSchedule] = useState(true);
   const [workingHours, setWorkingHours] = useState<Record<string, ClinicWorkingHoursDay>>(
     clinic.working_hours
   );
@@ -75,9 +76,17 @@ function ClinicConfigurationForm({ clinic }: { clinic: OwnerClinicView }) {
         slot_duration_minutes: Number(slotDuration),
         currency: clinicCurrency,
         tax_note: taxNote.trim() || null,
+        syncDoctorSchedule,
         working_hours: workingHours,
       }).unwrap();
-      toast.success(t("settings.clinicSaved", "Clinic configuration saved"));
+      toast.success(
+        syncDoctorSchedule
+          ? t(
+              "settings.clinicSavedWithSync",
+              "Clinic configuration saved and doctor schedule synchronized with no conflicts."
+            )
+          : t("settings.clinicSaved", "Clinic configuration saved.")
+      );
     } catch (err) {
       const extracted = extractApiError(err);
       toast.error(
@@ -135,6 +144,31 @@ function ClinicConfigurationForm({ clinic }: { clinic: OwnerClinicView }) {
             </div>
           );
         })}
+      </div>
+
+      {/* Doctor Schedule Auto-Sync Option */}
+      <div className="flex items-start gap-3 rounded-xl border border-teal-primary/20 bg-teal-primary/5 p-3.5">
+        <input
+          type="checkbox"
+          id="syncDoctorSchedule"
+          checked={syncDoctorSchedule}
+          onChange={(e) => setSyncDoctorSchedule(e.target.checked)}
+          className="mt-0.5 h-4 w-4 rounded border-border-medium text-teal-primary focus:ring-teal-primary"
+        />
+        <div className="flex flex-col">
+          <label htmlFor="syncDoctorSchedule" className="text-xs font-semibold text-ink cursor-pointer">
+            {t(
+              "settings.syncDoctorScheduleTitle",
+              "Automatically sync doctor schedule with clinic operational hours"
+            )}
+          </label>
+          <span className="text-[11px] text-slate-muted mt-0.5">
+            {t(
+              "settings.syncDoctorScheduleDesc",
+              "Safely aligns your personal availability with the clinic's operating days and hours, eliminating schedule conflicts and preventing patient booking on closed days."
+            )}
+          </span>
+        </div>
       </div>
 
       <div className="flex justify-end border-t border-border-subtle pt-4">

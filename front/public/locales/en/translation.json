@@ -240,7 +240,24 @@
       "invalidHours": "End time must be later than start time.",
       "incompleteBreak": "Enter both break times, or leave both blank.",
       "invalidBreak": "Break time must be within working hours.",
-      "note": "Pausing a day changes future availability only; existing appointments are not removed."
+      "note": "Pausing a day changes future availability only; existing appointments are not removed.",
+      "syncSuccess": "Weekly schedule synchronized with clinic operating hours successfully with no conflicts.",
+      "syncFailed": "Could not synchronize schedule with clinic.",
+      "clinicClosedError": "The clinic is closed on this day. Please update clinic hours in Clinic Settings to allow scheduling.",
+      "outsideClinicError": "Doctor schedule must be within clinic hours ({{open}} – {{close}}).",
+      "cannotActivateClosed": "Cannot activate availability on a day when the clinic is closed in Clinic Settings.",
+      "linkedClinic": "Linked to Clinic Schedule",
+      "syncClinicBtn": "Sync with clinic hours",
+      "clinicClosedBadge": "Clinic Closed",
+      "emergencyBadge": "Emergency Only",
+      "clinicClosedDayOff": "Clinic is closed on this day.",
+      "conflictBadge": "Conflict",
+      "conflictClosedMsg": "Clinic is marked closed on this day. Pause schedule or open the day in Clinic Settings.",
+      "conflictEmergencyMsg": "Clinic is emergency-only on this day with no regular hours.",
+      "conflictHoursMsg": "Doctor hours ({{start}} – {{end}}) exceed clinic operating hours ({{clinic}}).",
+      "editClosedWarning": "Note: The clinic is closed on this day. You cannot set an active schedule until you open the day in Clinic Settings.",
+      "allowedClinicRange": "Clinic operating hours:",
+      "useClinicHours": "Use clinic hours"
     },
     "profileTitle": "Personal Details",
     "profileSubtitle": "Update your name and clinic contact number",
@@ -264,7 +281,10 @@
     "institutionalLicense": "Institutional License",
     "standardSlotDuration": "Standard Slot Duration",
     "billingCurrency": "Billing Currency",
-    "operationalHours": "Operational Hours"
+    "operationalHours": "Operational Hours",
+    "clinicSavedWithSync": "Clinic configuration saved and doctor schedule synchronized with no conflicts.",
+    "syncDoctorScheduleTitle": "Automatically sync doctor schedule with clinic operational hours",
+    "syncDoctorScheduleDesc": "Safely aligns your personal availability with the clinic operating days and hours, eliminating schedule conflicts and preventing patient booking on closed days."
   },
   "doctors": {
     "title": "Physicians & Specialists",
@@ -1290,5 +1310,71 @@
     "colorSchemeDesc": "Clinical Precision Teal accent with high-contrast accessibility",
     "language": "Platform Language",
     "languageDesc": "Switch interface language and layout direction (RTL / LTR)"
+  },
+  "doctorAssignments": {
+    "accessDenied": {
+      "title": "Access Denied",
+      "message": "Only administrators have permission to manage doctor-receptionist clinic assignments."
+    },
+    "page": {
+      "title": "Doctor & Receptionist Assignments",
+      "subtitle": "Configure multi-clinic isolation boundaries by assigning receptionists to specific doctor clinic workspaces.",
+      "assignButton": "Assign Receptionist"
+    },
+    "filters": {
+      "allStatuses": "All Statuses",
+      "activeOnly": "Active Assignments Only",
+      "inactiveOnly": "Inactive Assignments"
+    },
+    "columns": {
+      "doctor": "Doctor / Clinic Workspace",
+      "receptionist": "Assigned Receptionist",
+      "assignedBy": "Assigned By",
+      "status": "Status",
+      "notes": "Notes",
+      "actions": "Actions"
+    },
+    "table": {
+      "doctorAvatar": "Dr",
+      "doctorName": "Dr. {{firstName}} {{lastName}}",
+      "doctorFallback": "Doctor",
+      "generalPractice": "General Practice",
+      "receptionistFallback": "Receptionist",
+      "adminFallback": "Admin",
+      "emptyTitle": "No Doctor Assignments Found",
+      "emptyDescription": "Create an assignment to grant a receptionist access to a doctor's clinic workspace."
+    },
+    "actions": {
+      "activate": "Activate",
+      "deactivate": "Deactivate",
+      "cancel": "Cancel"
+    },
+    "createModal": {
+      "title": "Assign Receptionist to Doctor",
+      "subtitle": "Grant receptionist access to manage the doctor's patients, appointments, and invoices.",
+      "doctorLabel": "Doctor Clinic Workspace",
+      "doctorPlaceholder": "Select Doctor...",
+      "doctorOption": "Dr. {{firstName}} {{lastName}} ({{specialization}})",
+      "receptionistLabel": "Receptionist",
+      "receptionistPlaceholder": "Select Receptionist...",
+      "receptionistOption": "{{firstName}} {{lastName}} ({{email}})",
+      "notesLabel": "Operational Notes (Optional)",
+      "notesPlaceholder": "e.g. Primary morning shift receptionist for Clinic A",
+      "confirm": "Confirm Assignment"
+    },
+    "confirmDialog": {
+      "deactivateTitle": "Deactivate Doctor Assignment?",
+      "activateTitle": "Activate Doctor Assignment?",
+      "deactivateMessage": "Deactivating this assignment will immediately revoke this receptionist's access to this doctor's clinic workspace, patients, and records.",
+      "activateMessage": "Activating this assignment will grant this receptionist access to manage this doctor's clinic workspace."
+    },
+    "messages": {
+      "selectBoth": "Please select both a doctor and a receptionist.",
+      "createSuccess": "Doctor assignment created successfully.",
+      "createFailed": "Failed to create assignment.",
+      "deactivateSuccess": "Assignment deactivated successfully.",
+      "activateSuccess": "Assignment activated successfully.",
+      "statusUpdateFailed": "Failed to update assignment status."
+    }
   }
 }

@@ -1,5 +1,6 @@
 const Schedule = require("./schedule.model");
 const Doctor = require("../Doctor/doctor.model");
+const Clinic = require("../Clinic/clinic.model");
 const { AppError } = require("../../middlewares/errorHandler");
 const auditLogService = require("../AuditLog/auditLog.service");
 const { paginateQuery } = require("../../utils/pagination");
@@ -13,6 +14,65 @@ const {
   applyClinicScope,
   getAuthorizedDoctorIds,
 } = require("../../utils/accessControl");
+
+const DAY_INDEX_TO_NAME = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+];
+
+const getClinicForDoctor = async (doctorId) => {
+  const doctor = await Doctor.findById(doctorId).select("clinic").lean();
+  if (doctor?.clinic) {
+    const clinic = await Clinic.findById(doctor.clinic).lean();
+    if (clinic) return clinic;
+  }
+  return await Clinic.findOne({ owner_doctor_id: doctorId }).lean();
+};
+
+const validateScheduleAgainstClinic = (clinic, dayOfWeek, { startTime, endTime, isActive }) => {
+  if (isActive === false) return;
+  if (!clinic?.working_hours) return;
+
+  const dayName = DAY_INDEX_TO_NAME[dayOfWeek];
+  const clinicDay = clinic.working_hours[dayName];
+  if (!clinicDay) return;
+
+  if (clinicDay.closed) {
+    throw new AppError(
+      `Clinic is closed on ${dayName}. Doctor schedule cannot be active on a closed day.`,
+      400,
+      "CLINIC_CLOSED_ON_DAY"
+    );
+  }
+
+  if (clinicDay.emergency && !clinicDay.open) {
+    throw new AppError(
+      `Clinic is open for emergencies only on ${dayName} with no standard operating hours.`,
+      400,
+      "CLINIC_EMERGENCY_ONLY"
+    );
+  }
+
+  if (clinicDay.open && clinicDay.close) {
+    const clinicOpen = timeToMinutes(clinicDay.open);
+    const clinicClose = timeToMinutes(clinicDay.close);
+    const docStart = timeToMinutes(startTime);
+    const docEnd = timeToMinutes(endTime);
+
+    if (docStart < clinicOpen || docEnd > clinicClose) {
+      throw new AppError(
+        `Doctor schedule (${startTime} - ${endTime}) must be within clinic operating hours (${clinicDay.open} - ${clinicDay.close}) on ${dayName}`,
+        400,
+        "SCHEDULE_OUTSIDE_CLINIC_HOURS"
+      );
+    }
+  }
+};
 
 const timeToMinutes = (time) => {
   const [hours, minutes] = time.split(":").map(Number);
@@ -129,6 +189,11 @@ const createSchedule = async (data, currentUser) => {
   await validateDoctor(doctorId);
 
   validateScheduleTimes(data);
+
+  const clinic = await getClinicForDoctor(doctorId);
+  if (clinic) {
+    validateScheduleAgainstClinic(clinic, data.dayOfWeek, data);
+  }
 
   const existingSchedule = await Schedule.findOne({
     doctor: doctorId,
@@ -300,6 +365,14 @@ const updateSchedule = async (id, data, currentUser) => {
 
   validateScheduleTimes(updatedData);
 
+  const clinic = await getClinicForDoctor(schedule.doctor);
+  if (clinic) {
+    validateScheduleAgainstClinic(clinic, updatedData.dayOfWeek, {
+      ...updatedData,
+      isActive: data.isActive !== undefined ? data.isActive : schedule.isActive,
+    });
+  }
+
   const conflictingSchedule = await Schedule.findOne({
     _id: { $ne: id },
     doctor: schedule.doctor,
@@ -396,10 +469,94 @@ const deactivateSchedule = async (id, currentUser) => {
   return schedule;
 };
 
+const syncDoctorScheduleWithClinic = async (currentUser) => {
+  if (currentUser?.role !== "doctor") {
+    throw new AppError("Only doctors can sync schedule with clinic", 403, "FORBIDDEN");
+  }
+
+  const doctorId = await getDoctorScopeId(currentUser, Doctor);
+  if (!doctorId) {
+    throw new AppError("Doctor profile not found", 404, "DOCTOR_PROFILE_NOT_FOUND");
+  }
+
+  const clinic = await getClinicForDoctor(doctorId);
+  if (!clinic || !clinic.working_hours) {
+    throw new AppError("Clinic operating hours not found", 404, "CLINIC_NOT_FOUND");
+  }
+
+  const updatedSchedules = [];
+
+  for (let day = 0; day <= 6; day++) {
+    const dayName = DAY_INDEX_TO_NAME[day];
+    const clinicDay = clinic.working_hours[dayName];
+    if (!clinicDay) continue;
+
+    let schedule = await Schedule.findOne({
+      doctor: doctorId,
+      dayOfWeek: day,
+    });
+
+    if (clinicDay.closed || (clinicDay.emergency && !clinicDay.open)) {
+      if (schedule && schedule.isActive) {
+        schedule.isActive = false;
+        schedule.updatedBy = currentUser._id;
+        await schedule.save();
+        updatedSchedules.push(schedule);
+      }
+    } else if (clinicDay.open && clinicDay.close) {
+      const cs = timeToMinutes(clinicDay.open);
+      const ce = timeToMinutes(clinicDay.close);
+
+      if (schedule) {
+        schedule.startTime = clinicDay.open;
+        schedule.endTime = clinicDay.close;
+        schedule.isActive = true;
+        if (schedule.breakStart && schedule.breakEnd) {
+          const bs = timeToMinutes(schedule.breakStart);
+          const be = timeToMinutes(schedule.breakEnd);
+          if (bs < cs || be > ce) {
+            schedule.breakStart = null;
+            schedule.breakEnd = null;
+          }
+        }
+        schedule.updatedBy = currentUser._id;
+        await schedule.save();
+        updatedSchedules.push(schedule);
+      } else {
+        schedule = await Schedule.create({
+          doctor: doctorId,
+          dayOfWeek: day,
+          startTime: clinicDay.open,
+          endTime: clinicDay.close,
+          isActive: true,
+          createdBy: currentUser._id,
+        });
+        updatedSchedules.push(schedule);
+      }
+    }
+  }
+
+  if (currentUser?._id) {
+    await auditLogService.logActivity({
+      actor: currentUser,
+      action: "SCHEDULE_SYNCED_WITH_CLINIC",
+      resource: "Schedule",
+      details: {
+        doctorId,
+        clinicId: clinic._id,
+        syncedDays: updatedSchedules.map((s) => s.dayOfWeek),
+      },
+    });
+  }
+
+  return updatedSchedules;
+};
+
 module.exports = {
   createSchedule,
   getSchedules,
   getScheduleById,
   updateSchedule,
   deactivateSchedule,
+  syncDoctorScheduleWithClinic,
 };

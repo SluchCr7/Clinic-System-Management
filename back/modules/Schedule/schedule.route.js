@@ -29,6 +29,14 @@ router.get(
   scheduleController.getSchedules
 );
 
+// Sync Doctor Schedule with Clinic Working Hours
+router.post(
+  "/sync-clinic",
+  protect,
+  authorize("doctor"),
+  scheduleController.syncClinicSchedule
+);
+
 // Get Schedule By ID
 router.get(
   "/:id",

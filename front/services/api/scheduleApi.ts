@@ -67,6 +67,14 @@ export const scheduleApi = baseApi.injectEndpoints({
         { type: "Schedule", id: "LIST" },
       ],
     }),
+
+    syncClinicSchedule: builder.mutation<ApiResponse<Schedule[]>, void>({
+      query: () => ({
+        url: "/schedules/sync-clinic",
+        method: "POST",
+      }),
+      invalidatesTags: [{ type: "Schedule", id: "LIST" }],
+    }),
   }),
 });
 
@@ -76,4 +84,5 @@ export const {
   useCreateScheduleMutation,
   useUpdateScheduleMutation,
   useDeactivateScheduleMutation,
+  useSyncClinicScheduleMutation,
 } = scheduleApi;

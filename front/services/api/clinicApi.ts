@@ -15,14 +15,19 @@ export const clinicApi = baseApi.injectEndpoints({
     }),
     updateMyClinic: builder.mutation<
       ApiResponse<OwnerClinicView>,
-      Partial<Omit<OwnerClinicView, "id" | "owner_doctor_id">>
+      Partial<Omit<OwnerClinicView, "id" | "owner_doctor_id">> & {
+        syncDoctorSchedule?: boolean;
+      }
     >({
       query: (body) => ({
         url: "/clinics/me",
         method: "PATCH",
         body,
       }),
-      invalidatesTags: [{ type: "Clinic", id: "ME" }],
+      invalidatesTags: [
+        { type: "Clinic", id: "ME" },
+        { type: "Schedule", id: "LIST" },
+      ],
     }),
   }),
 });

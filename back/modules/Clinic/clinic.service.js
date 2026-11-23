@@ -1,7 +1,14 @@
 const Clinic = require("./clinic.model");
 const Doctor = require("../Doctor/doctor.model");
 const DoctorAssignment = require("../DoctorAssignment/doctorAssignment.model");
+const Schedule = require("../Schedule/schedule.model");
 const { AppError } = require("../../middlewares/errorHandler");
+
+const timeToMinutes = (time) => {
+  if (!time) return null;
+  const [hours, minutes] = time.split(":").map(Number);
+  return hours * 60 + minutes;
+};
 
 const ownerClinicView = (clinic) => ({
   id: clinic._id,
@@ -134,6 +141,79 @@ const updateMyClinic = async (currentUser, data) => {
   }
 
   await clinic.save();
+
+  if (data.working_hours) {
+    const shouldSync = data.syncDoctorSchedule !== false;
+    const existingSchedules = await Schedule.find({ doctor: doctor._id });
+    const scheduleByDay = new Map(existingSchedules.map((s) => [s.dayOfWeek, s]));
+    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+    for (let day = 0; day <= 6; day++) {
+      const dayName = dayNames[day];
+      const clinicDay = data.working_hours[dayName];
+      if (!clinicDay) continue;
+
+      let schedule = scheduleByDay.get(day);
+
+      if (clinicDay.closed || (clinicDay.emergency && !clinicDay.open)) {
+        if (schedule && schedule.isActive) {
+          schedule.isActive = false;
+          schedule.updatedBy = currentUser._id;
+          await schedule.save();
+        }
+      } else if (clinicDay.open && clinicDay.close) {
+        const cs = timeToMinutes(clinicDay.open);
+        const ce = timeToMinutes(clinicDay.close);
+
+        if (schedule) {
+          if (shouldSync) {
+            schedule.startTime = clinicDay.open;
+            schedule.endTime = clinicDay.close;
+            schedule.isActive = true;
+            if (schedule.breakStart && schedule.breakEnd) {
+              const bs = timeToMinutes(schedule.breakStart);
+              const be = timeToMinutes(schedule.breakEnd);
+              if (bs < cs || be > ce) {
+                schedule.breakStart = null;
+                schedule.breakEnd = null;
+              }
+            }
+          } else if (schedule.isActive) {
+            let docStart = timeToMinutes(schedule.startTime);
+            let docEnd = timeToMinutes(schedule.endTime);
+            if (docStart < cs) schedule.startTime = clinicDay.open;
+            if (docEnd > ce) schedule.endTime = clinicDay.close;
+            if (timeToMinutes(schedule.startTime) >= timeToMinutes(schedule.endTime)) {
+              schedule.startTime = clinicDay.open;
+              schedule.endTime = clinicDay.close;
+            }
+            if (schedule.breakStart && schedule.breakEnd) {
+              const bs = timeToMinutes(schedule.breakStart);
+              const be = timeToMinutes(schedule.breakEnd);
+              const ns = timeToMinutes(schedule.startTime);
+              const ne = timeToMinutes(schedule.endTime);
+              if (bs < ns || be > ne) {
+                schedule.breakStart = null;
+                schedule.breakEnd = null;
+              }
+            }
+          }
+          schedule.updatedBy = currentUser._id;
+          await schedule.save();
+        } else if (shouldSync) {
+          await Schedule.create({
+            doctor: doctor._id,
+            dayOfWeek: day,
+            startTime: clinicDay.open,
+            endTime: clinicDay.close,
+            isActive: true,
+            createdBy: currentUser._id,
+          });
+        }
+      }
+    }
+  }
+
   return ownerClinicView(clinic);
 };
 

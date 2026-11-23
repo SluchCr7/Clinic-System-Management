@@ -29,6 +29,7 @@ const updateClinicSchema = Joi.object({
   slot_duration_minutes: Joi.number().integer().positive(),
   currency: Joi.string().valid("USD", "EGP", "EUR", "SAR", "AED", "GBP"),
   tax_note: Joi.string().max(300).trim().allow("", null),
+  syncDoctorSchedule: Joi.boolean(),
   working_hours: Joi.object({
     sunday: workingHoursDaySchema,
     monday: workingHoursDaySchema,

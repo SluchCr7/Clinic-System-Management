@@ -82,9 +82,11 @@ export default function DoctorAssignmentsPage() {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center">
         <LuShieldAlert className="w-12 h-12 text-status-error mb-3" />
-        <h2 className="text-lg font-semibold text-ink">Access Denied</h2>
+        <h2 className="text-lg font-semibold text-ink">
+          {t("doctorAssignments.accessDenied.title")}
+        </h2>
         <p className="text-sm text-slate-muted mt-1">
-          Only administrators have permission to manage doctor-receptionist clinic assignments.
+          {t("doctorAssignments.accessDenied.message")}
         </p>
       </div>
     );
@@ -103,7 +105,7 @@ export default function DoctorAssignmentsPage() {
   const handleCreateAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createForm.doctor || !createForm.receptionist) {
-      setCreateError("Please select both a doctor and a receptionist.");
+      setCreateError(t("doctorAssignments.messages.selectBoth"));
       return;
     }
 
@@ -114,12 +116,14 @@ export default function DoctorAssignmentsPage() {
         notes: createForm.notes.trim() || undefined,
       }).unwrap();
 
-      toast.success("Doctor assignment created successfully.");
+      toast.success(t("doctorAssignments.messages.createSuccess"));
       setIsCreateModalOpen(false);
     } catch (err) {
       const extracted = extractApiError(err);
-      setCreateError(extracted.message || "Failed to create assignment.");
-      toast.error(extracted.message || "Failed to create assignment.");
+      const message =
+        extracted.message || t("doctorAssignments.messages.createFailed");
+      setCreateError(message);
+      toast.error(message);
     }
   };
 
@@ -129,40 +133,48 @@ export default function DoctorAssignmentsPage() {
     try {
       if (selectedAssignment.isActive) {
         await deleteAssignment(selectedAssignment._id).unwrap();
-        toast.success("Assignment deactivated successfully.");
+        toast.success(t("doctorAssignments.messages.deactivateSuccess"));
       } else {
         await updateAssignment({
           id: selectedAssignment._id,
           data: { isActive: true },
         }).unwrap();
-        toast.success("Assignment activated successfully.");
+        toast.success(t("doctorAssignments.messages.activateSuccess"));
       }
       setIsConfirmDialogOpen(false);
       setSelectedAssignment(null);
     } catch (err) {
       const extracted = extractApiError(err);
-      toast.error(extracted.message || "Failed to update assignment status.");
+      toast.error(
+        extracted.message || t("doctorAssignments.messages.statusUpdateFailed")
+      );
     }
   };
 
   const columns: Column<DoctorAssignment>[] = [
     {
       key: "doctor",
-      header: "Doctor / Clinic Workspace",
+      header: t("doctorAssignments.columns.doctor"),
       render: (a) => {
         const doc = typeof a.doctor === "object" ? a.doctor : null;
         const u = doc && typeof doc.user === "object" ? doc.user : null;
         return (
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-teal-subtle text-teal-dark font-semibold text-xs flex items-center justify-center shrink-0">
-              Dr
+              {t("doctorAssignments.table.doctorAvatar")}
             </div>
             <div>
               <p className="font-semibold text-ink leading-tight">
-                {u ? `Dr. ${u.firstName} ${u.lastName}` : "Doctor"}
+                {u
+                  ? t("doctorAssignments.table.doctorName", {
+                      firstName: u.firstName,
+                      lastName: u.lastName,
+                    })
+                  : t("doctorAssignments.table.doctorFallback")}
               </p>
               <p className="text-[11px] text-teal-dark font-medium">
-                {doc?.specialization || "General Practice"}
+                {doc?.specialization ||
+                  t("doctorAssignments.table.generalPractice")}
               </p>
             </div>
           </div>
@@ -171,13 +183,15 @@ export default function DoctorAssignmentsPage() {
     },
     {
       key: "receptionist",
-      header: "Assigned Receptionist",
+      header: t("doctorAssignments.columns.receptionist"),
       render: (a) => {
         const rec = typeof a.receptionist === "object" ? a.receptionist : null;
         return (
           <div>
             <p className="font-medium text-ink leading-tight">
-              {rec ? `${rec.firstName} ${rec.lastName}` : "Receptionist"}
+              {rec
+                ? `${rec.firstName} ${rec.lastName}`
+                : t("doctorAssignments.table.receptionistFallback")}
             </p>
             <p className="text-[11px] text-slate-muted">{rec?.email || "-"}</p>
           </div>
@@ -186,26 +200,28 @@ export default function DoctorAssignmentsPage() {
     },
     {
       key: "assignedBy",
-      header: "Assigned By",
+      header: t("doctorAssignments.columns.assignedBy"),
       render: (a) => {
         const by = typeof a.assignedBy === "object" ? a.assignedBy : null;
         return (
           <span className="text-xs text-slate-dark">
-            {by ? `${by.firstName} ${by.lastName}` : "Admin"}
+            {by
+              ? `${by.firstName} ${by.lastName}`
+              : t("doctorAssignments.table.adminFallback")}
           </span>
         );
       },
     },
     {
       key: "status",
-      header: "Status",
+      header: t("doctorAssignments.columns.status"),
       render: (a) => (
         <StatusBadge status={a.isActive ? "active" : "inactive"} size="sm" />
       ),
     },
     {
       key: "notes",
-      header: "Notes",
+      header: t("doctorAssignments.columns.notes"),
       render: (a) => (
         <span className="text-xs text-slate-muted truncate max-w-[180px] block">
           {a.notes || "-"}
@@ -214,7 +230,7 @@ export default function DoctorAssignmentsPage() {
     },
     {
       key: "actions",
-      header: "Actions",
+      header: t("doctorAssignments.columns.actions"),
       align: "right",
       render: (a) => (
         <Button
@@ -226,7 +242,9 @@ export default function DoctorAssignmentsPage() {
           }}
           leftIcon={<LuPower className="w-3.5 h-3.5" />}
         >
-          {a.isActive ? "Deactivate" : "Activate"}
+          {a.isActive
+            ? t("doctorAssignments.actions.deactivate")
+            : t("doctorAssignments.actions.activate")}
         </Button>
       ),
     },
@@ -235,8 +253,8 @@ export default function DoctorAssignmentsPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Doctor & Receptionist Assignments"
-        subtitle="Configure multi-clinic isolation boundaries by assigning receptionists to specific doctor clinic workspaces."
+        title={t("doctorAssignments.page.title")}
+        subtitle={t("doctorAssignments.page.subtitle")}
         actions={
           <Button
             variant="primary"
@@ -244,7 +262,7 @@ export default function DoctorAssignmentsPage() {
             onClick={handleOpenCreateModal}
             leftIcon={<LuPlus className="w-3.5 h-3.5" />}
           >
-            Assign Receptionist
+            {t("doctorAssignments.page.assignButton")}
           </Button>
         }
       />
@@ -268,9 +286,15 @@ export default function DoctorAssignmentsPage() {
             })
           }
           options={[
-            { value: "", label: "All Statuses" },
-            { value: "true", label: "Active Assignments Only" },
-            { value: "false", label: "Inactive Assignments" },
+            { value: "", label: t("doctorAssignments.filters.allStatuses") },
+            {
+              value: "true",
+              label: t("doctorAssignments.filters.activeOnly"),
+            },
+            {
+              value: "false",
+              label: t("doctorAssignments.filters.inactiveOnly"),
+            },
           ]}
           className="w-48"
         />
@@ -284,16 +308,16 @@ export default function DoctorAssignmentsPage() {
         isError={isError}
         pagination={data?.pagination}
         onPageChange={(page) => setQueryParams({ ...queryParams, page })}
-        emptyTitle="No Doctor Assignments Found"
-        emptyDescription="Create an assignment to grant a receptionist access to a doctor's clinic workspace."
+        emptyTitle={t("doctorAssignments.table.emptyTitle")}
+        emptyDescription={t("doctorAssignments.table.emptyDescription")}
       />
 
       {/* Create Assignment Modal */}
       <Modal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        title="Assign Receptionist to Doctor"
-        subtitle="Grant receptionist access to manage the doctor's patients, appointments, and invoices."
+        title={t("doctorAssignments.createModal.title")}
+        subtitle={t("doctorAssignments.createModal.subtitle")}
       >
         <form onSubmit={handleCreateAssignment} className="flex flex-col gap-4">
           {createError && (
@@ -303,20 +327,27 @@ export default function DoctorAssignmentsPage() {
           )}
 
           <Select
-            label="Doctor Clinic Workspace"
+            label={t("doctorAssignments.createModal.doctorLabel")}
             required
             value={createForm.doctor}
             onChange={(e) =>
               setCreateForm({ ...createForm, doctor: e.target.value })
             }
             options={[
-              { value: "", label: "Select Doctor..." },
+              {
+                value: "",
+                label: t("doctorAssignments.createModal.doctorPlaceholder"),
+              },
               ...(doctorsData?.data?.map((d) => {
                 const u = typeof d.user === "object" ? d.user : null;
                 return {
                   value: d._id,
                   label: u
-                    ? `Dr. ${u.firstName} ${u.lastName} (${d.specialization})`
+                    ? t("doctorAssignments.createModal.doctorOption", {
+                        firstName: u.firstName,
+                        lastName: u.lastName,
+                        specialization: d.specialization,
+                      })
                     : d.specialization,
                 };
               }) || []),
@@ -324,24 +355,33 @@ export default function DoctorAssignmentsPage() {
           />
 
           <Select
-            label="Receptionist"
+            label={t("doctorAssignments.createModal.receptionistLabel")}
             required
             value={createForm.receptionist}
             onChange={(e) =>
               setCreateForm({ ...createForm, receptionist: e.target.value })
             }
             options={[
-              { value: "", label: "Select Receptionist..." },
+              {
+                value: "",
+                label: t(
+                  "doctorAssignments.createModal.receptionistPlaceholder"
+                ),
+              },
               ...(receptionistsData?.data?.map((r) => ({
                 value: r._id,
-                label: `${r.firstName} ${r.lastName} (${r.email})`,
+                label: t("doctorAssignments.createModal.receptionistOption", {
+                  firstName: r.firstName,
+                  lastName: r.lastName,
+                  email: r.email,
+                }),
               })) || []),
             ]}
           />
 
           <Textarea
-            label="Operational Notes (Optional)"
-            placeholder="e.g. Primary morning shift receptionist for Clinic A"
+            label={t("doctorAssignments.createModal.notesLabel")}
+            placeholder={t("doctorAssignments.createModal.notesPlaceholder")}
             value={createForm.notes}
             onChange={(e) =>
               setCreateForm({ ...createForm, notes: e.target.value })
@@ -356,7 +396,7 @@ export default function DoctorAssignmentsPage() {
               size="sm"
               onClick={() => setIsCreateModalOpen(false)}
             >
-              Cancel
+              {t("doctorAssignments.actions.cancel")}
             </Button>
             <Button
               type="submit"
@@ -365,7 +405,7 @@ export default function DoctorAssignmentsPage() {
               isLoading={isCreating}
               leftIcon={<LuUserCheck className="w-3.5 h-3.5" />}
             >
-              Confirm Assignment
+              {t("doctorAssignments.createModal.confirm")}
             </Button>
           </div>
         </form>
@@ -382,15 +422,19 @@ export default function DoctorAssignmentsPage() {
         isLoading={isUpdating || isDeleting}
         title={
           selectedAssignment?.isActive
-            ? "Deactivate Doctor Assignment?"
-            : "Activate Doctor Assignment?"
+            ? t("doctorAssignments.confirmDialog.deactivateTitle")
+            : t("doctorAssignments.confirmDialog.activateTitle")
         }
         message={
           selectedAssignment?.isActive
-            ? "Deactivating this assignment will immediately revoke this receptionist's access to this doctor's clinic workspace, patients, and records."
-            : "Activating this assignment will grant this receptionist access to manage this doctor's clinic workspace."
+            ? t("doctorAssignments.confirmDialog.deactivateMessage")
+            : t("doctorAssignments.confirmDialog.activateMessage")
         }
-        confirmText={selectedAssignment?.isActive ? "Deactivate" : "Activate"}
+        confirmText={
+          selectedAssignment?.isActive
+            ? t("doctorAssignments.actions.deactivate")
+            : t("doctorAssignments.actions.activate")
+        }
         variant={selectedAssignment?.isActive ? "danger" : "primary"}
       />
     </div>

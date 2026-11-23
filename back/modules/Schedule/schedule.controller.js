@@ -91,10 +91,21 @@ const deactivateSchedule = asyncHandler(async (req, res) => {
   });
 });
 
+const syncClinicSchedule = asyncHandler(async (req, res) => {
+  const schedules = await scheduleService.syncDoctorScheduleWithClinic(req.user);
+
+  res.status(200).json({
+    success: true,
+    message: "Doctor schedule successfully synchronized with clinic operating hours",
+    data: schedules,
+  });
+});
+
 module.exports = {
   createSchedule,
   getSchedules,
   getScheduleById,
   updateSchedule,
   deactivateSchedule,
+  syncClinicSchedule,
 };
