@@ -187,6 +187,14 @@ export interface ExtractedApiError {
   code: string;
   message: string;
   errors?: string[] | Array<{ field: string; message: string }>;
+  conflicts?: Array<{
+    type: string;
+    id: string | null;
+    start: string;
+    end: string;
+    patientDisplay: string;
+  }>;
+  nextAvailableSlots?: Array<{ start: string; end: string }>;
 }
 
 export function extractApiError(error: unknown): ExtractedApiError {
@@ -202,6 +210,8 @@ export function extractApiError(error: unknown): ExtractedApiError {
         code: data?.code || (typeof status === "number" ? `HTTP_${status}` : "NETWORK_ERROR"),
         message: data?.message || "An unexpected error occurred",
         errors: data?.errors,
+        conflicts: data?.conflicts,
+        nextAvailableSlots: data?.nextAvailableSlots,
       };
     }
   }

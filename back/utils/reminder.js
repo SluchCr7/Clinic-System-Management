@@ -4,6 +4,10 @@ const User = require("../modules/User/user.model");
 const ReminderSettings = require("../modules/Notification/reminderSettings.model");
 const notificationService = require("../modules/Notification/notification.service");
 const reminderSettingsService = require("../modules/Notification/reminderSettings.service");
+const Visit = require("../modules/Visit/visit.model");
+const Notification = require("../modules/Notification/notification.model");
+const { getAuthorizedReceptionistIds } = require("./accessControl");
+const Doctor = require("../modules/Doctor/doctor.model");
 const { formatAppointmentReminder } = require("./appointmentReminder");
 
 const CRON_EXPRESSION = "* * * * *";
@@ -120,14 +124,88 @@ const runAppointmentReminders = async () => {
   return { processed, enabled: true };
 };
 
+const runLateVisitReminders = async () => {
+  const now = new Date();
+  const visits = await Visit.find({ status: "in_progress" })
+    .populate("patient", "firstName lastName")
+    .populate({
+      path: "appointment",
+      select: "appointmentDate duration",
+    })
+    .populate({
+      path: "doctor",
+      select: "user",
+      populate: {
+        path: "user",
+        select: "firstName lastName",
+      },
+    });
+
+  let processed = 0;
+  for (const visit of visits) {
+    if (!visit.appointment || !visit.doctor) continue;
+    const expectedEnd =
+      new Date(visit.appointment.appointmentDate).getTime() +
+      (visit.appointment.duration || 30) * 60 * 1000;
+    if (now.getTime() < expectedEnd) continue;
+
+    const patientName =
+      `${visit.patient?.firstName || ""} ${visit.patient?.lastName || ""}`.trim() ||
+      "المريض";
+    const appointmentTime = new Intl.DateTimeFormat("ar-EG", {
+      timeZone: "Africa/Cairo",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(new Date(visit.appointment.appointmentDate));
+    const receptionistIds = await getAuthorizedReceptionistIds(visit.doctor._id);
+    const recipientIds = new Set(
+      [
+        visit.doctor.user?._id,
+        ...receptionistIds,
+      ].filter(Boolean).map((id) => id.toString())
+    );
+
+    for (const recipientId of recipientIds) {
+      const eventKey = `visit-delayed:${visit._id}:${recipientId}`;
+      await Notification.findOneAndUpdate(
+        { eventKey },
+        {
+          $setOnInsert: {
+            recipient: recipientId,
+            type: "appointment",
+            title: "الزيارة الحالية تجاوزت موعدها",
+            message:
+              `الزيارة الحالية تجاوزت وقتها، موعد المريض ${patientName} الساعة ${appointmentTime} قد يتأخر. أعد جدولته أو أبلغ المريض.`,
+            relatedModel: "Visit",
+            relatedId: visit._id,
+            eventKey,
+            actor: null,
+            entityType: "Visit",
+            entityId: visit._id,
+            link: `/visits/${visit._id}`,
+            priority: "high",
+          },
+        },
+        { upsert: true, new: true }
+      );
+      processed += 1;
+    }
+  }
+  return { processed };
+};
+
 const startReminderJob = () => {
   if (reminderTask) return reminderTask;
 
   const runAndLogErrors = () => {
     if (!runningJob) {
-      runningJob = runAppointmentReminders()
+      runningJob = Promise.all([
+        runAppointmentReminders(),
+        runLateVisitReminders(),
+      ])
         .catch((error) => {
-          console.error("Appointment reminder worker failed:", error);
+          console.error("Reminder worker failed:", error);
         })
         .finally(() => {
           runningJob = null;
@@ -156,6 +234,7 @@ const stopReminderJob = async () => {
 
 module.exports = {
   runAppointmentReminders,
+  runLateVisitReminders,
   startReminderJob,
   stopReminderJob,
 };

@@ -15,6 +15,9 @@ const createNotificationSchema = Joi.object({
       "payment",
       "prescription",
       "medical_attachment",
+      "visit_completed",
+      "lab_result",
+      "lab_cancelled",
       "system"
     )
     .required(),
@@ -37,11 +40,17 @@ const createNotificationSchema = Joi.object({
       "LabOrder",
       "Payment",
       "Prescription",
-      "MedicalAttachment"
+      "MedicalAttachment",
+      "Visit"
     )
     .optional(),
 
   relatedId: objectId.optional(),
+  actor: objectId.optional(),
+  entityType: Joi.string().trim().max(100).optional(),
+  entityId: objectId.optional(),
+  link: Joi.string().trim().max(500).optional(),
+  priority: Joi.string().valid("low", "medium", "high").optional(),
 });
 
 const markAsReadSchema = Joi.object({
@@ -60,6 +69,9 @@ const notificationListQuerySchema = createListQuerySchema({
       "payment",
       "prescription",
       "medical_attachment",
+      "visit_completed",
+      "lab_result",
+      "lab_cancelled",
       "system"
     ),
   },

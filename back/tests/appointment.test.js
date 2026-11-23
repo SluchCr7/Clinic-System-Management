@@ -163,6 +163,97 @@ describe("Appointments API", () => {
     expect(await Notification.countDocuments()).toBe(0);
   });
 
+  test("rejects booking during another patient's in-progress visit", async () => {
+    const visitAppointment = await createSavedAppointment({
+      status: "checked_in",
+      appointmentDate,
+    });
+    await Visit.create({
+      appointment: visitAppointment._id,
+      patient: patient._id,
+      doctor: doctor._id,
+      chiefComplaint: "Current consultation",
+      status: "in_progress",
+      startedAt: new Date(),
+      createdBy: doctorUser.user._id,
+    });
+
+    const otherPatient = await createTestPatient(receptionist.user, {
+      doctor: doctor._id,
+    });
+    const response = await request(app)
+      .post("/api/appointments")
+      .set("Authorization", receptionist.authHeader)
+      .send(
+        createAppointmentPayload({
+          patient: otherPatient._id.toString(),
+          appointmentDate: new Date(
+            appointmentDate.getTime() + 5 * 60 * 1000
+          ).toISOString(),
+        })
+      );
+
+    expect(response.status).toBe(409);
+    expect(["DOCTOR_BUSY", "APPOINTMENT_CONFLICT"]).toContain(
+      response.body.code
+    );
+  });
+
+  test("rejects overlapping appointments for the same patient across doctors", async () => {
+    const otherDoctor = await createTestDoctor(admin.user);
+    const crossPatient = await createTestPatient(admin.user, {
+      doctor: otherDoctor.doctor._id,
+    });
+    await Appointment.create({
+      patient: crossPatient._id,
+      doctor: doctor._id,
+      appointmentDate,
+      duration: 30,
+      status: "scheduled",
+      createdBy: admin.user._id,
+    });
+    await createTestSchedule(otherDoctor.doctor, receptionist.user, appointmentDate);
+
+    const response = await request(app)
+      .post("/api/appointments")
+      .set("Authorization", admin.authHeader)
+      .send(
+        createAppointmentPayload({
+          patient: crossPatient._id.toString(),
+          doctor: otherDoctor.doctor._id.toString(),
+        })
+      );
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe("PATIENT_DOUBLE_BOOKED");
+  });
+
+  test("allows ten concurrent bookings to have only one success", async () => {
+    const patients = await Promise.all(
+      Array.from({ length: 10 }, () =>
+        createTestPatient(receptionist.user, { doctor: doctor._id })
+      )
+    );
+
+    const responses = await Promise.all(
+      patients.map((concurrentPatient) =>
+        request(app)
+          .post("/api/appointments")
+          .set("Authorization", receptionist.authHeader)
+          .send(
+            createAppointmentPayload({
+              patient: concurrentPatient._id.toString(),
+            })
+          )
+      )
+    );
+
+    expect(responses.filter((response) => response.status === 201)).toHaveLength(1);
+    expect(
+      responses.filter((response) => response.status === 409).length
+    ).toBeGreaterThanOrEqual(9);
+  });
+
   test("notifies the doctor when a receptionist reschedules an appointment", async () => {
     const appointment = await createSavedAppointment();
     const rescheduledDate = getFutureAppointmentDate(4);
@@ -542,7 +633,7 @@ describe("Appointments API", () => {
     const appointment = await createSavedAppointment();
     const otherAppointment = await createSavedAppointment({
       doctor: otherDoctor.doctor._id,
-      appointmentDate: new Date(appointmentDate.getTime() + 60 * 60 * 1000),
+      appointmentDate: new Date(appointmentDate.getTime() + 5 * 60 * 1000),
     });
 
     const ownResponse = await request(app)
@@ -635,6 +726,46 @@ describe("Appointments API", () => {
       .send({ status: "completed" });
     expect(recCompleteRes.status).toBe(403);
     expect(recCompleteRes.body.code).toBe("FORBIDDEN");
+  });
+
+  test("rejects starting a visit while another visit is in progress", async () => {
+    const firstAppointment = await createSavedAppointment({
+      status: "checked_in",
+    });
+    await Visit.create({
+      appointment: firstAppointment._id,
+      patient: patient._id,
+      doctor: doctor._id,
+      chiefComplaint: "First visit",
+      status: "in_progress",
+      startedAt: new Date(),
+      createdBy: doctorUser.user._id,
+    });
+
+    const secondPatient = await createTestPatient(receptionist.user, {
+      doctor: doctor._id,
+    });
+    const secondAppointment = await Appointment.create({
+      patient: secondPatient._id,
+      doctor: doctor._id,
+      appointmentDate: new Date(appointmentDate.getTime() + 5 * 60 * 1000),
+      duration: 30,
+      status: "checked_in",
+      createdBy: receptionist.user._id,
+    });
+
+    const response = await request(app)
+      .post("/api/visits")
+      .set("Authorization", doctorUser.authHeader)
+      .send({
+        appointment: secondAppointment._id.toString(),
+        patient: secondPatient._id.toString(),
+        doctor: doctor._id.toString(),
+        chiefComplaint: "Second visit",
+      });
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe("DOCTOR_BUSY");
   });
 
   test("requires visits to be started through the assigned doctor's workflow", async () => {

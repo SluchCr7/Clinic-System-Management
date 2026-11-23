@@ -4,8 +4,15 @@ const Visit = require("../Visit/visit.model");
 const Patient = require("../Patient/patient.model");
 const Doctor = require("../Doctor/doctor.model");
 const auditLogService = require("../AuditLog/auditLog.service");
+const {
+  applyClinicScope,
+  assertPatientAccess,
+  getAuthorizedReceptionistIds,
+} = require("../../utils/accessControl");
 
 const { AppError } = require("../../middlewares/errorHandler");
+const Notification = require("../Notification/notification.model");
+const { getIO } = require("../../utils/socket");
 const { assertVisitInProgress } = require("../../utils/visitLifecycle");
 
 const { paginateQuery } = require("../../utils/pagination");
@@ -149,6 +156,7 @@ const createLabOrder = async (
   }
 
   const {
+    type,
     visit,
     patient,
     doctor,
@@ -157,6 +165,9 @@ const createLabOrder = async (
     priority,
     notes,
     orderedAt,
+    instructions,
+    clinicalNotes,
+    expectedBy,
   } = data;
 
   const doctorId = await getDoctorScopeId(currentUser, Doctor);
@@ -201,6 +212,7 @@ const createLabOrder = async (
   }
 
   const labOrder = await LabOrder.create({
+    type: type || "LAB",
     visit,
     patient,
     doctor,
@@ -209,6 +221,11 @@ const createLabOrder = async (
     priority,
     notes,
     orderedAt,
+    requestedAt: orderedAt || new Date(),
+    requestedBy: currentUser._id,
+    instructions,
+    clinicalNotes,
+    expectedBy,
     createdBy: currentUser._id,
   });
 
@@ -232,6 +249,10 @@ const createLabOrder = async (
       reason: labOrder.reason,
       priority: labOrder.priority,
       notes: labOrder.notes,
+      type: labOrder.type,
+      instructions: labOrder.instructions,
+      clinicalNotes: labOrder.clinicalNotes,
+      expectedBy: labOrder.expectedBy,
 
       status: labOrder.status,
       orderedAt: labOrder.orderedAt,
@@ -247,6 +268,10 @@ const createLabOrder = async (
 
 const getLabOrders = async (query = {}, currentUser = null) => {
   const filter = {};
+
+  if (query.type) {
+    filter.type = query.type;
+  }
 
   if (query.visit) {
     filter.visit = query.visit;
@@ -278,7 +303,7 @@ const getLabOrders = async (query = {}, currentUser = null) => {
   }
 
   applyCairoDateRange(filter, "orderedAt", query);
-  await applyDoctorScope(filter, query, currentUser, Doctor);
+  await applyClinicScope(filter, query, currentUser, "doctor");
 
   return paginateQuery(
     LabOrder.find(filter)
@@ -333,13 +358,7 @@ const getLabOrders = async (query = {}, currentUser = null) => {
 
 const getLabOrderById = async (id, currentUser = null) => {
   const filter = { _id: id };
-  if (currentUser?.role === "doctor") {
-    const doctorId = await getDoctorScopeId(currentUser, Doctor);
-    if (!doctorId) return null;
-    filter.doctor = doctorId;
-  }
-
-  return await LabOrder.findOne(filter)
+  const labOrder = await LabOrder.findOne(filter)
     .populate(
       "patient",
       "firstName lastName phone email dateOfBirth gender bloodType"
@@ -365,7 +384,15 @@ const getLabOrderById = async (id, currentUser = null) => {
     .populate(
       "updatedBy",
       "firstName lastName email role"
+    )
+    .populate(
+      "resultAttachment",
+      "title description file type patient visit uploadedBy"
     );
+
+  if (!labOrder) return null;
+  await assertPatientAccess(currentUser, labOrder.patient);
+  return labOrder;
 };
 
 // ---------------------------------------------
@@ -377,7 +404,7 @@ const updateLabOrder = async (
   data,
   currentUser
 ) => {
-  if (!currentUser || !["admin", "doctor"].includes(currentUser.role)) {
+  if (!currentUser || !["admin", "doctor", "receptionist"].includes(currentUser.role)) {
     throw new AppError(
       "You do not have permission to update lab orders",
       403,
@@ -386,11 +413,6 @@ const updateLabOrder = async (
   }
 
   const filter = { _id: id };
-  if (currentUser?.role === "doctor") {
-    const doctorId = await getDoctorScopeId(currentUser, Doctor);
-    if (!doctorId) return null;
-    filter.doctor = doctorId;
-  }
 
   const labOrder =
     await LabOrder.findOne(filter);
@@ -398,22 +420,8 @@ const updateLabOrder = async (
   if (!labOrder) {
     return null;
   }
-
-  // -------------------------------------------
-  // Prevent modification of finalized orders
-  // -------------------------------------------
-
-  if (
-    ["completed", "cancelled"].includes(
-      labOrder.status
-    )
-  ) {
-    throw new AppError(
-      "Completed or cancelled lab orders cannot be modified",
-      400,
-      "LAB_ORDER_LOCKED"
-    );
-  }
+  const patientRecord = await Patient.findById(labOrder.patient);
+  await assertPatientAccess(currentUser, patientRecord);
 
   // -------------------------------------------
   // Save Previous Values For Audit
@@ -425,6 +433,10 @@ const updateLabOrder = async (
     priority: labOrder.priority,
     notes: labOrder.notes,
     orderedAt: labOrder.orderedAt,
+    type: labOrder.type,
+    instructions: labOrder.instructions,
+    clinicalNotes: labOrder.clinicalNotes,
+    expectedBy: labOrder.expectedBy,
     status: labOrder.status,
   };
 
@@ -454,6 +466,22 @@ const updateLabOrder = async (
     labOrder.notes = data.notes;
   }
 
+  if (data.type !== undefined) {
+    if (labOrder.status !== "REQUESTED") {
+      throw new AppError("Referral type can only be changed while requested", 409, "LAB_ORDER_LOCKED");
+    }
+    labOrder.type = data.type;
+  }
+
+  if (data.instructions !== undefined) labOrder.instructions = data.instructions;
+  if (data.clinicalNotes !== undefined) labOrder.clinicalNotes = data.clinicalNotes;
+  if (data.expectedBy !== undefined) labOrder.expectedBy = data.expectedBy;
+  if (data.receivedAt !== undefined) labOrder.receivedAt = data.receivedAt;
+  if (data.performedAt !== undefined) labOrder.performedAt = data.performedAt;
+  if (data.externalFacilityName !== undefined) labOrder.externalFacilityName = data.externalFacilityName;
+  if (data.resultNotes !== undefined) labOrder.resultNotes = data.resultNotes;
+  if (data.resultAttachment !== undefined) labOrder.resultAttachment = data.resultAttachment;
+
   if (data.orderedAt !== undefined) {
     if (
       new Date(data.orderedAt) > new Date()
@@ -473,46 +501,81 @@ const updateLabOrder = async (
   // -------------------------------------------
 
   if (data.status !== undefined) {
-    const currentStatus =
-      labOrder.status;
+    const currentStatus = labOrder.status;
+    const newStatus = data.status;
+    let allowed = false;
 
-    const newStatus =
-      data.status;
+    if (currentStatus === "REQUESTED") {
+      allowed =
+        newStatus === "RESULT_RECEIVED" ||
+        newStatus === "CANCELLED";
+    } else if (currentStatus === "RESULT_RECEIVED") {
+      allowed =
+        newStatus === "REQUESTED" &&
+        ["admin", "doctor"].includes(currentUser.role);
+    } else if (currentStatus === "CANCELLED") {
+      allowed =
+        newStatus === "REQUESTED" &&
+        currentUser.role === "admin";
+    }
 
-    const allowedTransitions = {
-      ordered: [
-        "sample_collected",
-        "completed",
-        "cancelled",
-      ],
-
-      sample_collected: [
-        "processing",
-        "cancelled",
-      ],
-
-      processing: [
-        "completed",
-        "cancelled",
-      ],
-
-      completed: [],
-
-      cancelled: [],
-    };
-
-    const allowed =
-      allowedTransitions[currentStatus] || [];
-
-    if (!allowed.includes(newStatus)) {
+    if (!allowed) {
       throw new AppError(
         `Invalid lab order status transition from ${currentStatus} to ${newStatus}`,
-        400,
+        409,
         "INVALID_STATUS_TRANSITION"
       );
     }
 
+    if (newStatus === "CANCELLED" && !data.statusChangeReason) {
+      throw new AppError(
+        "A reason is required when cancelling an external referral",
+        422,
+        "STATUS_REASON_REQUIRED"
+      );
+    }
+
+    if (
+      currentStatus === "RESULT_RECEIVED" &&
+      newStatus === "REQUESTED" &&
+      !data.statusChangeReason
+    ) {
+      throw new AppError(
+        "A reason is required when reopening a received result",
+        422,
+        "STATUS_REASON_REQUIRED"
+      );
+    }
+
+    if (
+      newStatus === "RESULT_RECEIVED" &&
+      ["doctor", "receptionist", "admin"].includes(currentUser.role)
+    ) {
+      if (!data.receivedAt) data.receivedAt = new Date();
+      labOrder.receivedBy = currentUser._id;
+      labOrder.receivedAt = data.receivedAt;
+      if (data.performedAt !== undefined) labOrder.performedAt = data.performedAt;
+      if (data.externalFacilityName !== undefined) {
+        labOrder.externalFacilityName = data.externalFacilityName;
+      }
+      if (data.resultNotes !== undefined) labOrder.resultNotes = data.resultNotes;
+      if (data.resultAttachment !== undefined) {
+        labOrder.resultAttachment = data.resultAttachment;
+      }
+    }
+
+    if (newStatus === "CANCELLED" && currentUser.role !== "doctor" && currentUser.role !== "admin") {
+      throw new AppError(
+        "Only the doctor or administrator may cancel an external referral",
+        403,
+        "FORBIDDEN"
+      );
+    }
+
     labOrder.status = newStatus;
+    labOrder.statusChangeReason =
+      data.statusChangeReason || labOrder.statusChangeReason || null;
+    labOrder.updatedBy = currentUser._id;
   }
 
   labOrder.updatedBy =
@@ -539,7 +602,17 @@ const updateLabOrder = async (
         priority: labOrder.priority,
         notes: labOrder.notes,
         orderedAt: labOrder.orderedAt,
+        type: labOrder.type,
+        instructions: labOrder.instructions,
+        clinicalNotes: labOrder.clinicalNotes,
+        expectedBy: labOrder.expectedBy,
+        receivedAt: labOrder.receivedAt,
+        performedAt: labOrder.performedAt,
+        externalFacilityName: labOrder.externalFacilityName,
+        resultNotes: labOrder.resultNotes,
+        resultAttachment: labOrder.resultAttachment,
         status: labOrder.status,
+        statusChangeReason: labOrder.statusChangeReason,
       },
 
       statusChanged:
@@ -547,6 +620,100 @@ const updateLabOrder = async (
         labOrder.status,
     },
   });
+
+  if (
+    previousValues.status !== "RESULT_RECEIVED" &&
+    labOrder.status === "RESULT_RECEIVED" &&
+    currentUser.role === "receptionist"
+  ) {
+    const doctor = await Doctor.findById(labOrder.doctor)
+      .populate("user", "_id firstName lastName")
+      .lean();
+    const recipientId = doctor?.user?._id;
+    if (
+      recipientId &&
+      recipientId.toString() !== currentUser._id.toString()
+    ) {
+      const testName =
+        labOrder.tests?.map((test) => test.name).join("، ") ||
+        "الطلب الخارجي";
+      const eventKey =
+        `lab-result:${labOrder._id}:${recipientId}`;
+      const notification = await Notification.findOneAndUpdate(
+        { eventKey },
+        {
+          $setOnInsert: {
+            recipient: recipientId,
+            type: "lab_result",
+            title: "وصلت نتيجة طلب خارجي",
+            message:
+              `وصلت نتيجة ${testName} للمريض ${patientRecord.firstName} ${patientRecord.lastName}`,
+            relatedModel: "LabOrder",
+            relatedId: labOrder._id,
+            eventKey,
+            createdBy: currentUser._id,
+            actor: currentUser._id,
+            entityType: "LabOrder",
+            entityId: labOrder._id,
+            link: `/lab-orders`,
+            priority: "medium",
+          },
+        },
+        { upsert: true, new: true }
+      );
+      try {
+        getIO().to(`user:${recipientId}`).emit("notification:new", {
+          notification,
+        });
+      } catch {
+        // Persisted notification is sufficient if realtime is unavailable.
+      }
+    }
+  }
+
+  if (
+    previousValues.status !== "CANCELLED" &&
+    labOrder.status === "CANCELLED" &&
+    currentUser.role === "doctor"
+  ) {
+    const receptionistIds = await getAuthorizedReceptionistIds(labOrder.doctor);
+    const testName =
+      labOrder.tests?.map((test) => test.name).join("، ") ||
+      "الطلب الخارجي";
+    for (const receptionistId of receptionistIds) {
+      const eventKey =
+        `lab-cancelled:${labOrder._id}:${receptionistId}`;
+      const notification = await Notification.findOneAndUpdate(
+        { eventKey },
+        {
+          $setOnInsert: {
+            recipient: receptionistId,
+            type: "lab_cancelled",
+            title: "تم إلغاء طلب خارجي",
+            message:
+              `أُلغي طلب ${testName} للمريض ${patientRecord.firstName} ${patientRecord.lastName}`,
+            relatedModel: "LabOrder",
+            relatedId: labOrder._id,
+            eventKey,
+            createdBy: currentUser._id,
+            actor: currentUser._id,
+            entityType: "LabOrder",
+            entityId: labOrder._id,
+            link: `/lab-orders`,
+            priority: "low",
+          },
+        },
+        { upsert: true, new: true }
+      );
+      try {
+        getIO().to(`user:${receptionistId}`).emit("notification:new", {
+          notification,
+        });
+      } catch {
+        // Persisted notification is sufficient if realtime is unavailable.
+      }
+    }
+  }
 
   return labOrder;
 };

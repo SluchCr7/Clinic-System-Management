@@ -67,9 +67,8 @@ const createPrescriptionSchema = Joi.object({
 
   medications: Joi.array()
     .items(medicationSchema)
-    .min(1)
     .max(50)
-    .required(),
+    .default([]),
 
   generalInstructions: Joi.string()
     .trim()
@@ -85,7 +84,6 @@ const createPrescriptionSchema = Joi.object({
 const updatePrescriptionSchema = Joi.object({
   medications: Joi.array()
     .items(medicationSchema)
-    .min(1)
     .max(50),
 
   generalInstructions: Joi.string()

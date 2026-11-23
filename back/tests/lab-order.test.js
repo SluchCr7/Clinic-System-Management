@@ -40,7 +40,7 @@ describe("Lab orders API", () => {
     });
   });
 
-  test("allows an ordered lab order to be completed directly", async () => {
+  test("allows an external referral to become result received", async () => {
     const labOrder = await LabOrder.create({
       visit: visit._id,
       patient: patient._id,
@@ -52,11 +52,11 @@ describe("Lab orders API", () => {
     const response = await request(app)
       .patch(`/api/lab-orders/${labOrder._id}`)
       .set("Authorization", admin.authHeader)
-      .send({ status: "completed" });
+      .send({ status: "RESULT_RECEIVED", receivedAt: new Date().toISOString() });
 
     expect(response.status).toBe(200);
-    expect(response.body.data.status).toBe("completed");
-    expect((await LabOrder.findById(labOrder._id)).status).toBe("completed");
+    expect(response.body.data.status).toBe("RESULT_RECEIVED");
+    expect((await LabOrder.findById(labOrder._id)).status).toBe("RESULT_RECEIVED");
     expect(
       await AuditLog.findOne({
         action: "LAB_ORDER_UPDATED",

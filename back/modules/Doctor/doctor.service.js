@@ -6,6 +6,7 @@ const mongoose = require("mongoose");
 const { AppError } = require("../../middlewares/errorHandler");
 const auditLogService = require("../AuditLog/auditLog.service");
 const { paginateQuery } = require("../../utils/pagination");
+const { getNextAvailableSlots } = require("../../utils/doctorAvailability");
 const { getSearchRegex, getSort } = require("../../utils/listQuery");
 const {
   getAuthorizedDoctorIds,
@@ -317,10 +318,33 @@ const deactivateDoctor = async (id, currentUser) => {
   return doctor;
 };
 
+const getDoctorAvailability = async (id, query = {}, currentUser = null) => {
+  const doctor = await Doctor.findOne({ _id: id, isActive: true });
+  if (!doctor) {
+    throw new AppError("Doctor not found", 404, "DOCTOR_NOT_FOUND");
+  }
+  if (currentUser) {
+    await assertDoctorAccess(currentUser, doctor._id);
+  }
+
+  const date = typeof query.date === "string" ? query.date : null;
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new AppError("A valid date is required", 400, "VALIDATION_ERROR");
+  }
+  const duration = Math.min(240, Math.max(5, Number(query.duration || 30)));
+  const slots = await getNextAvailableSlots({
+    doctorId: doctor._id,
+    date: new Date(`${date}T00:00:00Z`),
+    duration,
+  });
+  return { doctorId: doctor._id, date, duration, availableSlots: slots };
+};
+
 module.exports = {
   createDoctor,
   getDoctors,
   getDoctorById,
   updateDoctor,
   deactivateDoctor,
+  getDoctorAvailability,
 };

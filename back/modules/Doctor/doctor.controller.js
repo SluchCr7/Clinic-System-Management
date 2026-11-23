@@ -89,10 +89,23 @@ const deactivateDoctor = asyncHandler(async (req, res) => {
   });
 });
 
+const getDoctorAvailability = asyncHandler(async (req, res) => {
+  const availability = await doctorService.getDoctorAvailability(
+    req.params.id,
+    req.validatedQuery || req.query,
+    req.user
+  );
+  res.status(200).json({
+    success: true,
+    data: availability,
+  });
+});
+
 module.exports = {
   createDoctor,
   getDoctors,
   getDoctorById,
   updateDoctor,
   deactivateDoctor,
+  getDoctorAvailability,
 };

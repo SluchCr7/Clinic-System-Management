@@ -6,6 +6,7 @@ import type {
   CreateDoctorRequest,
   UpdateDoctorRequest,
   DoctorQueryParams,
+  DoctorAvailabilityResponse,
 } from "@/types/doctor";
 
 export const doctorApi = baseApi.injectEndpoints({
@@ -32,6 +33,20 @@ export const doctorApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, id) => [{ type: "Doctor", id }],
     }),
+
+      getDoctorAvailability: builder.query<
+        ApiResponse<DoctorAvailabilityResponse>,
+        { doctorId: string; date: string; duration: number }
+      >({
+        query: ({ doctorId, date, duration }) => ({
+          url: `/doctors/${doctorId}/availability`,
+          method: "GET",
+          params: { date, duration },
+        }),
+        providesTags: (_result, _error, { doctorId, date }) => [
+          { type: "Doctor", id: `${doctorId}:${date}` },
+        ],
+      }),
 
     createDoctor: builder.mutation<ApiResponse<Doctor>, CreateDoctorRequest>({
       query: (body) => ({
@@ -78,6 +93,7 @@ export const doctorApi = baseApi.injectEndpoints({
 export const {
   useGetDoctorsQuery,
   useGetDoctorByIdQuery,
+  useGetDoctorAvailabilityQuery,
   useCreateDoctorMutation,
   useUpdateDoctorMutation,
   useDeactivateDoctorMutation,

@@ -21,6 +21,10 @@ const {
   createInitialStatusHistory,
   transitionAppointment,
 } = require("../../utils/appointmentLifecycle");
+const {
+  checkDoctorAvailability,
+  throwAvailabilityConflict,
+} = require("../../utils/doctorAvailability");
 
 const CLINIC_TIMEZONE = "Africa/Cairo";
 
@@ -259,41 +263,22 @@ const validateNoConflict = async ({
   appointmentDate,
   duration,
   excludeAppointmentId = null,
+  patientId = null,
   session = null,
 }) => {
   const appointmentStart = toClinicDate(appointmentDate);
   const appointmentEnd = new Date(
     appointmentStart.getTime() + duration * 60 * 1000
   );
-
-  const query = {
-    doctor: doctorId,
-    status: { $nin: ["cancelled", "no-show"] },
-    appointmentDate: { $lt: appointmentEnd },
-  };
-
-  if (excludeAppointmentId) {
-    query._id = { $ne: excludeAppointmentId };
-  }
-
-  const existingAppointments = await Appointment.find(query).session(session);
-
-  const hasConflict = existingAppointments.some((existing) => {
-    const existingStart = new Date(existing.appointmentDate);
-    const existingEnd = new Date(
-      existingStart.getTime() + existing.duration * 60 * 1000
-    );
-
-    return appointmentStart < existingEnd && appointmentEnd > existingStart;
+  const availability = await checkDoctorAvailability({
+    doctorId,
+    patientId,
+    start: appointmentStart,
+    end: appointmentEnd,
+    excludeAppointmentId,
+    session,
   });
-
-  if (hasConflict) {
-    throw new AppError(
-      "Doctor already has an appointment during this time",
-      409,
-      "APPOINTMENT_CONFLICT"
-    );
-  }
+  throwAvailabilityConflict(availability);
 };
 
 const validateFollowUpDoesNotDuplicate = async ({
@@ -700,6 +685,7 @@ const createAppointment = async (data, currentUser) => {
 
     await validateNoConflict({
       doctorId: doctor,
+      patientId: patient,
       appointmentDate,
       duration,
       session,
@@ -976,6 +962,7 @@ const updateAppointment = async (id, data, currentUser) => {
 
       await validateNoConflict({
         doctorId: appointment.doctor,
+        patientId: appointment.patient,
         appointmentDate: newDate,
         duration: newDuration,
         excludeAppointmentId: id,

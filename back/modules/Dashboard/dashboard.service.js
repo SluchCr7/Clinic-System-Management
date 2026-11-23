@@ -382,28 +382,15 @@ const getDashboardOverview = async () => {
 
     labOrders: {
       pending:
-        getStatusCount(
-          labOrderStats,
-          "ordered"
-        ) +
-        getStatusCount(
-          labOrderStats,
-          "sample_collected"
-        ),
+        getStatusCount(labOrderStats, "REQUESTED"),
 
-      processing: getStatusCount(
-        labOrderStats,
-        "processing"
-      ),
+      processing: 0,
 
-      completed: getStatusCount(
-        labOrderStats,
-        "completed"
-      ),
+      completed: getStatusCount(labOrderStats, "RESULT_RECEIVED"),
 
       cancelled: getStatusCount(
         labOrderStats,
-        "cancelled"
+        "CANCELLED"
       ),
     },
   };
@@ -1013,27 +1000,17 @@ const getLabOrdersReport = async ({
           total: { $sum: "$count" },
           ordered: {
             $sum: {
-              $cond: [{ $eq: ["$_id.status", "ordered"] }, "$count", 0],
-            },
-          },
-          sampleCollected: {
-            $sum: {
-              $cond: [{ $eq: ["$_id.status", "sample_collected"] }, "$count", 0],
-            },
-          },
-          processing: {
-            $sum: {
-              $cond: [{ $eq: ["$_id.status", "processing"] }, "$count", 0],
+              $cond: [{ $eq: ["$_id.status", "REQUESTED"] }, "$count", 0],
             },
           },
           completed: {
             $sum: {
-              $cond: [{ $eq: ["$_id.status", "completed"] }, "$count", 0],
+              $cond: [{ $eq: ["$_id.status", "RESULT_RECEIVED"] }, "$count", 0],
             },
           },
           cancelled: {
             $sum: {
-              $cond: [{ $eq: ["$_id.status", "cancelled"] }, "$count", 0],
+              $cond: [{ $eq: ["$_id.status", "CANCELLED"] }, "$count", 0],
             },
           },
         },
@@ -1056,11 +1033,9 @@ const getLabOrdersReport = async ({
     },
     totalOrders,
     byStatus: {
-      ordered: getStatusCount(statusStats, "ordered"),
-      sampleCollected: getStatusCount(statusStats, "sample_collected"),
-      processing: getStatusCount(statusStats, "processing"),
-      completed: getStatusCount(statusStats, "completed"),
-      cancelled: getStatusCount(statusStats, "cancelled"),
+      ordered: getStatusCount(statusStats, "REQUESTED"),
+      completed: getStatusCount(statusStats, "RESULT_RECEIVED"),
+      cancelled: getStatusCount(statusStats, "CANCELLED"),
     },
     byPriority: {
       routine: getStatusCount(priorityStats, "routine"),
@@ -1071,8 +1046,6 @@ const getLabOrdersReport = async ({
       date: item._id,
       total: item.total,
       ordered: item.ordered,
-      sampleCollected: item.sampleCollected,
-      processing: item.processing,
       completed: item.completed,
       cancelled: item.cancelled,
     })),

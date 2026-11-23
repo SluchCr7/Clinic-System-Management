@@ -7,6 +7,10 @@
     "test": "jest --runInBand --detectOpenHandles",
     "migrate:clinic-isolation": "node scripts/migrateClinicIsolation.js",
     "migrate:clinic-data": "node scripts/migrateClinicData.js",
+    "migrate:lab-external-referrals": "node scripts/migrateLabExternalReferrals.js",
+    "rollback:lab-external-referrals": "node scripts/migrateLabExternalReferrals.js --rollback",
+    "report:appointment-conflicts": "node scripts/reportAppointmentConflicts.js",
+    "migrate:appointment-scheduling": "node scripts/migrateAppointmentScheduling.js",
     "start": "nodemon index.js",
     "dev": "nodemon index.js"
   },

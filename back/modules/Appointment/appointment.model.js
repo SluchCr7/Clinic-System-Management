@@ -239,4 +239,18 @@ AppointmentSchema.index({
   appointmentDate: 1,
 });
 
+AppointmentSchema.index({
+  doctor: 1,
+  status: 1,
+  appointmentDate: 1,
+  duration: 1,
+});
+
+AppointmentSchema.index({
+  patient: 1,
+  status: 1,
+  appointmentDate: 1,
+  duration: 1,
+});
+
 module.exports = mongoose.model("Appointment", AppointmentSchema);

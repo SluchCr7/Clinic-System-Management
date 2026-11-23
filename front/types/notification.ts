@@ -7,6 +7,9 @@ export type NotificationType =
   | "payment"
   | "prescription"
   | "medical_attachment"
+  | "visit_completed"
+  | "lab_result"
+  | "lab_cancelled"
   | "system";
 
 export type NotificationRelatedModel =
@@ -14,7 +17,8 @@ export type NotificationRelatedModel =
   | "LabOrder"
   | "Payment"
   | "Prescription"
-  | "MedicalAttachment";
+  | "MedicalAttachment"
+  | "Visit";
 
 export interface AppointmentReminderSettings {
   enabled: boolean;
@@ -35,6 +39,8 @@ export interface Notification {
   relatedId?: string;
   createdAt: string;
   updatedAt: string;
+  link?: string | null;
+  priority?: "low" | "medium" | "high";
 }
 
 export interface CreateNotificationRequest {

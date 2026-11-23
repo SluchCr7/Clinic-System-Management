@@ -199,6 +199,18 @@ VisitSchema.index({
   createdAt: -1,
 });
 
+VisitSchema.index({
+  doctor: 1,
+  status: 1,
+  startedAt: 1,
+});
+
+VisitSchema.index({
+  patient: 1,
+  status: 1,
+  startedAt: 1,
+});
+
 VisitSchema.pre("validate", function () {
   const bloodPressure = this.vitals?.bloodPressure;
   if (!bloodPressure) return;

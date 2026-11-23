@@ -15,6 +15,14 @@ export interface ApiError {
   message: string;
   errors?: string[] | Array<{ field: string; message: string }>;
   stack?: string;
+  conflicts?: Array<{
+    type: string;
+    id: string | null;
+    start: string;
+    end: string;
+    patientDisplay: string;
+  }>;
+  nextAvailableSlots?: Array<{ start: string; end: string }>;
 }
 
 export interface Pagination {

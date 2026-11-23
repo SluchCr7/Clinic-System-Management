@@ -11,6 +11,14 @@ const {
   applyDoctorScope,
 } = require("../../utils/listQuery");
 const { transitionAppointment } = require("../../utils/appointmentLifecycle");
+const LabOrder = require("../LabOrder/labOrder.model");
+const Notification = require("../Notification/notification.model");
+const { getAuthorizedReceptionistIds } = require("../../utils/accessControl");
+const { getIO } = require("../../utils/socket");
+const {
+  checkDoctorAvailability,
+  throwAvailabilityConflict,
+} = require("../../utils/doctorAvailability");
 
 const validateDoctor = async (doctorId, session = null) => {
   const doctor = await Doctor.findById(doctorId).session(session);
@@ -145,6 +153,29 @@ const createVisit = async (data, currentUser) => {
         );
       }
 
+      await Doctor.updateOne(
+        { _id: doctor },
+        { $inc: { appointmentBookingVersion: 1 } },
+        { session }
+      );
+
+      const visitStart = startedAt;
+      const visitEnd = new Date(
+        new Date(appointmentData.appointmentDate).getTime() +
+          (appointmentData.duration || 30) * 60 * 1000
+      );
+      const availability = await checkDoctorAvailability({
+        doctorId: doctor,
+        patientId: patient,
+        start: visitStart,
+        end: visitEnd,
+        excludeAppointmentId: appointmentData._id,
+        session,
+        checkWorkingHours: false,
+      });
+      throwAvailabilityConflict(availability);
+
+
       const [visit] = await Visit.create(
         [
           {
@@ -182,6 +213,49 @@ const createVisit = async (data, currentUser) => {
       });
       appointmentData.updatedBy = currentUser._id;
       await appointmentData.save({ session });
+
+      const warningEnd = new Date(startedAt.getTime() + 15 * 60 * 1000);
+      const upcoming = await Appointment.findOne({
+        doctor,
+        patient: { $ne: patient },
+        status: { $in: ["scheduled", "confirmed", "checked_in"] },
+        appointmentDate: { $gte: startedAt, $lte: warningEnd },
+      })
+        .populate("patient", "firstName lastName")
+        .session(session);
+      if (upcoming) {
+        const patientName =
+          upcoming.patient
+            ? `${upcoming.patient.firstName || ""} ${upcoming.patient.lastName || ""}`.trim()
+            : "المريض";
+        const time = new Intl.DateTimeFormat("ar-EG", {
+          timeZone: "Africa/Cairo",
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        }).format(new Date(upcoming.appointmentDate));
+        await Notification.findOneAndUpdate(
+          { eventKey: `visit-start-nearby:${visit._id}:${upcoming._id}:${currentUser._id}` },
+          {
+            $setOnInsert: {
+              recipient: currentUser._id,
+              type: "appointment",
+              title: "تنبيه موعد قريب",
+              message: `تنبيه: عندك موعد للمريض ${patientName} الساعة ${time}`,
+              relatedModel: "Appointment",
+              relatedId: upcoming._id,
+              eventKey: `visit-start-nearby:${visit._id}:${upcoming._id}:${currentUser._id}`,
+              createdBy: currentUser._id,
+              actor: currentUser._id,
+              entityType: "Appointment",
+              entityId: upcoming._id,
+              link: `/appointments`,
+              priority: "medium",
+            },
+          },
+          { upsert: true, new: true, session }
+        );
+      }
 
       await auditLogService.logActivity({
         actor: currentUser,
@@ -423,6 +497,7 @@ const completeVisit = async (id, currentUser) => {
   const session = await mongoose.startSession();
   const completedAt = new Date();
   let completedVisit;
+  const createdVisitNotifications = [];
 
   try {
     await session.withTransaction(async () => {
@@ -507,8 +582,58 @@ const completeVisit = async (id, currentUser) => {
         session,
       });
 
+      const openReferralCount = await LabOrder.countDocuments({
+        visit: visit._id,
+        status: "REQUESTED",
+      }).session(session);
+      const receptionistIds = await getAuthorizedReceptionistIds(visit.doctor);
+
+      for (const receptionistId of receptionistIds) {
+        if (receptionistId.toString() === currentUser._id.toString()) continue;
+        const eventKey =
+          `visit-completed:${visit._id}:${receptionistId}`;
+        const referralText =
+          openReferralCount > 0
+            ? ` مطلوب منه ${openReferralCount} تحاليل/أشعة`
+            : "";
+        const notification = await Notification.findOneAndUpdate(
+          { eventKey },
+          {
+            $setOnInsert: {
+              recipient: receptionistId,
+              type: "visit_completed",
+              title: "جهّز الفاتورة",
+              message:
+                `تمّت زيارة المريض ${patient.firstName} ${patient.lastName}.${referralText}`,
+              relatedModel: "Visit",
+              relatedId: visit._id,
+              eventKey,
+              createdBy: currentUser._id,
+              actor: currentUser._id,
+              entityType: "Visit",
+              entityId: visit._id,
+              link: `/visits/${visit._id}?action=invoice`,
+              priority: "high",
+            },
+          },
+          { upsert: true, new: true, session }
+        );
+        createdVisitNotifications.push(notification);
+      }
+
       completedVisit = visit;
     });
+
+    for (const notification of createdVisitNotifications) {
+      if (!notification) continue;
+      try {
+        getIO().to(`user:${notification.recipient}`).emit("notification:new", {
+          notification,
+        });
+      } catch {
+        // Notification persistence is authoritative; Socket delivery is best-effort.
+      }
+    }
 
     return completedVisit || null;
   } finally {

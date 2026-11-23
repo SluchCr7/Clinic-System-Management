@@ -38,6 +38,18 @@ export interface DoctorQueryParams extends BaseListQueryParams {
   isActive?: boolean;
 }
 
+export interface DoctorAvailabilitySlot {
+  start: string;
+  end: string;
+}
+
+export interface DoctorAvailabilityResponse {
+  doctorId: string;
+  date: string;
+  duration: number;
+  availableSlots: DoctorAvailabilitySlot[];
+}
+
 export interface DoctorAssignment {
   _id: string;
   doctor: Doctor | string;

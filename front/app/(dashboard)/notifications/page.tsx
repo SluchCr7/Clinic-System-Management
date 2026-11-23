@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import {
   useGetNotificationsQuery,
@@ -35,6 +36,7 @@ import {
 
 export default function NotificationsPage() {
   const { t } = useTranslation();
+  const router = useRouter();
   const [queryParams, setQueryParams] = useState<NotificationQueryParams>({
     page: 1,
     limit: 20,
@@ -81,6 +83,10 @@ export default function NotificationsPage() {
         return <LuFileText className="w-4 h-4 text-amber-500" />;
       case "medical_attachment":
         return <LuPaperclip className="w-4 h-4 text-slate-dark" />;
+      case "visit_completed":
+      case "lab_result":
+      case "lab_cancelled":
+        return <LuFlaskConical className="w-4 h-4 text-status-info" />;
       default:
         return <LuInfo className="w-4 h-4 text-slate-muted" />;
     }
@@ -157,6 +163,9 @@ export default function NotificationsPage() {
                 { value: "lab_order", label: t("notifications.labOrders") },
                 { value: "payment", label: t("notifications.payments") },
                 { value: "prescription", label: t("notifications.prescriptions") },
+                { value: "visit_completed", label: t("notifications.visitCompleted") },
+                { value: "lab_result", label: t("notifications.labResult") },
+                { value: "lab_cancelled", label: t("notifications.labCancelled") },
                 { value: "system", label: t("notifications.systemAlerts") },
               ]}
             />
@@ -194,6 +203,18 @@ export default function NotificationsPage() {
           {notifications.map((n) => (
             <div
               key={n._id}
+              role={n.link ? "link" : undefined}
+              tabIndex={n.link ? 0 : undefined}
+              onClick={async () => {
+                if (!n.isRead) await handleMarkAsRead(n._id);
+                if (n.link) router.push(n.link);
+              }}
+              onKeyDown={(event) => {
+                if (n.link && (event.key === "Enter" || event.key === " ")) {
+                  event.preventDefault();
+                  router.push(n.link);
+                }
+              }}
               className={`p-3.5 rounded-lg border transition-all flex items-start justify-between gap-4 ${
                 !n.isRead
                   ? "bg-mint/20 border-teal-primary/30 shadow-xs"

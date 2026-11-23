@@ -9,7 +9,10 @@ import {
   useCancelAppointmentMutation,
 } from "@/services/api/appointmentApi";
 import { useGetPatientsQuery } from "@/services/api/patientApi";
-import { useGetDoctorsQuery } from "@/services/api/doctorApi";
+import {
+  useGetDoctorsQuery,
+  useGetDoctorAvailabilityQuery,
+} from "@/services/api/doctorApi";
 import type {
   Appointment,
   AppointmentQueryParams,
@@ -117,6 +120,27 @@ export default function AppointmentsPage() {
     notes: "",
   });
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [bookingAlternatives, setBookingAlternatives] = useState<
+    Array<{ start: string; end: string }>
+  >([]);
+
+  const availabilityDate = bookingForm.appointmentDate
+    ? bookingForm.appointmentDate.slice(0, 10)
+    : "";
+  const { data: availabilityData } = useGetDoctorAvailabilityQuery(
+    {
+      doctorId: bookingForm.doctor,
+      date: availabilityDate,
+      duration: bookingForm.duration,
+    },
+    {
+      skip:
+        !isBookModalOpen ||
+        !bookingForm.doctor ||
+        !availabilityDate,
+      pollingInterval: 60_000,
+    }
+  );
 
   // Cancellation Dialog State
   const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
@@ -163,6 +187,7 @@ export default function AppointmentsPage() {
       notes: "",
     });
     setBookingError(null);
+    setBookingAlternatives([]);
     setIsBookModalOpen(true);
   };
 
@@ -204,6 +229,7 @@ export default function AppointmentsPage() {
     } catch (err) {
       const extracted = extractApiError(err);
       setBookingError(extracted.message || t("appointments.errors.bookingFailed"));
+      setBookingAlternatives(extracted.nextAvailableSlots || []);
       toast.error(extracted.message || t("appointments.errors.bookingFailed"));
     }
   };
@@ -624,6 +650,67 @@ export default function AppointmentsPage() {
               }
             />
           </div>
+
+          {(availabilityData?.data?.availableSlots?.length ?? 0) > 0 && (
+            <div className="p-3 rounded-md bg-paper border border-border-subtle">
+              <p className="text-[10px] font-semibold text-slate-muted mb-2">
+                {t("appointments.bookModal.availableSlots")}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(availabilityData?.data?.availableSlots || []).slice(0, 6).map((slot) => (
+                  <Button
+                    key={slot.start}
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setBookingAlternatives([]);
+                      setBookingForm((previous) => ({
+                        ...previous,
+                        appointmentDate: formatClinicDateTimeForInput(new Date(slot.start)),
+                      }));
+                    }}
+                  >
+                    {new Date(slot.start).toLocaleTimeString(
+                      isRtl ? "ar-EG" : "en-US",
+                      { hour: "numeric", minute: "2-digit" }
+                    )}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {bookingAlternatives.length > 0 && (
+            <div className="p-3 rounded-md bg-status-warning-bg border border-status-warning/20">
+              <p className="text-[10px] font-semibold text-status-warning mb-2">
+                {t("appointments.bookModal.alternativeSlots")}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {bookingAlternatives.map((slot) => (
+                  <Button
+                    key={slot.start}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setBookingAlternatives([]);
+                      setBookingError(null);
+                      setBookingForm((previous) => ({
+                        ...previous,
+                        appointmentDate: formatClinicDateTimeForInput(new Date(slot.start)),
+                      }));
+                    }}
+                  >
+                    {new Date(slot.start).toLocaleTimeString(
+                      isRtl ? "ar-EG" : "en-US",
+                      { hour: "numeric", minute: "2-digit" }
+                    )}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <Input
             label={t("appointments.bookModal.reason")}

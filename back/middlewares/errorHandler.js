@@ -1,13 +1,14 @@
 // src/middlewares/errorHandler.js
 
 class AppError extends Error {
-  constructor(message, statusCode = 500, code = "INTERNAL_SERVER_ERROR") {
+  constructor(message, statusCode = 500, code = "INTERNAL_SERVER_ERROR", details = null) {
     super(message);
 
     this.statusCode = statusCode;
     this.code = code;
     this.status = `${statusCode}`.startsWith("4") ? "fail" : "error";
     this.isOperational = true;
+    this.details = details;
 
     Error.captureStackTrace(this, this.constructor);
   }
@@ -104,6 +105,7 @@ const errorHandler = (err, req, res, next) => {
     ...(process.env.NODE_ENV === "development" && {
       stack: error.stack,
     }),
+    ...(error.details && error.details),
   });
 };
 

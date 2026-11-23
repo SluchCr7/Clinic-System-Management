@@ -2,6 +2,7 @@ import { BaseListQueryParams } from "./api";
 import { Visit } from "./visit";
 import { Patient } from "./patient";
 import { Doctor } from "./doctor";
+import type { LabOrder } from "./labOrder";
 
 export type MedicationRoute =
   | "oral"
@@ -33,6 +34,7 @@ export interface Prescription {
   notes?: string | null;
   createdAt: string;
   updatedAt: string;
+  labOrders?: LabOrder[];
 }
 
 export interface CreatePrescriptionRequest {

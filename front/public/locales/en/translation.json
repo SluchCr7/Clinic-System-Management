@@ -50,8 +50,9 @@
       "partially-paid": "Partially Paid",
       "unpaid": "Unpaid",
       "ordered": "Ordered",
-      "sample-collected": "Sample Collected",
-      "processing": "Processing",
+      "REQUESTED": "Requested",
+      "RESULT_RECEIVED": "Result received",
+      "CANCELLED": "Cancelled",
       "routine": "Routine",
       "urgent": "Urgent",
       "stat": "STAT",
@@ -77,7 +78,7 @@
     "appointments": "Appointments",
     "visits": "Visits",
     "prescriptions": "Prescriptions",
-    "labOrders": "Laboratory",
+    "labOrders": "Requested Labs & Imaging",
     "invoices": "Invoices",
     "payments": "Payments",
     "medicalServices": "Medical Services",
@@ -176,7 +177,7 @@
     "revenueCollected": "Revenue Collected",
     "revenueSubtitle": "Today: {{value}}",
     "outstanding": "Outstanding",
-    "labOrders": "Laboratory Orders",
+    "labOrders": "Requested Labs & Imaging",
     "labOrdersSubtitle": "Active orders awaiting results",
     "labSubTitle": "Active orders awaiting results",
     "pending": "Pending",
@@ -407,7 +408,7 @@
       "tabs": {
         "overview": "Overview & Notes",
         "prescriptions": "Prescriptions (Rx)",
-        "labOrders": "Laboratory Orders",
+        "labOrders": "Requested Labs & Imaging",
         "services": "Performed Services",
         "attachments": "Medical Files",
         "billing": "Invoice & Billing"
@@ -433,16 +434,16 @@
       "generalInstructions": "General Patient Instructions",
       "prescriptionNotes": "Prescription Notes",
       "prescriptionSuccess": "Prescription issued successfully.",
-      "labOrdersTitle": "Diagnostic Laboratory Investigations",
-      "labOrdersSubtitle": "Pathology and diagnostic specimen requisitions",
+      "labOrdersTitle": "Requested Labs & Imaging",
+      "labOrdersSubtitle": "Follow external laboratory and imaging referrals",
       "orderLabTest": "Order Lab Test",
-      "noLabOrders": "No laboratory investigations requested for this visit.",
+      "noLabOrders": "No lab or imaging requests for this visit.",
       "testName": "Test Name",
       "testCode": "Test Code",
       "priority": "Priority",
       "reason": "Clinical Indication / Reason",
-      "labOrderNotes": "Lab Order Notes",
-      "labOrderSuccess": "Lab order created successfully.",
+      "labOrderNotes": "Referral Notes",
+      "labOrderSuccess": "Lab or imaging request created successfully.",
       "servicesTitle": "Clinical Procedures & Performed Services",
       "servicesSubtitle": "Billable clinical procedures executed during this encounter",
       "recordService": "Record Performed Service",
@@ -487,40 +488,59 @@
     }
   },
   "labOrders": {
-    "title": "Diagnostic Laboratory Orders",
-    "subtitle": "Specimen tracking and pathology laboratory status workflow",
+    "title": "Requested Labs & Imaging",
+    "subtitle": "Track external laboratory and imaging referrals and follow up on results",
+    "requestedPending": "Still requested",
+    "quickResult": "Result received",
     "updateStatus": "Update Status",
-    "emptyTitle": "No lab orders found",
-    "emptyDescription": "No laboratory diagnostic investigations match this filter.",
+    "emptyTitle": "No referral requests found",
+    "emptyDescription": "No laboratory or imaging requests match this filter.",
+    "type": {
+      "lab": "Laboratory",
+      "imaging": "Imaging"
+    },
+    "status": {
+      "requested": "Requested",
+      "resultReceived": "Result received",
+      "cancelled": "Cancelled"
+    },
     "filter": {
       "allStatuses": "All Statuses",
+      "allTypes": "All Types",
       "allPriorities": "All Priorities",
-      "ordered": "Ordered (Requested)",
-      "sampleCollected": "Sample Collected",
-      "processing": "Processing (Lab)",
-      "completed": "Completed",
-      "cancelled": "Cancelled",
       "routine": "Routine",
       "urgent": "Urgent",
-      "stat": "STAT (Emergency)"
+      "stat": "STAT",
+      "searchPatient": "Search patient"
     },
     "table": {
       "orderedDate": "Ordered Date",
-      "orderingPhysician": "Ordering Physician",
-      "diagnosticTests": "Diagnostic Tests",
-      "workflowStatus": "Workflow Status"
+      "orderingPhysician": "Doctor",
+      "diagnosticTests": "Labs/Imaging",
+      "workflowStatus": "Status",
+      "type": "Type",
+      "visit": "Visit",
+      "status": "Status",
+      "openVisit": "Open visit"
     },
     "modal": {
-      "title": "Update Specimen Status",
+      "title": "Update Referral Status",
       "orderId": "Order ID",
-      "workflowStatus": "Lab Order Workflow Status",
-      "testsIncluded": "Tests Included:"
+      "workflowStatus": "Status",
+      "status": "Status",
+      "testsIncluded": "Included requests:",
+      "receivedAt": "Received date",
+      "performedAt": "Performed date",
+      "facility": "Lab / imaging facility",
+      "notes": "Result notes",
+      "file": "Result file",
+      "cancelReason": "Cancellation reason"
     },
     "success": {
-      "updated": "Laboratory status updated successfully."
+      "updated": "Referral status updated successfully."
     },
     "errors": {
-      "updateFailed": "Failed to update lab order."
+      "updateFailed": "Failed to update the lab or imaging request."
     }
   },
   "medicalServices": {
@@ -690,7 +710,7 @@
       "appointments": "Appointments",
       "visits": "Visits",
       "prescriptions": "Prescriptions",
-      "laboratory": "Laboratory",
+      "laboratory": "Labs & Imaging",
       "attachments": "Attachments",
       "billing": "Billing"
     },
@@ -717,8 +737,8 @@
     "orderedDate": "Ordered Date",
     "labTests": "Lab Tests",
     "priority": "Priority",
-    "emptyTitleLabOrders": "No lab orders",
-    "emptyDescriptionLabOrders": "No diagnostic laboratory tests have been ordered.",
+    "emptyTitleLabOrders": "No referral requests",
+    "emptyDescriptionLabOrders": "No lab or imaging requests have been created.",
     "documentTitle": "Document Title",
     "category": "Category",
     "attachmentTypes": {
@@ -892,6 +912,7 @@
     "bloodGroup": "Blood Group",
     "code": "Rx Code",
     "prescribedMedications": "Prescribed Medications",
+    "externalReferrals": "Requested Labs & Imaging",
     "drugNameAndForm": "Drug Name & Form",
     "dosage": "Dosage",
     "frequency": "Frequency",
@@ -1025,13 +1046,13 @@
     },
     "lab": {
       "totalRequisitions": "Total Lab Requisitions",
-      "totalRequisitionsDescription": "Diagnostic specimens handled",
+      "totalRequisitionsDescription": "External referral requests",
       "urgentOrders": "STAT / Urgent Orders",
-      "urgentOrdersDescription": "High priority specimens",
+      "urgentOrdersDescription": "High-priority external referrals",
       "routineOrders": "Routine Orders",
       "routineOrdersDescription": "Standard pathology tests",
       "topTests": "Top Diagnostic Tests",
-      "topTestsSubtitle": "Most frequent laboratory investigations",
+      "topTestsSubtitle": "Most frequent labs and imaging",
       "orderCount": "{{count}} orders",
       "empty": "No diagnostic laboratory investigations recorded for this period."
     },
@@ -1098,6 +1119,8 @@
       "duration": "Consultation duration",
       "reason": "Visit reason",
       "notes": "Additional notes",
+      "availableSlots": "Available times",
+      "alternativeSlots": "Nearest alternative times",
       "submit": "Confirm appointment"
     },
     "cancelDialog": {
@@ -1224,7 +1247,7 @@
   },
   "notifications": {
     "title": "Notifications & Clinical Alerts",
-    "subtitle": "Operational reminders, laboratory specimen completions, and financial transactions",
+    "subtitle": "Visit, external referral, and billing operations",
     "markAllRead": "Mark All as Read",
     "allStatus": "All Status",
     "allNotifications": "All Notifications",
@@ -1232,9 +1255,12 @@
     "readOnly": "Read Only",
     "allCategories": "All Categories",
     "appointments": "Appointments",
-    "labOrders": "Lab Orders",
+    "labOrders": "Requested Labs & Imaging",
     "payments": "Payments",
     "prescriptions": "Prescriptions",
+    "visitCompleted": "Visit completed",
+    "labResult": "Result received",
+    "labCancelled": "Referral cancelled",
     "systemAlerts": "System Alerts",
     "total": "Total",
     "failedLoad": "Failed to load notifications.",

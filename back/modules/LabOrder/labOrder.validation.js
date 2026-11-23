@@ -24,7 +24,14 @@ const testSchema = Joi.object({
     .optional(),
 });
 
+const statusSchema = Joi.string().valid(
+  "REQUESTED",
+  "RESULT_RECEIVED",
+  "CANCELLED"
+);
+
 const createLabOrderSchema = Joi.object({
+  type: Joi.string().valid("LAB", "IMAGING").default("LAB"),
   visit: objectId.required(),
 
   patient: objectId.required(),
@@ -50,6 +57,10 @@ const createLabOrderSchema = Joi.object({
     .max(2000)
     .optional(),
 
+  instructions: Joi.string().trim().max(1000).optional(),
+  clinicalNotes: Joi.string().trim().max(2000).optional(),
+  expectedBy: Joi.date().optional(),
+
   orderedAt: Joi.date()
     .optional(),
 });
@@ -69,15 +80,18 @@ const updateLabOrderSchema = Joi.object({
     .valid("routine", "urgent", "stat")
     .optional(),
 
-  status: Joi.string()
-    .valid(
-      "ordered",
-      "sample_collected",
-      "processing",
-      "completed",
-      "cancelled"
-    )
-    .optional(),
+  status: statusSchema.optional(),
+  type: Joi.string().valid("LAB", "IMAGING").optional(),
+  instructions: Joi.string().trim().max(1000).optional(),
+  clinicalNotes: Joi.string().trim().max(2000).optional(),
+  expectedBy: Joi.date().optional(),
+  receivedAt: Joi.date().optional(),
+  performedAt: Joi.date().optional(),
+  externalFacilityName: Joi.string().trim().max(300).optional(),
+  resultNotes: Joi.string().trim().max(2000).optional(),
+  resultAttachment: objectId.optional(),
+  reason: Joi.string().trim().max(1000).optional(),
+  statusChangeReason: Joi.string().trim().max(1000).optional(),
 
   notes: Joi.string()
     .trim()
@@ -101,13 +115,8 @@ const labOrderListQuerySchema = createListQuerySchema({
     visit: objectId,
     patient: objectId,
     doctor: objectId,
-    status: Joi.string().valid(
-      "ordered",
-      "sample_collected",
-      "processing",
-      "completed",
-      "cancelled"
-    ),
+    type: Joi.string().valid("LAB", "IMAGING"),
+    status: statusSchema,
     priority: Joi.string().valid("routine", "urgent", "stat"),
   },
 });

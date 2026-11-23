@@ -48,6 +48,11 @@ const createNotification = async (
     relatedModel,
     relatedId,
     eventKey,
+    actor,
+    entityType,
+    entityId,
+    link,
+    priority,
   } = data;
 
   await validateRecipient(recipient);
@@ -77,6 +82,11 @@ const createNotification = async (
     relatedId: relatedId || null,
     eventKey: eventKey || undefined,
     createdBy: currentUser?._id || null,
+    actor: actor || currentUser?._id || null,
+    entityType: entityType || null,
+    entityId: entityId || null,
+    link: link || null,
+    priority: priority || "medium",
   };
   let notification;
 

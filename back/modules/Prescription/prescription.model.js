@@ -82,13 +82,7 @@ const PrescriptionSchema = new mongoose.Schema(
     medications: {
       type: [MedicationSchema],
       required: true,
-      validate: {
-        validator: function (medications) {
-          return medications.length > 0;
-        },
-        message:
-          "Prescription must contain at least one medication",
-      },
+      default: [],
     },
 
     generalInstructions: {

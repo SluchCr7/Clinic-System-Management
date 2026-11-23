@@ -29,6 +29,14 @@ router.get(
 )
 
 router.get(
+    "/:id/availability",
+    protect,
+    authorize("admin", "doctor", "receptionist"),
+    validateId("id", "doctor ID"),
+    doctorController.getDoctorAvailability
+)
+
+router.get(
     "/:id",
     protect,
     authorize("admin", "doctor", "receptionist"),

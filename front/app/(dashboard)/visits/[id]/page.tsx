@@ -27,7 +27,7 @@ import { hasPermission } from "@/lib/permissions";
 import VisitLifecyclePanel from "@/components/visits/VisitLifecyclePanel";
 import { extractApiError } from "@/services/api/baseQuery";
 import type { MedicationRoute } from "@/types/prescription";
-import type { LabOrderPriority } from "@/types/labOrder";
+import type { LabOrderPriority, LabOrderType } from "@/types/labOrder";
 import type { MedicalAttachment, MedicalAttachmentType } from "@/types/medicalAttachment";
 import type { PaymentMethod } from "@/types/payment";
 import {
@@ -176,6 +176,7 @@ export default function VisitWorkspacePage() {
     { name: "", code: "", instructions: "" },
   ]);
   const [labPriority, setLabPriority] = useState<LabOrderPriority>("routine");
+  const [labType, setLabType] = useState<LabOrderType>("LAB");
   const [labReason, setLabReason] = useState("");
   const [labNotes, setLabNotes] = useState("");
 
@@ -291,6 +292,7 @@ export default function VisitWorkspacePage() {
 
     try {
       await createLabOrder({
+        type: labType,
         visit: visitId,
         patient: patientId,
         doctor: doctorId,
@@ -456,6 +458,15 @@ export default function VisitWorkspacePage() {
   ];
 
   const labColumns: Column<(typeof visitLabOrders)[0]>[] = [
+    {
+      key: "type",
+      header: t("labOrders.table.type"),
+      render: (l) => (
+        <span className="text-xs font-medium text-ink">
+          {t(l.type === "IMAGING" ? "labOrders.type.imaging" : "labOrders.type.lab")}
+        </span>
+      ),
+    },
     {
       key: "tests",
       header: t("visits.workspace.testName"),
@@ -1264,10 +1275,19 @@ export default function VisitWorkspacePage() {
         isOpen={isLabModalOpen}
         onClose={() => setIsLabModalOpen(false)}
         title={t("visits.workspace.orderLabTest")}
-        subtitle="Request clinical pathology investigations"
+        subtitle={t("labOrders.subtitle")}
         size="md"
       >
         <form onSubmit={handleSubmitLabOrder} className="flex flex-col gap-3 text-xs">
+          <Select
+            label={t("labOrders.table.type")}
+            value={labType}
+            onChange={(event) => setLabType(event.target.value as LabOrderType)}
+            options={[
+              { value: "LAB", label: t("labOrders.type.lab") },
+              { value: "IMAGING", label: t("labOrders.type.imaging") },
+            ]}
+          />
           <div>
             <label className="text-[10px] uppercase font-semibold text-slate-muted block mb-1">
               {t("visits.workspace.testName")} *

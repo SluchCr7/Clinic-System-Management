@@ -139,6 +139,7 @@ export default function PrescriptionDetailPage() {
         </div>
 
         {/* RX Symbol & Medication Schedule Table */}
+        {rx.medications?.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-3">
             <span className="text-2xl font-serif font-black text-teal-primary tracking-tight">
@@ -204,6 +205,44 @@ export default function PrescriptionDetailPage() {
             </table>
           </div>
         </div>
+        )}
+
+        {/* Live external referral section - source of truth is LabOrders */}
+        {rx.labOrders && rx.labOrders.length > 0 && (
+          <div className="border border-border-subtle rounded-md overflow-hidden">
+            <div className="bg-paper px-3 py-2.5 border-b border-border-subtle">
+              <h3 className="text-xs font-bold text-ink">
+                {t("prescriptions.externalReferrals")}
+              </h3>
+            </div>
+            <ol className="divide-y divide-border-subtle text-xs">
+              {rx.labOrders.map((order, index) => (
+                <li key={order._id} className="px-3 py-2.5 flex gap-3">
+                  <span className="font-mono text-slate-muted">{index + 1}.</span>
+                  <div className="flex-1">
+                    <p className="font-bold text-ink">
+                      {order.type === "IMAGING" ? t("labOrders.type.imaging") : t("labOrders.type.lab")}
+                      {order.priority !== "routine" ? ` — ${t(`labOrders.filter.${order.priority}`)}` : ""}
+                    </p>
+                    {order.tests.map((test) => (
+                      <p key={test.name} className="text-slate-dark">
+                        {test.name}{test.code ? ` (${test.code})` : ""}
+                      </p>
+                    ))}
+                    {order.instructions && (
+                      <p className="text-slate-muted mt-1">
+                        {t("prescriptions.instructions")}: {order.instructions}
+                      </p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <p className="px-3 py-2.5 border-t border-border-subtle bg-paper/30 text-xs font-semibold text-ink">
+              يرجى إحضار النتائج في الزيارة القادمة
+            </p>
+          </div>
+        )}
 
         {/* General Instructions & Advice */}
         {rx.generalInstructions && (

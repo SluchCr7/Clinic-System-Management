@@ -16,6 +16,9 @@ const NotificationSchema = new mongoose.Schema(
         "payment",
         "prescription",
         "medical_attachment",
+        "visit_completed",
+        "lab_result",
+        "lab_cancelled",
         "system",
       ],
       required: true,
@@ -43,6 +46,7 @@ const NotificationSchema = new mongoose.Schema(
         "Payment",
         "Prescription",
         "MedicalAttachment",
+        "Visit",
         null,
       ],
       default: null,
@@ -73,6 +77,37 @@ const NotificationSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
+    },
+
+    actor: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    entityType: {
+      type: String,
+      trim: true,
+      maxlength: 100,
+      default: null,
+    },
+
+    entityId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+    },
+
+    link: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+      default: null,
+    },
+
+    priority: {
+      type: String,
+      enum: ["low", "medium", "high"],
+      default: "medium",
     },
   },
   {

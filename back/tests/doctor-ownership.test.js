@@ -46,8 +46,8 @@ describe("Doctor resource ownership", () => {
       .set("Authorization", doctorUser.authHeader)
       .send({ notes: "Unauthorized change" });
 
-    expect(read.status).toBe(404);
-    expect(update.status).toBe(404);
+    expect(read.status).toBe(403);
+    expect(update.status).toBe(403);
     expect((await LabOrder.findById(labOrder._id)).notes).toBeUndefined();
   });
 

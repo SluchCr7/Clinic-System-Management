@@ -2,6 +2,14 @@ const mongoose = require("mongoose");
 
 const LabOrderSchema = new mongoose.Schema(
   {
+    type: {
+      type: String,
+      enum: ["LAB", "IMAGING"],
+      default: "LAB",
+      required: true,
+      index: true,
+    },
+
     visit: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Visit",
@@ -59,14 +67,8 @@ const LabOrderSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: [
-        "ordered",
-        "sample_collected",
-        "processing",
-        "completed",
-        "cancelled",
-      ],
-      default: "ordered",
+      enum: ["REQUESTED", "RESULT_RECEIVED", "CANCELLED"],
+      default: "REQUESTED",
       required: true,
     },
 
@@ -79,6 +81,85 @@ const LabOrderSchema = new mongoose.Schema(
     orderedAt: {
       type: Date,
       default: Date.now,
+    },
+
+    requestedAt: {
+      type: Date,
+      default: null,
+    },
+
+    requestedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    instructions: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+      default: null,
+    },
+
+    clinicalNotes: {
+      type: String,
+      trim: true,
+      maxlength: 2000,
+      default: null,
+    },
+
+    expectedBy: {
+      type: Date,
+      default: null,
+    },
+
+    receivedAt: {
+      type: Date,
+      default: null,
+    },
+
+    receivedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    performedAt: {
+      type: Date,
+      default: null,
+    },
+
+    externalFacilityName: {
+      type: String,
+      trim: true,
+      maxlength: 300,
+      default: null,
+    },
+
+    resultNotes: {
+      type: String,
+      trim: true,
+      maxlength: 2000,
+      default: null,
+    },
+
+    statusChangeReason: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+      default: null,
+    },
+
+    resultAttachment: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MedicalAttachment",
+      default: null,
+    },
+
+    legacyStatus: {
+      type: String,
+      trim: true,
+      default: null,
     },
 
     createdBy: {
@@ -115,5 +196,8 @@ LabOrderSchema.index({
 LabOrderSchema.index({
   status: 1,
 });
+
+LabOrderSchema.index({ status: 1, patient: 1, visit: 1 });
+LabOrderSchema.index({ type: 1, status: 1, createdAt: -1 });
 
 module.exports = mongoose.model("LabOrder", LabOrderSchema);

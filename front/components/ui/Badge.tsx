@@ -78,6 +78,7 @@ export function StatusBadge({ status, size = "md", className = "" }: StatusBadge
     case "confirmed":
     case "completed":
     case "paid":
+    case "result-received":
       variant = "success";
       break;
 
@@ -87,6 +88,7 @@ export function StatusBadge({ status, size = "md", className = "" }: StatusBadge
     case "in-progress":
     case "sample-collected":
     case "processing":
+    case "requested":
       variant = "teal";
       break;
 
@@ -98,10 +100,10 @@ export function StatusBadge({ status, size = "md", className = "" }: StatusBadge
 
     // Inactive / Cancelled / Error states
     case "inactive":
-    case "cancelled":
     case "no-show":
     case "unpaid":
     case "stat":
+    case "cancelled":
       variant = "error";
       break;
 

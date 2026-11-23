@@ -1,67 +1,97 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import Link from "next/link";
 import { useTranslation } from "react-i18next";
-import {
-  useGetLabOrdersQuery,
-  useUpdateLabOrderMutation,
-} from "@/services/api/labOrderApi";
-import type {
-  LabOrder,
-  LabOrderQueryParams,
-  LabOrderStatus,
-  LabOrderPriority,
-} from "@/types/labOrder";
+import { useGetLabOrdersQuery, useUpdateLabOrderMutation } from "@/services/api/labOrderApi";
+import { useCreateMedicalAttachmentMutation } from "@/services/api/medicalAttachmentApi";
+import type { LabOrder, LabOrderPriority, LabOrderStatus, LabOrderType } from "@/types/labOrder";
 import {
   PageHeader,
   DataTable,
   Button,
   Select,
+  Input,
+  Textarea,
   StatusBadge,
   Modal,
   toast,
   type Column,
 } from "@/components/ui";
 import { extractApiError } from "@/services/api/baseQuery";
-import { selectUserRole } from "@/features/auth/authSelectors";
-import { useAppSelector } from "@/redux/hooks";
-import { hasPermission } from "@/lib/permissions";
-import { LuCircleCheck } from "react-icons/lu";
+import { LuCircleCheck, LuFlaskConical, LuScanLine, LuExternalLink } from "react-icons/lu";
 
 export default function LabOrdersPage() {
   const { t } = useTranslation();
-  const role = useAppSelector(selectUserRole);
-  const canManageLabOrders = hasPermission(role, "laboratory.manage");
-  const [queryParams, setQueryParams] = useState<LabOrderQueryParams>({
+  const [queryParams, setQueryParams] = useState({
     page: 1,
     limit: 10,
-    status: undefined,
-    priority: undefined,
-    sortBy: "orderedAt",
-    sortOrder: "desc",
+    status: undefined as LabOrderStatus | undefined,
+    type: undefined as LabOrderType | undefined,
+    priority: undefined as LabOrderPriority | undefined,
+    search: "",
   });
-
   const { data, isLoading, isError, refetch } = useGetLabOrdersQuery(queryParams);
   const [updateLabOrder, { isLoading: isUpdating }] = useUpdateLabOrderMutation();
+  const [createAttachment] = useCreateMedicalAttachmentMutation();
 
   const [activeOrder, setActiveOrder] = useState<LabOrder | null>(null);
-  const [selectedStatus, setSelectedStatus] = useState<LabOrderStatus>("ordered");
+  const [selectedStatus, setSelectedStatus] = useState<LabOrderStatus>("REQUESTED");
+  const [receivedAt, setReceivedAt] = useState(new Date().toISOString().slice(0, 10));
+  const [performedAt, setPerformedAt] = useState("");
+  const [facility, setFacility] = useState("");
+  const [resultNotes, setResultNotes] = useState("");
+  const [cancelReason, setCancelReason] = useState("");
+  const [resultFile, setResultFile] = useState<File | null>(null);
 
-  const handleOpenStatusModal = (order: LabOrder) => {
+  const openModal = (order: LabOrder, status: LabOrderStatus = order.status) => {
     setActiveOrder(order);
-    setSelectedStatus(order.status);
+    setSelectedStatus(status);
+    setReceivedAt(new Date().toISOString().slice(0, 10));
+    setPerformedAt("");
+    setFacility("");
+    setResultNotes("");
+    setCancelReason("");
+    setResultFile(null);
   };
 
-  const handleUpdateStatus = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitUpdate = async () => {
     if (!activeOrder) return;
-
     try {
+      let resultAttachment: string | undefined;
+      if (selectedStatus === "RESULT_RECEIVED" && resultFile) {
+        const patientId =
+          typeof activeOrder.patient === "object" ? activeOrder.patient._id : activeOrder.patient;
+        const visitId =
+          typeof activeOrder.visit === "object" ? activeOrder.visit._id : activeOrder.visit;
+        const formData = new FormData();
+        formData.append("file", resultFile);
+        formData.append("patient", patientId);
+        formData.append("visit", visitId);
+        formData.append("type", activeOrder.type === "IMAGING" ? "xray" : "lab_report");
+        formData.append("title", `نتيجة ${activeOrder.tests.map((test) => test.name).join("، ")}`);
+        formData.append("description", "نتيجة طلب تحاليل أو أشعة خارجية");
+        const upload = await createAttachment(formData).unwrap();
+        resultAttachment = upload.data._id;
+      }
+
       await updateLabOrder({
         id: activeOrder._id,
-        data: { status: selectedStatus },
+        data: {
+          status: selectedStatus,
+          receivedAt: selectedStatus === "RESULT_RECEIVED" ? receivedAt : undefined,
+          performedAt: selectedStatus === "RESULT_RECEIVED" && performedAt ? performedAt : undefined,
+          externalFacilityName: selectedStatus === "RESULT_RECEIVED" ? facility || undefined : undefined,
+          resultNotes: selectedStatus === "RESULT_RECEIVED" ? resultNotes || undefined : undefined,
+          resultAttachment,
+          statusChangeReason:
+            selectedStatus === "CANCELLED"
+              ? cancelReason
+              : selectedStatus === "REQUESTED"
+                ? "تصحيح خطأ - إعادة فتح النتيجة"
+                : undefined,
+        },
       }).unwrap();
-
       toast.success(t("labOrders.success.updated"));
       setActiveOrder(null);
     } catch (err) {
@@ -70,77 +100,85 @@ export default function LabOrdersPage() {
     }
   };
 
+  const requestedCount = useMemo(
+    () => (data?.data || []).filter((order) => order.status === "REQUESTED").length,
+    [data]
+  );
+
   const columns: Column<LabOrder>[] = [
     {
-      key: "orderedAt",
-      header: t("labOrders.table.orderedDate"),
-      render: (l) => (
-        <span className="font-mono text-xs font-semibold text-ink">
-          {new Date(l.orderedAt).toLocaleDateString()}
+      key: "patient",
+      header: t("common.patient"),
+      render: (order) => {
+        const patient = typeof order.patient === "object" ? order.patient : null;
+        return <span className="font-semibold text-xs text-ink">{patient ? `${patient.firstName} ${patient.lastName}` : "-"}</span>;
+      },
+    },
+    {
+      key: "type",
+      header: t("labOrders.table.type"),
+      render: (order) => (
+        <span className="flex items-center gap-1.5 text-xs text-ink">
+          {order.type === "IMAGING" ? <LuScanLine className="w-4 h-4" /> : <LuFlaskConical className="w-4 h-4" />}
+          {t(order.type === "IMAGING" ? "labOrders.type.imaging" : "labOrders.type.lab")}
         </span>
       ),
     },
     {
-      key: "patient",
-      header: t("common.patient"),
-      render: (l) => {
-        const p = typeof l.patient === "object" && l.patient ? l.patient : null;
-        return (
-          <span className="font-semibold text-ink text-xs">
-            {p ? `${p.firstName} ${p.lastName}` : t("common.patient")}
-          </span>
-        );
-      },
-    },
-    {
-      key: "doctor",
-      header: t("labOrders.table.orderingPhysician"),
-      render: (l) => {
-        const doc = typeof l.doctor === "object" && l.doctor ? l.doctor : null;
-        const u = doc && typeof doc.user === "object" && doc.user ? doc.user : null;
-        return (
-          <span className="text-xs text-slate-dark">
-            {u ? `Dr. ${u.lastName}` : t("common.doctor")}
-          </span>
-        );
-      },
-    },
-    {
       key: "tests",
       header: t("labOrders.table.diagnosticTests"),
-      render: (l) => (
-        <div className="flex flex-col gap-0.5">
-          {l.tests.map((t, idx) => (
-            <span key={idx} className="text-xs font-medium text-ink">
-              • {t.name} {t.code && `(${t.code})`}
+      render: (order) => (
+        <div className="flex flex-col gap-1">
+          {order.tests.map((test, index) => (
+            <span key={`${test.name}-${index}`} className="text-xs font-medium text-ink">
+              • {test.name}
             </span>
           ))}
+          {order.instructions && <span className="text-[10px] text-slate-muted">{order.instructions}</span>}
         </div>
       ),
     },
     {
+      key: "visit",
+      header: t("labOrders.table.visit"),
+      render: (order) => {
+        const visitId = typeof order.visit === "object" ? order.visit._id : order.visit;
+        return (
+          <Link href={`/visits/${visitId}`} className="inline-flex items-center gap-1 text-xs text-teal-primary hover:underline">
+            {t("labOrders.table.openVisit")}
+            <LuExternalLink className="w-3 h-3" />
+          </Link>
+        );
+      },
+    },
+    {
       key: "priority",
       header: t("common.priority"),
-      render: (l) => <StatusBadge status={l.priority} size="sm" />,
+      render: (order) => <StatusBadge status={order.priority} size="sm" />,
     },
     {
       key: "status",
-      header: t("labOrders.table.workflowStatus"),
-      render: (l) => <StatusBadge status={l.status} size="sm" />,
+      header: t("labOrders.table.status"),
+      render: (order) => <StatusBadge status={order.status} size="sm" />,
     },
     {
       key: "actions",
       header: "",
       align: "right",
-      render: (l) => canManageLabOrders ? (
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => handleOpenStatusModal(l)}
-        >
-          {t("labOrders.updateStatus")}
-        </Button>
-      ) : null,
+      render: (order) => (
+        <div className="flex justify-end gap-2">
+          {order.status === "REQUESTED" && (
+            <Button variant="secondary" size="sm" onClick={() => openModal(order, "RESULT_RECEIVED")}>
+              {t("labOrders.quickResult")}
+            </Button>
+          )}
+          {order.status !== "CANCELLED" && (
+            <Button variant="ghost" size="sm" onClick={() => openModal(order)}>
+              {t("labOrders.updateStatus")}
+            </Button>
+          )}
+        </div>
+      ),
     },
   ];
 
@@ -149,53 +187,47 @@ export default function LabOrdersPage() {
       <PageHeader
         title={t("labOrders.title")}
         subtitle={t("labOrders.subtitle")}
+        badge={<StatusBadge status={`${requestedCount} ${t("labOrders.requestedPending")}`} size="sm" />}
       />
 
-      {/* Filter Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-surface p-3 rounded-lg border border-border-subtle">
-        <div className="flex items-center gap-2.5">
-          <div className="w-40">
-            <Select
-              value={queryParams.status || ""}
-              onChange={(e) =>
-                setQueryParams((prev) => ({
-                  ...prev,
-                  status: (e.target.value as LabOrderStatus) || undefined,
-                  page: 1,
-                }))
-              }
-              placeholder={t("labOrders.filter.allStatuses")}
-              options={[
-                { value: "", label: t("labOrders.filter.allStatuses") },
-                { value: "ordered", label: t("labOrders.filter.ordered") },
-                { value: "sample_collected", label: t("labOrders.filter.sampleCollected") },
-                { value: "processing", label: t("labOrders.filter.processing") },
-                { value: "completed", label: t("labOrders.filter.completed") },
-                { value: "cancelled", label: t("labOrders.filter.cancelled") },
-              ]}
-            />
-          </div>
-
-          <div className="w-32">
-            <Select
-              value={queryParams.priority || ""}
-              onChange={(e) =>
-                setQueryParams((prev) => ({
-                  ...prev,
-                  priority: (e.target.value as LabOrderPriority) || undefined,
-                  page: 1,
-                }))
-              }
-              placeholder={t("labOrders.filter.allPriorities")}
-              options={[
-                { value: "", label: t("labOrders.filter.allPriorities") },
-                { value: "routine", label: t("labOrders.filter.routine") },
-                { value: "urgent", label: t("labOrders.filter.urgent") },
-                { value: "stat", label: t("labOrders.filter.stat") },
-              ]}
-            />
-          </div>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 bg-surface p-3 rounded-lg border border-border-subtle">
+        <Select
+          value={queryParams.status || ""}
+          onChange={(event) => setQueryParams((prev) => ({ ...prev, status: (event.target.value as LabOrderStatus) || undefined, page: 1 }))}
+          placeholder={t("labOrders.filter.allStatuses")}
+          options={[
+            { value: "", label: t("labOrders.filter.allStatuses") },
+            { value: "REQUESTED", label: t("labOrders.status.requested") },
+            { value: "RESULT_RECEIVED", label: t("labOrders.status.resultReceived") },
+            { value: "CANCELLED", label: t("labOrders.status.cancelled") },
+          ]}
+        />
+        <Select
+          value={queryParams.type || ""}
+          onChange={(event) => setQueryParams((prev) => ({ ...prev, type: (event.target.value as LabOrderType) || undefined, page: 1 }))}
+          placeholder={t("labOrders.filter.allTypes")}
+          options={[
+            { value: "", label: t("labOrders.filter.allTypes") },
+            { value: "LAB", label: t("labOrders.type.lab") },
+            { value: "IMAGING", label: t("labOrders.type.imaging") },
+          ]}
+        />
+        <Select
+          value={queryParams.priority || ""}
+          onChange={(event) => setQueryParams((prev) => ({ ...prev, priority: (event.target.value as LabOrderPriority) || undefined, page: 1 }))}
+          placeholder={t("labOrders.filter.allPriorities")}
+          options={[
+            { value: "", label: t("labOrders.filter.allPriorities") },
+            { value: "routine", label: t("labOrders.filter.routine") },
+            { value: "urgent", label: t("labOrders.filter.urgent") },
+            { value: "stat", label: t("labOrders.filter.stat") },
+          ]}
+        />
+        <Input
+          value={queryParams.search}
+          onChange={(event) => setQueryParams((prev) => ({ ...prev, search: event.target.value, page: 1 }))}
+          placeholder={t("labOrders.filter.searchPatient")}
+        />
       </div>
 
       <DataTable
@@ -210,50 +242,53 @@ export default function LabOrdersPage() {
         onPageChange={(page) => setQueryParams((prev) => ({ ...prev, page }))}
       />
 
-      {/* Update Lab Status Modal */}
       <Modal
         isOpen={Boolean(activeOrder)}
         onClose={() => setActiveOrder(null)}
         title={t("labOrders.modal.title")}
-        subtitle={`${t("labOrders.modal.orderId")}: ${activeOrder?._id}`}
+        subtitle={activeOrder?.tests.map((test) => test.name).join("، ")}
       >
-        <form onSubmit={handleUpdateStatus} className="flex flex-col gap-4">
+        <form onSubmit={(event) => { event.preventDefault(); void submitUpdate(); }} className="flex flex-col gap-4">
           <Select
-            label={t("labOrders.modal.workflowStatus")}
+            label={t("labOrders.modal.status")}
             value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value as LabOrderStatus)}
+            onChange={(event) => setSelectedStatus(event.target.value as LabOrderStatus)}
             options={[
-              { value: "ordered", label: t("labOrders.filter.ordered") },
-              { value: "sample_collected", label: t("labOrders.filter.sampleCollected") },
-              { value: "processing", label: t("labOrders.filter.processing") },
-              { value: "completed", label: t("labOrders.filter.completed") },
-              { value: "cancelled", label: t("labOrders.filter.cancelled") },
+              { value: "REQUESTED", label: t("labOrders.status.requested") },
+              { value: "RESULT_RECEIVED", label: t("labOrders.status.resultReceived") },
+              { value: "CANCELLED", label: t("labOrders.status.cancelled") },
             ]}
           />
 
-          <div className="p-3 bg-paper rounded-lg text-xs text-slate-muted flex flex-col gap-1">
-            <span className="font-semibold text-ink">{t("labOrders.modal.testsIncluded")}</span>
-            {activeOrder?.tests.map((t, idx) => (
-              <span key={idx}>• {t.name}</span>
-            ))}
-          </div>
+          {selectedStatus === "RESULT_RECEIVED" && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input label={t("labOrders.modal.receivedAt")} type="date" value={receivedAt} onChange={(event) => setReceivedAt(event.target.value)} />
+              <Input label={t("labOrders.modal.performedAt")} type="date" value={performedAt} onChange={(event) => setPerformedAt(event.target.value)} />
+              <div className="sm:col-span-2">
+                <Input label={t("labOrders.modal.facility")} value={facility} onChange={(event) => setFacility(event.target.value)} />
+              </div>
+              <div className="sm:col-span-2">
+                <Textarea label={t("labOrders.modal.notes")} value={resultNotes} onChange={(event) => setResultNotes(event.target.value)} />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-medium mb-1.5">{t("labOrders.modal.file")}</label>
+                <input type="file" accept=".pdf,image/*" onChange={(event) => setResultFile(event.target.files?.[0] || null)} className="block w-full text-xs" />
+              </div>
+            </div>
+          )}
 
-          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border-subtle">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => setActiveOrder(null)}
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              isLoading={isUpdating}
-              leftIcon={<LuCircleCheck className="w-3.5 h-3.5" />}
-            >
+          {selectedStatus === "CANCELLED" && (
+            <Textarea
+              label={t("labOrders.modal.cancelReason")}
+              value={cancelReason}
+              onChange={(event) => setCancelReason(event.target.value)}
+              required
+            />
+          )}
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-border-subtle">
+            <Button type="button" variant="secondary" size="sm" onClick={() => setActiveOrder(null)}>{t("common.cancel")}</Button>
+            <Button type="submit" variant="primary" size="sm" isLoading={isUpdating} leftIcon={<LuCircleCheck className="w-3.5 h-3.5" />}>
               {t("labOrders.updateStatus")}
             </Button>
           </div>

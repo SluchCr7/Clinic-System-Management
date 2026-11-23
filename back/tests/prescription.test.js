@@ -156,7 +156,9 @@ describe("Prescriptions API", () => {
     const invalid = await request(app)
       .post("/api/prescriptions")
       .set("Authorization", doctorUser.authHeader)
-      .send(prescriptionPayload({ medications: [] }));
+      .send(prescriptionPayload({
+        medications: [{ name: "", dosage: "", frequency: "", duration: "" }],
+      }));
 
     expect(invalid.status).toBe(400);
     expect(invalid.body.code).toBe("VALIDATION_ERROR");

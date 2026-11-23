@@ -21,11 +21,13 @@ router.post(
   labOrderController.createLabOrder
 );
 
+// Receptionists may receive results for doctor-assigned orders.
+
 // Get All - Doctor (own clinic) & Admin (oversight)
 router.get(
   "/",
   protect,
-  authorize("admin", "doctor"),
+  authorize("admin", "doctor", "receptionist"),
   validateQuery(labOrderListQuerySchema),
   labOrderController.getLabOrders
 );
@@ -34,7 +36,7 @@ router.get(
 router.get(
   "/:id",
   protect,
-  authorize("admin", "doctor"),
+  authorize("admin", "doctor", "receptionist"),
   validateId("id"),
   labOrderController.getLabOrderById
 );
@@ -43,7 +45,7 @@ router.get(
 router.patch(
   "/:id",
   protect,
-  authorize("admin", "doctor"),
+  authorize("admin", "doctor", "receptionist"),
   validateId("id"),
   validate(updateLabOrderSchema),
   labOrderController.updateLabOrder

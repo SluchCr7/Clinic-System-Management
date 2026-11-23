@@ -2,6 +2,7 @@ const Prescription = require("./prescription.model");
 const Visit = require("../Visit/visit.model");
 const Patient = require("../Patient/patient.model");
 const Doctor = require("../Doctor/doctor.model");
+const LabOrder = require("../LabOrder/labOrder.model");
 const { AppError } = require("../../middlewares/errorHandler");
 const auditLogService = require("../AuditLog/auditLog.service");
 const { paginateQuery } = require("../../utils/pagination");
@@ -122,6 +123,20 @@ const createPrescription = async (data, currentUser) => {
   await validateDoctor(doctor);
   await validateVisit(visit, patient, doctor);
 
+  if (!data.medications?.length) {
+    const referralCount = await LabOrder.countDocuments({
+      visit,
+      status: { $ne: "CANCELLED" },
+    });
+    if (referralCount === 0) {
+      throw new AppError(
+        "A prescription requires at least one medication or external referral",
+        422,
+        "PRESCRIPTION_CONTENT_REQUIRED"
+      );
+    }
+  }
+
   const existingPrescription = await Prescription.findOne({ visit });
 
   if (existingPrescription) {
@@ -213,6 +228,14 @@ const getPrescriptionById = async (id, currentUser = null) => {
     return null;
   }
 
+  const liveLabOrders = await LabOrder.find({
+    visit: prescription.visit,
+  })
+    .populate("doctor", "user specialization")
+    .populate("requestedBy", "firstName lastName")
+    .sort({ createdAt: -1 });
+  prescription._doc.labOrders = liveLabOrders;
+
   if (currentUser) {
     await assertDoctorAccess(
       currentUser,
@@ -257,6 +280,19 @@ const updatePrescription = async (id, data, currentUser) => {
   const previousMedicationCount = prescription.medications?.length || 0;
 
   Object.assign(prescription, data);
+  if (!prescription.medications?.length) {
+    const referralCount = await LabOrder.countDocuments({
+      visit: prescription.visit,
+      status: { $ne: "CANCELLED" },
+    });
+    if (referralCount === 0) {
+      throw new AppError(
+        "A prescription requires at least one medication or external referral",
+        422,
+        "PRESCRIPTION_CONTENT_REQUIRED"
+      );
+    }
+  }
   prescription.updatedBy = currentUser._id;
 
   await prescription.save();

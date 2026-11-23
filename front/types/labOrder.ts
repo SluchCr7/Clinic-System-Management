@@ -4,12 +4,11 @@ import { Patient } from "./patient";
 import { Doctor } from "./doctor";
 
 export type LabOrderPriority = "routine" | "urgent" | "stat";
+export type LabOrderType = "LAB" | "IMAGING";
 export type LabOrderStatus =
-  | "ordered"
-  | "sample_collected"
-  | "processing"
-  | "completed"
-  | "cancelled";
+  | "REQUESTED"
+  | "RESULT_RECEIVED"
+  | "CANCELLED";
 
 export interface LabTest {
   name: string;
@@ -19,6 +18,7 @@ export interface LabTest {
 
 export interface LabOrder {
   _id: string;
+  type: LabOrderType;
   visit: Visit | string;
   patient: Patient | string;
   doctor: Doctor | string;
@@ -28,11 +28,24 @@ export interface LabOrder {
   status: LabOrderStatus;
   notes?: string;
   orderedAt: string;
+  requestedAt?: string;
+  requestedBy?: string | { firstName: string; lastName: string };
+  instructions?: string;
+  clinicalNotes?: string;
+  expectedBy?: string;
+  receivedAt?: string;
+  receivedBy?: string;
+  performedAt?: string;
+  externalFacilityName?: string;
+  resultNotes?: string;
+  resultAttachment?: string;
+  statusChangeReason?: string;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface CreateLabOrderRequest {
+  type?: LabOrderType;
   visit: string;
   patient: string;
   doctor: string;
@@ -41,6 +54,9 @@ export interface CreateLabOrderRequest {
   priority?: LabOrderPriority;
   notes?: string;
   orderedAt?: string;
+  instructions?: string;
+  clinicalNotes?: string;
+  expectedBy?: string;
 }
 
 export interface UpdateLabOrderRequest {
@@ -50,6 +66,16 @@ export interface UpdateLabOrderRequest {
   status?: LabOrderStatus;
   notes?: string;
   orderedAt?: string;
+  type?: LabOrderType;
+  instructions?: string;
+  clinicalNotes?: string;
+  expectedBy?: string;
+  receivedAt?: string;
+  performedAt?: string;
+  externalFacilityName?: string;
+  resultNotes?: string;
+  resultAttachment?: string;
+  statusChangeReason?: string;
 }
 
 export interface LabOrderQueryParams extends BaseListQueryParams {

@@ -49,9 +49,9 @@
       "paid": "مدفوع",
       "partially-paid": "مدفوع جزئيًا",
       "unpaid": "غير مدفوع",
-      "ordered": "مطلوب",
-      "sample-collected": "تم جمع العينة",
-      "processing": "قيد المعالجة",
+      "REQUESTED": "مطلوب",
+      "RESULT_RECEIVED": "تم استلام النتيجة",
+      "CANCELLED": "ملغي",
       "routine": "اعتيادي",
       "urgent": "عاجل",
       "stat": "طارئ",
@@ -77,7 +77,7 @@
     "appointments": "المواعيد",
     "visits": "الزيارات",
     "prescriptions": "الوصفات",
-    "labOrders": "الفحوصات المخبرية",
+    "labOrders": "التحاليل والأشعة المطلوبة",
     "invoices": "الفواتير",
     "payments": "المدفوعات",
     "medicalServices": "الخدمات الطبية",
@@ -176,7 +176,7 @@
     "revenueCollected": "الإيرادات المحصلة",
     "revenueSubtitle": "اليوم: {{value}}",
     "outstanding": "مستحق",
-    "labOrders": "طلبات المختبر",
+    "labOrders": "التحاليل والأشعة المطلوبة",
     "labOrdersSubtitle": "طلبات نشطة بانتظار النتائج",
     "pending": "قيد الانتظار",
     "labSubTitle": "طلبات نشطة بانتظار النتائج",
@@ -407,7 +407,7 @@
       "tabs": {
         "overview": "نظرة عامة والملاحظات",
         "prescriptions": "الوصفات الطبية",
-        "labOrders": "طلبات المختبر",
+        "labOrders": "التحاليل والأشعة المطلوبة",
         "services": "الخدمات المنفذة",
         "attachments": "الملفات والتقارير",
         "billing": "الفاتورة والدفع"
@@ -433,16 +433,16 @@
       "generalInstructions": "تعليمات عامة للمريض",
       "prescriptionNotes": "ملاحظات الوصفة الطبية",
       "prescriptionSuccess": "تم إصدار الوصفة الطبية بنجاح.",
-      "labOrdersTitle": "الفحوصات المخبرية التشخيصية",
-      "labOrdersSubtitle": "طلبات التحاليل التشخيصية والعينات الطبية",
-      "orderLabTest": "طلب فحص مخبري",
-      "noLabOrders": "لم يتم طلب فحوصات مخبرية لهذه الزيارة.",
+      "labOrdersTitle": "التحاليل والأشعة المطلوبة",
+      "labOrdersSubtitle": "متابعة التحاليل والأشعة المطلوبة من المريض وإحضار نتائجها",
+      "orderLabTest": "طلب تحليل أو أشعة",
+      "noLabOrders": "لم يتم طلب تحاليل أو أشعة لهذه الزيارة.",
       "testName": "اسم الفحص",
       "testCode": "رمز الفحص",
       "priority": "الأولوية",
       "reason": "السبب السريري / المبرر الطبي",
-      "labOrderNotes": "ملاحظات طلب الفحص",
-      "labOrderSuccess": "تم إنشاء طلب الفحص المخبري بنجاح.",
+      "labOrderNotes": "ملاحظات الطلب",
+      "labOrderSuccess": "تم إنشاء طلب التحاليل أو الأشعة بنجاح.",
       "servicesTitle": "الإجراءات الطبية والخدمات المنفذة",
       "servicesSubtitle": "الإجراءات والخدمات السريرية التي تم تنفيذها خلال هذه الزيارة",
       "recordService": "تسجيل خدمة منفذة",
@@ -487,40 +487,59 @@
     }
   },
   "labOrders": {
-    "title": "طلبات المختبر التشخيصي",
-    "subtitle": "تتبع العينات وسير عمل المختبر التشخيصي",
+    "title": "التحاليل والأشعة المطلوبة",
+    "subtitle": "متابعة التحاليل والأشعة المطلوبة من المرضى وإحضار نتائجها",
+    "requestedPending": "مطلوب لسه",
+    "quickResult": "تم استلام النتيجة",
     "updateStatus": "تحديث الحالة",
-    "emptyTitle": "لا توجد طلبات مختبر",
-    "emptyDescription": "لا توجد تحاليل مخبرية تطابق هذا الفلتر.",
+    "emptyTitle": "لا توجد طلبات",
+    "emptyDescription": "لا توجد تحاليل أو أشعة تطابق هذا الفلتر.",
+    "type": {
+      "lab": "تحليل",
+      "imaging": "أشعة"
+    },
+    "status": {
+      "requested": "مطلوب",
+      "resultReceived": "تم استلام النتيجة",
+      "cancelled": "ملغي"
+    },
     "filter": {
       "allStatuses": "كل الحالات",
+      "allTypes": "كل الأنواع",
       "allPriorities": "كل الأولويات",
-      "ordered": "مطلوب (تم الطلب)",
-      "sampleCollected": "تم جمع العينة",
-      "processing": "قيد المعالجة (مختبر)",
-      "completed": "مكتمل",
-      "cancelled": "ملغي",
       "routine": "عادي",
       "urgent": "عاجل",
-      "stat": "طارئ (طوارئ)"
+      "stat": "مستعجل جدًا",
+      "searchPatient": "البحث باسم المريض"
     },
     "table": {
       "orderedDate": "تاريخ الطلب",
-      "orderingPhysician": "الطبيب الطارق",
-      "diagnosticTests": "الفحوصات التشخيصية",
-      "workflowStatus": "حالة سير العمل"
+      "orderingPhysician": "الطبيب",
+      "diagnosticTests": "التحاليل/الأشعة",
+      "workflowStatus": "الحالة",
+      "type": "النوع",
+      "visit": "الزيارة",
+      "status": "الحالة",
+      "openVisit": "فتح الزيارة"
     },
     "modal": {
-      "title": "تحديث حالة العينة",
+      "title": "تحديث حالة الطلب",
       "orderId": "معرّف الطلب",
-      "workflowStatus": "حالة سير عمل طلب المختبر",
-      "testsIncluded": "الفحوصات المتضمنة:"
+      "workflowStatus": "الحالة",
+      "status": "الحالة",
+      "testsIncluded": "الطلبات المتضمنة:",
+      "receivedAt": "تاريخ الاستلام",
+      "performedAt": "تاريخ إجراء الفحص",
+      "facility": "اسم المعمل/مركز الأشعة",
+      "notes": "ملاحظات النتيجة",
+      "file": "ملف النتيجة",
+      "cancelReason": "سبب الإلغاء"
     },
     "success": {
-      "updated": "تم تحديث حالة المختبر بنجاح."
+      "updated": "تم تحديث حالة الطلب بنجاح."
     },
     "errors": {
-      "updateFailed": "فشل في تحديث طلب المختبر."
+      "updateFailed": "فشل في تحديث طلب التحاليل أو الأشعة."
     }
   },
   "medicalServices": {
@@ -668,7 +687,7 @@
       "appointments": "المواعيد",
       "visits": "الزيارات",
       "prescriptions": "الوصفات",
-      "laboratory": "المختبر",
+      "laboratory": "التحاليل والأشعة",
       "attachments": "المرفقات",
       "billing": "الفوترة"
     },
@@ -693,9 +712,9 @@
     "emptyTitlePrescriptions": "لا توجد وصفات طبية",
     "emptyDescriptionPrescriptions": "لم يتم وصف أي أدوية لهذا المريض.",
     "orderedDate": "تاريخ الطلب",
-    "labTests": "اختبارات المختبر",
+    "labTests": "التحاليل والأشعة",
     "priority": "الأولوية",
-    "emptyTitleLabOrders": "لا توجد طلبات مختبر",
+    "emptyTitleLabOrders": "لا توجد تحاليل أو أشعة",
     "emptyDescriptionLabOrders": "لم يتم طلب أي فحوصات مخبرية.",
     "documentTitle": "عنوان الوثيقة",
     "category": "الفئة",
@@ -870,6 +889,7 @@
     "bloodGroup": "فصيلة الدم",
     "code": "رمز الوصفة",
     "prescribedMedications": "الأدوية الموصوفة",
+    "externalReferrals": "التحاليل والأشعة المطلوبة",
     "drugNameAndForm": "اسم الدواء وشكله",
     "dosage": "الجرعة",
     "frequency": "التكرار",
@@ -1002,14 +1022,14 @@
       "empty": "لم يتم العثور على بيانات استشارات الأطباء لهذه الفترة."
     },
     "lab": {
-      "totalRequisitions": "إجمالي طلبات المختبر",
+      "totalRequisitions": "إجمالي الطلبات الخارجية",
       "totalRequisitionsDescription": "العينات التشخيصية التي تمت معالجتها",
       "urgentOrders": "طلبات عاجلة / طارئة",
       "urgentOrdersDescription": "عينات ذات أولوية عالية",
       "routineOrders": "الطلبات الاعتيادية",
       "routineOrdersDescription": "فحوصات مرضية قياسية",
       "topTests": "أكثر الفحوصات التشخيصية طلبًا",
-      "topTestsSubtitle": "الفحوصات المخبرية الأكثر تكرارًا",
+      "topTestsSubtitle": "التحاليل والأشعة الأكثر تكرارًا",
       "orderCount": "{{count}} طلبات",
       "empty": "لم يتم تسجيل فحوصات مخبرية تشخيصية خلال هذه الفترة."
     },
@@ -1076,6 +1096,8 @@
       "duration": "مدة الاستشارة",
       "reason": "سبب الزيارة",
       "notes": "ملاحظات إضافية",
+      "availableSlots": "الأوقات المتاحة",
+      "alternativeSlots": "أقرب الأوقات البديلة",
       "submit": "تأكيد الموعد"
     },
     "cancelDialog": {
@@ -1202,7 +1224,7 @@
   },
   "notifications": {
     "title": "الإشعارات والتنبيهات السريرية",
-    "subtitle": "تذكيرات التشغيل وإنجازات العينات المخبرية والمعاملات المالية",
+    "subtitle": "تنبيهات الزيارات والطلبات الخارجية والعمليات المالية",
     "markAllRead": "تحديد جميعها كمقروءة",
     "allStatus": "كل الحالات",
     "allNotifications": "كل الإشعارات",
@@ -1210,9 +1232,12 @@
     "readOnly": "المقروءة فقط",
     "allCategories": "كل الفئات",
     "appointments": "المواعيد",
-    "labOrders": "طلبات المختبر",
+    "labOrders": "التحاليل والأشعة المطلوبة",
     "payments": "المدفوعات",
     "prescriptions": "الوصفات",
+    "visitCompleted": "إنهاء الزيارة",
+    "labResult": "استلام نتيجة",
+    "labCancelled": "إلغاء طلب",
     "systemAlerts": "تنبيهات النظام",
     "total": "الإجمالي",
     "failedLoad": "فشل تحميل الإشعارات.",
