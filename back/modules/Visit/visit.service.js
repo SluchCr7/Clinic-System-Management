@@ -18,6 +18,7 @@ const { getIO } = require("../../utils/socket");
 const {
   checkDoctorAvailability,
   throwAvailabilityConflict,
+  clinicWallTimeToUtc,
 } = require("../../utils/doctorAvailability");
 
 const validateDoctor = async (doctorId, session = null) => {
@@ -91,6 +92,7 @@ const createVisit = async (data, currentUser) => {
   const session = await mongoose.startSession();
   const startedAt = new Date();
   let createdVisit;
+  let reviewFollowUpAppointment = null;
 
   try {
     await session.withTransaction(async () => {
@@ -159,11 +161,9 @@ const createVisit = async (data, currentUser) => {
         { session }
       );
 
+      const durationMinutes = appointmentData.duration || 30;
       const visitStart = startedAt;
-      const visitEnd = new Date(
-        new Date(appointmentData.appointmentDate).getTime() +
-          (appointmentData.duration || 30) * 60 * 1000
-      );
+      const visitEnd = new Date(startedAt.getTime() + durationMinutes * 60 * 1000);
       const availability = await checkDoctorAvailability({
         doctorId: doctor,
         patientId: patient,
@@ -172,9 +172,46 @@ const createVisit = async (data, currentUser) => {
         excludeAppointmentId: appointmentData._id,
         session,
         checkWorkingHours: false,
+        checkAppointments: false,
       });
       throwAvailabilityConflict(availability);
 
+      let normalizedFollowUpDate = null;
+      if (data.followUpDate) {
+        normalizedFollowUpDate = new Date(data.followUpDate);
+        if (isNaN(normalizedFollowUpDate.getTime())) {
+          throw new AppError("Invalid follow-up date", 400, "INVALID_APPOINTMENT_DATE");
+        }
+        if (normalizedFollowUpDate <= new Date()) {
+          throw new AppError(
+            "Review appointment date must be in the future",
+            400,
+            "INVALID_APPOINTMENT_DATE"
+          );
+        }
+
+        if (normalizedFollowUpDate.getUTCHours() === 0 && normalizedFollowUpDate.getUTCMinutes() === 0) {
+          const datePart = `${normalizedFollowUpDate.getUTCFullYear()}-${String(normalizedFollowUpDate.getUTCMonth() + 1).padStart(2, "0")}-${String(normalizedFollowUpDate.getUTCDate()).padStart(2, "0")}`;
+          normalizedFollowUpDate = clinicWallTimeToUtc(datePart, "10:00");
+        }
+
+        // Only validate conflict and schedule if explicitly booking the appointment
+        if (data.bookFollowUp) {
+          const reviewDuration = Number(data.followUpDuration) || 30;
+          const reviewEnd = new Date(normalizedFollowUpDate.getTime() + reviewDuration * 60 * 1000);
+
+          const reviewAvailability = await checkDoctorAvailability({
+            doctorId: doctor,
+            patientId: patient,
+            start: normalizedFollowUpDate,
+            end: reviewEnd,
+            session,
+            checkWorkingHours: true,
+            checkAppointments: true,
+          });
+          throwAvailabilityConflict(reviewAvailability);
+        }
+      }
 
       const [visit] = await Visit.create(
         [
@@ -188,8 +225,8 @@ const createVisit = async (data, currentUser) => {
             examination: data.examination,
             diagnosis: data.diagnosis,
             doctorNotes: data.doctorNotes,
-            followUpDate: data.followUpDate,
-            followUpReason: data.followUpReason,
+            followUpDate: normalizedFollowUpDate || null,
+            followUpReason: data.followUpReason || null,
             status: "in_progress",
             startedAt,
             statusHistory: [
@@ -206,6 +243,52 @@ const createVisit = async (data, currentUser) => {
         ],
         { session }
       );
+
+      if (normalizedFollowUpDate && data.bookFollowUp) {
+        const [followUpAppt] = await Appointment.create(
+          [
+            {
+              patient: appointmentData.patient,
+              doctor: appointmentData.doctor,
+              appointmentDate: normalizedFollowUpDate,
+              duration: Number(data.followUpDuration) || 30,
+              reason: data.followUpReason || "استشارة متابعة",
+              followUpReason: data.followUpReason || undefined,
+              isFollowUp: true,
+              originatingVisit: visit._id,
+              followUpOf: appointmentData._id,
+              status: "scheduled",
+              createdBy: currentUser._id,
+              statusHistory: [
+                {
+                  from: null,
+                  to: "scheduled",
+                  changedBy: currentUser._id,
+                  changedAt: startedAt,
+                  note: "Review appointment booked during visit creation",
+                },
+              ],
+            },
+          ],
+          { session }
+        );
+        reviewFollowUpAppointment = followUpAppt;
+
+        await auditLogService.logActivity({
+          actor: currentUser,
+          action: "APPOINTMENT_CREATED",
+          resource: "Appointment",
+          resourceId: followUpAppt._id,
+          details: {
+            patient: appointmentData.patient,
+            doctor: appointmentData.doctor,
+            appointmentDate: normalizedFollowUpDate,
+            isFollowUp: true,
+            originatingVisit: visit._id,
+          },
+          session,
+        });
+      }
 
       transitionAppointment(appointmentData, "in_progress", currentUser, {
         source: "visit",
@@ -272,6 +355,15 @@ const createVisit = async (data, currentUser) => {
 
       createdVisit = visit;
     });
+
+    if (reviewFollowUpAppointment) {
+      try {
+        const { notifyAppointmentCreated } = require("../Appointment/appointment.service");
+        await notifyAppointmentCreated(reviewFollowUpAppointment, currentUser);
+      } catch (err) {
+        console.error("Failed to notify review appointment created:", err);
+      }
+    }
 
     return createdVisit;
   } catch (error) {
@@ -457,6 +549,14 @@ const updateVisit = async (id, data, currentUser) => {
         "followUpReason",
       ];
       const updatedFields = [];
+
+      if (data.followUpDate) {
+        let normalizedFollowUpDate = new Date(data.followUpDate);
+        if (normalizedFollowUpDate.getUTCHours() === 0 && normalizedFollowUpDate.getUTCMinutes() === 0) {
+          const datePart = `${normalizedFollowUpDate.getUTCFullYear()}-${String(normalizedFollowUpDate.getUTCMonth() + 1).padStart(2, "0")}-${String(normalizedFollowUpDate.getUTCDate()).padStart(2, "0")}`;
+          data.followUpDate = clinicWallTimeToUtc(datePart, "10:00");
+        }
+      }
 
       for (const field of allowedFields) {
         if (data[field] !== undefined) {

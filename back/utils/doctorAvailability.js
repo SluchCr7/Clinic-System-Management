@@ -146,6 +146,7 @@ const checkDoctorAvailability = async ({
   session = null,
   includeNextSlots = true,
   checkWorkingHours = true,
+  checkAppointments = true,
 }) => {
   const startDate = new Date(start);
   const endDate = new Date(end);
@@ -203,30 +204,32 @@ const checkDoctorAvailability = async ({
     }
   }
 
-  const appointmentQuery = {
-    doctor: doctorId,
-    status: { $in: ACTIVE_APPOINTMENT_STATUSES },
-    appointmentDate: { $lt: endDate },
-  };
-  if (excludeAppointmentId) appointmentQuery._id = { $ne: excludeAppointmentId };
+  if (checkAppointments) {
+    const appointmentQuery = {
+      doctor: doctorId,
+      status: { $in: ACTIVE_APPOINTMENT_STATUSES },
+      appointmentDate: { $gte: new Date(startDate.getTime() - 24 * 60 * 60 * 1000), $lt: endDate },
+    };
+    if (excludeAppointmentId) appointmentQuery._id = { $ne: excludeAppointmentId };
 
-  const appointments = await Appointment.find(appointmentQuery)
-    .populate("patient", "firstName lastName")
-    .session(session);
+    const appointments = await Appointment.find(appointmentQuery)
+      .populate("patient", "firstName lastName")
+      .session(session);
 
-  for (const appointment of appointments) {
-    const appointmentStart = new Date(appointment.appointmentDate);
-    const appointmentEnd = new Date(
-      appointmentStart.getTime() + (appointment.duration || 30) * 60 * 1000
-    );
-    if (overlap(startDate, endDate, appointmentStart, appointmentEnd)) {
-      conflicts.push({
-        type: "APPOINTMENT",
-        id: appointment._id,
-        start: appointmentStart,
-        end: appointmentEnd,
-        patientDisplay: getPatientDisplay(appointment.patient),
-      });
+    for (const appointment of appointments) {
+      const appointmentStart = new Date(appointment.appointmentDate);
+      const appointmentEnd = new Date(
+        appointmentStart.getTime() + (appointment.duration || 30) * 60 * 1000
+      );
+      if (overlap(startDate, endDate, appointmentStart, appointmentEnd)) {
+        conflicts.push({
+          type: "APPOINTMENT",
+          id: appointment._id,
+          start: appointmentStart,
+          end: appointmentEnd,
+          patientDisplay: getPatientDisplay(appointment.patient),
+        });
+      }
     }
   }
 
@@ -263,11 +266,11 @@ const checkDoctorAvailability = async ({
     }
   }
 
-  if (patientId) {
+  if (patientId && checkAppointments) {
     const patientAppointments = await Appointment.find({
       patient: patientId,
       status: { $in: ACTIVE_APPOINTMENT_STATUSES },
-      appointmentDate: { $lt: endDate },
+      appointmentDate: { $gte: new Date(startDate.getTime() - 24 * 60 * 60 * 1000), $lt: endDate },
     }).session(session);
 
     for (const appointment of patientAppointments) {
@@ -388,4 +391,6 @@ module.exports = {
   checkDoctorAvailability,
   throwAvailabilityConflict,
   getNextAvailableSlots,
+  clinicWallTimeToUtc,
+  getDayOfWeek,
 };

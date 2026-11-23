@@ -341,9 +341,9 @@ const validateFollowUpReferences = async ({
       );
     }
 
-    if (visit.status !== "completed") {
+    if (!["in_progress", "completed"].includes(visit.status)) {
       throw new AppError(
-        "A follow-up can only be created from a completed visit",
+        "A follow-up can only be created from an active or completed visit",
         400,
         "FOLLOW_UP_VISIT_NOT_COMPLETED"
       );
@@ -363,9 +363,9 @@ const validateFollowUpReferences = async ({
       );
     }
 
-    if (sourceAppointment.status !== "completed") {
+    if (!["in_progress", "completed"].includes(sourceAppointment.status)) {
       throw new AppError(
-        "A follow-up can only be created from a completed visit",
+        "A follow-up can only be created from an active or completed visit",
         400,
         "FOLLOW_UP_VISIT_NOT_COMPLETED"
       );
@@ -408,9 +408,9 @@ const validateFollowUpReferences = async ({
       );
     }
 
-    if (parentAppointment.status !== "completed") {
+    if (!["in_progress", "completed"].includes(parentAppointment.status)) {
       throw new AppError(
-        "A follow-up can only be linked to a completed appointment",
+        "A follow-up can only be linked to an active or completed appointment",
         400,
         "FOLLOW_UP_APPOINTMENT_NOT_COMPLETED"
       );

@@ -35,7 +35,7 @@ const vitalsSchema = Joi.object({
   height: Joi.number().min(1).max(300),
 });
 
-const followUpDateSchema = Joi.date().iso().greater("now").allow(null);
+const followUpDateSchema = Joi.date().iso().greater("now").allow("", null);
 
 const createVisitSchema = Joi.object({
   appointment: Joi.string()
@@ -89,10 +89,15 @@ const createVisitSchema = Joi.object({
     .max(3000)
     .allow("", null),
 
-  followUpDate: Joi.date()
-    .iso()
-    .greater("now")
-    .allow(null),
+  followUpDate: followUpDateSchema,
+
+  followUpDuration: Joi.number()
+    .integer()
+    .min(5)
+    .max(240)
+    .default(30),
+
+  bookFollowUp: Joi.boolean().default(false),
 
   followUpReason: Joi.string()
     .trim()
@@ -135,6 +140,11 @@ const updateVisitSchema = Joi.object({
     .allow("", null),
 
   followUpDate: followUpDateSchema,
+
+  followUpDuration: Joi.number()
+    .integer()
+    .min(5)
+    .max(240),
 
   followUpReason: Joi.string()
     .trim()

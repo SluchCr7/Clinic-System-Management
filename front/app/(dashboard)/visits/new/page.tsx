@@ -66,6 +66,7 @@ export default function NewVisitPage() {
   const [doctorNotes, setDoctorNotes] = useState("");
   const [followUpDate, setFollowUpDate] = useState("");
   const [followUpReason, setFollowUpReason] = useState("");
+  const [bookFollowUp, setBookFollowUp] = useState(true);
 
   // Vitals
   const [temperature, setTemperature] = useState("");
@@ -144,6 +145,8 @@ export default function NewVisitPage() {
           : [],
         doctorNotes: doctorNotes.trim() || undefined,
         followUpDate: followUpDate ? new Date(followUpDate).toISOString() : null,
+        bookFollowUp: Boolean(followUpDate && bookFollowUp),
+        followUpDuration: followUpDate ? 30 : undefined,
         followUpReason: followUpReason.trim() || undefined,
       };
 
@@ -339,20 +342,41 @@ export default function NewVisitPage() {
             placeholder="Treatment strategy, patient advice, lifestyle recommendations..."
           />
 
-          <div className="max-w-xs">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Input
               label={t("visits.consultation.followUpDate")}
-              type="date"
+              type="datetime-local"
               value={followUpDate}
               onChange={(e) => setFollowUpDate(e.target.value)}
+              helperText={t("visits.consultation.followUpDateHelper", {
+                defaultValue: "اختياري - حدد التاريخ والوقت إذا كنت ترغب بحجز موعد مراجعة / متابعة",
+              })}
             />
+            <Textarea
+              label={t("visits.consultation.followUpReason")}
+              rows={2}
+              value={followUpReason}
+              onChange={(e) => setFollowUpReason(e.target.value)}
+              placeholder={t("visits.consultation.followUpReasonPlaceholder", {
+                defaultValue: "سبب المتابعة أو التعليمات للمريض...",
+              })}
+            />
+            {followUpDate && (
+              <label className="flex items-center gap-2 text-xs text-ink cursor-pointer sm:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={bookFollowUp}
+                  onChange={(e) => setBookFollowUp(e.target.checked)}
+                  className="rounded border-border-subtle text-primary focus:ring-primary h-4 w-4"
+                />
+                <span>
+                  {t("visits.consultation.bookFollowUpCheckbox", {
+                    defaultValue: "تأكيد حجز موعد المراجعة في جدول المواعيد السريرية",
+                  })}
+                </span>
+              </label>
+            )}
           </div>
-          <Textarea
-            label={t("visits.consultation.followUpReason")}
-            rows={2}
-            value={followUpReason}
-            onChange={(e) => setFollowUpReason(e.target.value)}
-          />
         </CardContent>
         <CardFooter className="justify-end">
           <Button

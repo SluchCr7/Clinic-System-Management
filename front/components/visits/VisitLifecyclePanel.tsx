@@ -65,8 +65,7 @@ const VisitLifecyclePanel = ({ visit, role }: VisitLifecyclePanelProps) => {
   const canEdit = role === "doctor" && visit.status === "in_progress";
   const canBookFollowUp =
     role === "doctor" &&
-    visit.status === "completed" &&
-    Boolean(visit.followUpDate || visit.followUpReason) &&
+    ["in_progress", "completed"].includes(visit.status) &&
     !activeFollowUp;
 
   const [chiefComplaint, setChiefComplaint] = useState(visit.chiefComplaint);
@@ -75,7 +74,7 @@ const VisitLifecyclePanel = ({ visit, role }: VisitLifecyclePanelProps) => {
   const [diagnosis, setDiagnosis] = useState(visit.diagnosis.join(", "));
   const [doctorNotes, setDoctorNotes] = useState(visit.doctorNotes || "");
   const [followUpDate, setFollowUpDate] = useState(
-    visit.followUpDate?.slice(0, 10) || ""
+    visit.followUpDate ? visit.followUpDate.slice(0, 16) : ""
   );
   const [followUpReason, setFollowUpReason] = useState(
     visit.followUpReason || ""
@@ -112,7 +111,7 @@ const VisitLifecyclePanel = ({ visit, role }: VisitLifecyclePanelProps) => {
           diagnosis: diagnosis.split(",").map((item) => item.trim()).filter(Boolean),
           doctorNotes: doctorNotes.trim() || null,
           followUpDate: followUpDate
-            ? new Date(`${followUpDate}T00:00:00.000Z`).toISOString()
+            ? new Date(followUpDate).toISOString()
             : null,
           followUpReason: followUpReason.trim() || null,
         },
@@ -302,7 +301,7 @@ const VisitLifecyclePanel = ({ visit, role }: VisitLifecyclePanelProps) => {
             <div className="grid gap-3 md:grid-cols-2">
               <Input
                 label={t("visits.consultation.followUpDate")}
-                type="date"
+                type="datetime-local"
                 value={followUpDate}
                 onChange={(event) => setFollowUpDate(event.target.value)}
               />
