@@ -7,6 +7,7 @@ const authorize = require("../../middlewares/authorize");
 const { validate, validateQuery, validateId } = require("../../middlewares/validation");
 
 const invoiceController = require("./invoice.controller");
+const paymentController = require("../Payment/payment.controller");
 
 const {
   createInvoiceSchema,
@@ -14,6 +15,7 @@ const {
   invoiceListQuerySchema,
   eligibleVisitListQuerySchema,
 } = require("./invoice.validation");
+const { createPaymentSchema } = require("../Payment/payment.validation");
 
 // Create Invoice
 router.post(
@@ -68,6 +70,16 @@ router.post(
   authorize("admin", "receptionist"),
   validateId("id", "invoice ID"),
   invoiceController.cancelInvoice
+);
+
+// Record payment for Invoice (e.g. POST /api/invoices/:id/payments)
+router.post(
+  "/:id/payments",
+  protect,
+  authorize("admin", "receptionist"),
+  validateId("id", "invoice ID"),
+  validate(createPaymentSchema),
+  paymentController.createPayment
 );
 
 module.exports = router;

@@ -13,6 +13,9 @@
     "migrate:appointment-scheduling": "node scripts/migrateAppointmentScheduling.js",
     "migrate:medical-services": "node scripts/migrateMedicalServicesDoctorOwnership.js",
     "seed:medical-services": "node scripts/seedMedicalServices.js",
+    "seed:payment-methods": "node scripts/seedPaymentMethods.js",
+    "migrate:payments": "node scripts/migratePaymentsToPaymentMethod.js",
+    "rollback:payments": "node scripts/migratePaymentsToPaymentMethod.js --rollback",
     "start": "nodemon index.js",
     "dev": "nodemon index.js"
   },

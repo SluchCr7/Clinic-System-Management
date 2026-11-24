@@ -5,19 +5,17 @@ import { useTranslation } from "react-i18next";
 import {
   useGetInvoicesQuery,
   useCreateInvoiceMutation,
-  useUpdateInvoiceMutation,
   useCancelInvoiceMutation,
   useGetEligibleVisitsQuery,
 } from "@/services/api/invoiceApi";
 import {
   useGetPaymentsQuery,
-  useCreatePaymentMutation,
 } from "@/services/api/paymentApi";
 import { useGetPerformedServicesQuery } from "@/services/api/performedServiceApi";
 import { useGetMedicalServicesQuery } from "@/services/api/medicalServiceApi";
 import type { Invoice, InvoiceQueryParams, InvoiceStatus } from "@/types/invoice";
-import type { PaymentMethod } from "@/types/payment";
 import type { PerformedService } from "@/types/performedService";
+import { RecordPaymentModal } from "@/components/payments/RecordPaymentModal";
 import {
   PageHeader,
   DataTable,
@@ -61,7 +59,7 @@ const roundMoney = (value: number) =>
   Math.round((value + Number.EPSILON) * 100) / 100;
 
 export default function InvoicesPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const role = useAppSelector(selectUserRole);
   const canManageBilling = hasPermission(role, "billing.manage");
 
@@ -75,9 +73,7 @@ export default function InvoicesPage() {
 
   const { data, isLoading, isError, refetch } = useGetInvoicesQuery(queryParams);
   const [createInvoice, { isLoading: isCreatingInvoice }] = useCreateInvoiceMutation();
-  const [updateInvoice, { isLoading: isUpdatingInvoice }] = useUpdateInvoiceMutation();
   const [cancelInvoice, { isLoading: isCancelling }] = useCancelInvoiceMutation();
-  const [createPayment, { isLoading: isRecordingPayment }] = useCreatePaymentMutation();
 
   // Modals state
   const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
@@ -85,20 +81,6 @@ export default function InvoicesPage() {
   const [cancelInvoiceTarget, setCancelInvoiceTarget] = useState<Invoice | null>(null);
   const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false);
   const [eligibleVisitsPage, setEligibleVisitsPage] = useState(1);
-
-  // Edit Services on existing invoice modal
-  const [isEditServicesOpen, setIsEditServicesOpen] = useState(false);
-  const [editInvoiceServices, setEditInvoiceServices] = useState<
-    Array<{
-      serviceId: string;
-      name: string;
-      code: string;
-      category?: string;
-      price: number;
-      quantity: number;
-    }>
-  >([]);
-  const [editAddingServiceId, setEditAddingServiceId] = useState<string>("");
 
   // Create Invoice Form State
   const [selectedVisitId, setSelectedVisitId] = useState<string>("");
@@ -118,12 +100,6 @@ export default function InvoicesPage() {
     }>
   >([]);
   const [addingServiceId, setAddingServiceId] = useState<string>("");
-
-  // Payment Form State
-  const [paymentAmount, setPaymentAmount] = useState<number>(0);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
-  const [paymentRef, setPaymentRef] = useState<string>("");
-  const [paymentNotes, setPaymentNotes] = useState<string>("");
 
   // Fetch Payment History for the currently viewed invoice
   const { data: invoicePaymentsData } = useGetPaymentsQuery(
@@ -146,7 +122,6 @@ export default function InvoicesPage() {
     data: visitServicesData,
     isLoading: isLoadingVisitServices,
     isError: isVisitServicesError,
-    refetch: refetchVisitServices,
   } = useGetPerformedServicesQuery(
     selectedVisitId ? { visit: selectedVisitId, limit: 100 } : undefined,
     { skip: !selectedVisitId }
@@ -181,21 +156,6 @@ export default function InvoicesPage() {
     { skip: !selectedVisitId }
   );
 
-  // Doctor's active catalog for the view/edit invoice modal
-  const viewInvoiceDoctorUser =
-    viewInvoice && typeof viewInvoice.doctor === "object" && viewInvoice.doctor?.user
-      ? typeof viewInvoice.doctor.user === "object"
-        ? viewInvoice.doctor.user._id
-        : viewInvoice.doctor.user
-      : undefined;
-
-  const { data: editInvoiceCatalogData } = useGetMedicalServicesQuery(
-    viewInvoiceDoctorUser
-      ? { doctor: viewInvoiceDoctorUser, isActive: true, limit: 100 }
-      : { isActive: true, limit: 100 },
-    { skip: !isEditServicesOpen }
-  );
-
   // Pre-populate services from visit's recorded performed services
   useEffect(() => {
     if (visitServicesData?.data && visitServicesData.data.length > 0) {
@@ -209,6 +169,7 @@ export default function InvoicesPage() {
           price: s.price,
           quantity: s.quantity || 1,
         }));
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedServices(initial);
     } else {
       setSelectedServices([]);
@@ -321,39 +282,6 @@ export default function InvoicesPage() {
 
   const handleOpenPayment = (inv: Invoice) => {
     setPaymentInvoice(inv);
-    setPaymentAmount(inv.remainingAmount || 0);
-    setPaymentMethod("cash");
-    setPaymentRef("");
-    setPaymentNotes("");
-  };
-
-  const handleRecordPayment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!paymentInvoice) return;
-
-    if (paymentAmount <= 0) {
-      toast.error(t("invoices.errors.amountGreaterThanZero"));
-      return;
-    }
-
-    try {
-      await createPayment({
-        invoice: paymentInvoice._id,
-        amount: Number(paymentAmount),
-        method: paymentMethod,
-        transactionReference: paymentRef.trim() || undefined,
-        notes: paymentNotes.trim() || undefined,
-      }).unwrap();
-
-      toast.success(t("invoices.success.paymentRecorded"));
-      setPaymentInvoice(null);
-      if (viewInvoice && viewInvoice._id === paymentInvoice._id) {
-        setViewInvoice(null);
-      }
-    } catch (err) {
-      const extracted = extractApiError(err);
-      toast.error(extracted.message || t("invoices.errors.paymentFailed"));
-    }
   };
 
   const handleCancelInvoice = async () => {
@@ -736,22 +664,31 @@ export default function InvoicesPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border-subtle">
-                      {invoicePaymentsData.data.map((p) => (
-                        <tr key={p._id}>
-                          <td className="py-2 px-3 text-slate-dark font-mono text-[11px]">
-                            {new Date(p.paidAt || p.createdAt).toLocaleString()}
-                          </td>
-                          <td className="py-2 px-3 capitalize font-medium text-ink">
-                            {p.method.replace("_", " ")}
-                          </td>
-                          <td className="py-2 px-3 font-mono text-slate-muted text-[11px]">
-                            {p.transactionReference || "-"}
-                          </td>
-                          <td className="py-2 px-3 text-right font-semibold text-status-success font-mono">
-                            +${p.amount?.toFixed(2)}
-                          </td>
-                        </tr>
-                      ))}
+                      {invoicePaymentsData.data.map((p) => {
+                        const methodLabel =
+                          typeof p.paymentMethod === "object" && p.paymentMethod
+                            ? (i18n.language === "ar"
+                                ? p.paymentMethod.nameAr
+                                : p.paymentMethod.nameEn)
+                            : t(`payments.methods.${p.method}`, p.method.replace("_", " "));
+                        const ref = p.referenceNumber || p.transactionReference || "—";
+                        return (
+                          <tr key={p._id}>
+                            <td className="py-2 px-3 text-slate-dark font-mono text-[11px]">
+                              {new Date(p.paidAt || p.createdAt).toLocaleString()}
+                            </td>
+                            <td className="py-2 px-3 capitalize font-medium text-ink">
+                              {methodLabel}
+                            </td>
+                            <td className="py-2 px-3 font-mono text-slate-muted text-[11px]">
+                              {ref}
+                            </td>
+                            <td className="py-2 px-3 text-right font-semibold text-status-success font-mono">
+                              +${p.amount?.toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1136,74 +1073,17 @@ export default function InvoicesPage() {
       </Modal>
 
       {/* Record Payment Modal */}
-      <Modal
+      <RecordPaymentModal
         isOpen={Boolean(paymentInvoice)}
         onClose={() => setPaymentInvoice(null)}
-        title={t("invoices.payment.title")}
-        subtitle={`${t("invoices.payment.invoiceNumberPrefix")} ${paymentInvoice?.invoiceNumber || paymentInvoice?._id.slice(-6).toUpperCase()} • ${t("invoices.payment.remaining")} $${paymentInvoice?.remainingAmount?.toFixed(2)}`}
-      >
-        <form onSubmit={handleRecordPayment} className="flex flex-col gap-4">
-          <Input
-            label={t("invoices.payment.amountLabel")}
-            type="number"
-            step="0.01"
-            min="0.01"
-            max={paymentInvoice?.remainingAmount}
-            value={paymentAmount}
-            onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
-            required
-            helperText={`${t("invoices.payment.maxPayable")}: $${paymentInvoice?.remainingAmount?.toFixed(2)}`}
-          />
-
-          <Select
-            label={t("invoices.payment.methodLabel")}
-            value={paymentMethod}
-            onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-            options={[
-              { value: "cash", label: t("invoices.payment.methods.cash") },
-              { value: "card", label: t("invoices.payment.methods.card") },
-              { value: "bank_transfer", label: t("invoices.payment.methods.bankTransfer") },
-              { value: "online", label: t("invoices.payment.methods.online") },
-              { value: "insurance", label: t("invoices.payment.methods.insurance") },
-            ]}
-          />
-
-          <Input
-            label={t("invoices.payment.referenceLabel")}
-            placeholder={t("invoices.payment.referencePlaceholder")}
-            value={paymentRef}
-            onChange={(e) => setPaymentRef(e.target.value)}
-          />
-
-          <Textarea
-            label={t("invoices.payment.notesLabel")}
-            placeholder={t("invoices.payment.notesPlaceholder")}
-            value={paymentNotes}
-            onChange={(e) => setPaymentNotes(e.target.value)}
-            rows={2}
-          />
-
-          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border-subtle">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => setPaymentInvoice(null)}
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              isLoading={isRecordingPayment}
-              leftIcon={<LuCircleCheck className="w-3.5 h-3.5" />}
-            >
-              {t("invoices.payment.confirm")}
-            </Button>
-          </div>
-        </form>
-      </Modal>
+        invoice={paymentInvoice}
+        onPaymentSuccess={() => {
+          refetch();
+          if (viewInvoice && viewInvoice._id === paymentInvoice?._id) {
+            setViewInvoice(null);
+          }
+        }}
+      />
 
       {/* Cancel Invoice Confirmation Modal */}
       <Modal

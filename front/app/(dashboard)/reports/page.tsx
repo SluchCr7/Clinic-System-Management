@@ -23,7 +23,9 @@ import {
   StatusBadge,
   Badge,
   Skeleton,
+  Button,
 } from "@/components/ui";
+import { DailyClosingModal } from "@/components/payments/DailyClosingModal";
 import {
   LuDollarSign,
   LuCalendar,
@@ -33,12 +35,14 @@ import {
   LuCreditCard,
   LuActivity,
   LuTrendingUp,
+  LuCalendarCheck,
 } from "react-icons/lu";
 
 export default function ReportsPage() {
   const { t } = useTranslation();
   const [period, setPeriod] = useState<DashboardReportPeriod>("month");
   const [activeTab, setActiveTab] = useState<string>("revenue");
+  const [isDailyClosingOpen, setIsDailyClosingOpen] = useState<boolean>(false);
 
   // Query Hooks
   const { data: revData, isLoading: revLoading } = useGetRevenueReportQuery({ period });
@@ -427,6 +431,17 @@ export default function ReportsPage() {
                   </div>
                 ))}
               </div>
+
+              <div className="mt-4 pt-3 border-t border-border-subtle flex justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsDailyClosingOpen(true)}
+                  leftIcon={<LuCalendarCheck className="w-3.5 h-3.5 text-teal-primary" />}
+                >
+                  {t("invoices.payment.dailyClosing", "عرض التقفيل اليومي المفصل للخزينة")}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -491,6 +506,11 @@ export default function ReportsPage() {
           </Card>
         </div>
       )}
+      {/* Daily Closing Register Modal */}
+      <DailyClosingModal
+        isOpen={isDailyClosingOpen}
+        onClose={() => setIsDailyClosingOpen(false)}
+      />
     </div>
   );
 }

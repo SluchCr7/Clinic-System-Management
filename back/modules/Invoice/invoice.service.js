@@ -7,6 +7,7 @@ const PerformedService = require("../performedService/performedService.model");
 const Patient = require("../Patient/patient.model");
 const Doctor = require("../Doctor/doctor.model");
 const MedicalService = require("../medicalService/medicalService.model");
+const Payment = require("../Payment/payment.model");
 
 const { AppError } = require("../../middlewares/errorHandler");
 
@@ -773,7 +774,14 @@ const getInvoiceById = async (id, currentUser = null) => {
     }
   }
 
-  return invoice;
+  const invoiceObj = invoice.toObject ? invoice.toObject() : invoice;
+  invoiceObj.payments = await Payment.find({ invoice: invoice._id })
+    .populate("paymentMethod", "code nameAr nameEn requiresReference isDefault sortOrder")
+    .populate("receivedBy", "firstName lastName email role")
+    .sort({ paidAt: 1, createdAt: 1 })
+    .lean();
+
+  return invoiceObj;
 };
 
 // ---------------------------------------------

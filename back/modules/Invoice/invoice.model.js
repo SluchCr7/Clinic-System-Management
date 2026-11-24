@@ -181,6 +181,8 @@ const InvoiceSchema = new mongoose.Schema(
       type: String,
       enum: [
         "unpaid",
+        "issued",
+        "draft",
         "partially_paid",
         "paid",
         "cancelled",

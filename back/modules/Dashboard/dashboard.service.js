@@ -1192,7 +1192,11 @@ const getPaymentsReport = async ({
       totalInvoiced: invoices.totalInvoiced,
       totalOutstanding: invoices.totalOutstanding,
     },
-    byMethod: methodStats.map((item) => ({
+    byMethod: methodStats.reduce((acc, item) => {
+      acc[item._id || "cash"] = Number((item.amount || 0).toFixed(2));
+      return acc;
+    }, {}),
+    byMethodBreakdown: methodStats.map((item) => ({
       method: item._id,
       amount: item.amount,
       count: item.count,

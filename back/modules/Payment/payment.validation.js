@@ -7,23 +7,30 @@ const {
 const createPaymentSchema = Joi.object({
   invoice: Joi.string()
     .hex()
-    .length(24)
-    .required(),
+    .length(24),
 
   amount: Joi.number()
     .positive()
     .precision(2)
-    .required(),
+    .required()
+    .messages({
+      "number.positive": "مبلغ الدفع يجب أن يكون أكبر من 0",
+      "any.required": "مبلغ الدفع مطلوب",
+    }),
+
+  paymentMethod: Joi.string()
+    .trim()
+    .allow("", null),
 
   method: Joi.string()
-    .valid(
-      "cash",
-      "card",
-      "bank_transfer",
-      "online",
-      "insurance"
-    )
-    .required(),
+    .trim()
+    .lowercase()
+    .allow("", null),
+
+  referenceNumber: Joi.string()
+    .trim()
+    .max(200)
+    .allow("", null),
 
   transactionReference: Joi.string()
     .trim()
@@ -37,7 +44,24 @@ const createPaymentSchema = Joi.object({
 
   paidAt: Joi.date()
     .iso()
-    .default(() => new Date()),
+    .allow(null),
+
+  idempotencyKey: Joi.string()
+    .trim()
+    .max(100)
+    .allow("", null),
+});
+
+const reversePaymentSchema = Joi.object({
+  reason: Joi.string()
+    .trim()
+    .min(3)
+    .max(500)
+    .required()
+    .messages({
+      "string.min": "سبب إلغاء/عكس الدفعة يجب ألا يقل عن 3 أحرف",
+      "any.required": "سبب إلغاء/عكس الدفعة مطلوب",
+    }),
 });
 
 const paymentListQuerySchema = createListQuerySchema({
@@ -45,6 +69,7 @@ const paymentListQuerySchema = createListQuerySchema({
     "paidAt",
     "amount",
     "method",
+    "paymentMethod",
     "createdAt",
   ],
   dateFields: true,
@@ -52,17 +77,14 @@ const paymentListQuerySchema = createListQuerySchema({
   filters: {
     invoice: objectId,
     patient: objectId,
-    method: Joi.string().valid(
-      "cash",
-      "card",
-      "bank_transfer",
-      "online",
-      "insurance"
-    ),
+    paymentMethod: objectId,
+    receivedBy: objectId,
+    method: Joi.string().trim().lowercase(),
   },
 });
 
 module.exports = {
   createPaymentSchema,
+  reversePaymentSchema,
   paymentListQuerySchema,
 };

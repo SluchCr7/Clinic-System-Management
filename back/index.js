@@ -171,6 +171,7 @@ app.use("/api/medical-services", require("./modules/medicalService/medicalServic
 app.use("/api/performed-services", require("./modules/performedService/performedService.route"));
 app.use("/api/invoices", require("./modules/Invoice/invoice.route"));
 app.use("/api/payments", require("./modules/Payment/payment.route"));
+app.use("/api/payment-methods", require("./modules/PaymentMethod/paymentMethod.route"));
 app.use("/api/medical-attachments", require("./modules/medicalAttachment/medicalAttachment.route"));
 app.use("/api/lab-orders", require("./modules/LabOrder/labOrder.route"));
 app.use("/api/notifications", require("./modules/Notification/notification.route"));

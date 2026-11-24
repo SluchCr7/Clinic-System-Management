@@ -2,8 +2,12 @@
 
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useGetPaymentsQuery } from "@/services/api/paymentApi";
-import type { Payment, PaymentQueryParams, PaymentMethod } from "@/types/payment";
+import {
+  useGetPaymentsQuery,
+  useGetPaymentMethodsQuery,
+} from "@/services/api/paymentApi";
+import type { Payment, PaymentQueryParams, PaymentMethodCode } from "@/types/payment";
+import { DailyClosingModal } from "@/components/payments/DailyClosingModal";
 import {
   PageHeader,
   DataTable,
@@ -21,10 +25,12 @@ import {
   LuBuilding2,
   LuShield,
   LuGlobe,
+  LuSmartphone,
+  LuCalendarCheck,
 } from "react-icons/lu";
 
 export default function PaymentsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [queryParams, setQueryParams] = useState<PaymentQueryParams>({
     page: 1,
     limit: 10,
@@ -34,44 +40,68 @@ export default function PaymentsPage() {
   });
 
   const { data, isLoading, isError, refetch } = useGetPaymentsQuery(queryParams);
+  const { data: methodsData } = useGetPaymentMethodsQuery();
   const [receiptPayment, setReceiptPayment] = useState<Payment | null>(null);
+  const [isDailyClosingOpen, setIsDailyClosingOpen] = useState(false);
 
-  const getMethodBadge = (method: PaymentMethod) => {
-    switch (method) {
+  const getMethodBadge = (payment: Payment | PaymentMethodCode) => {
+    const code =
+      typeof payment === "string"
+        ? payment
+        : typeof payment.paymentMethod === "object" && payment.paymentMethod
+        ? payment.paymentMethod.code
+        : payment.method;
+
+    const label =
+      typeof payment === "object" &&
+      typeof payment.paymentMethod === "object" &&
+      payment.paymentMethod
+        ? (i18n.language === "ar"
+            ? payment.paymentMethod.nameAr
+            : payment.paymentMethod.nameEn)
+        : t(`payments.methods.${code}`, code);
+
+    switch (code) {
       case "cash":
         return (
           <Badge variant="teal" size="sm" className="gap-1">
-            <LuBanknote className="w-3 h-3" /> {t("payments.methods.cash")}
+            <LuBanknote className="w-3 h-3" /> {label}
           </Badge>
         );
       case "card":
         return (
           <Badge variant="info" size="sm" className="gap-1">
-            <LuCreditCard className="w-3 h-3" /> {t("payments.methods.card")}
+            <LuCreditCard className="w-3 h-3" /> {label}
+          </Badge>
+        );
+      case "vodafone_cash":
+        return (
+          <Badge variant="warning" size="sm" className="gap-1 bg-red-50 text-red-700 border-red-200">
+            <LuSmartphone className="w-3 h-3 text-red-600" /> {label}
           </Badge>
         );
       case "bank_transfer":
         return (
           <Badge variant="neutral" size="sm" className="gap-1">
-            <LuBuilding2 className="w-3 h-3" /> {t("payments.methods.bank_transfer")}
+            <LuBuilding2 className="w-3 h-3" /> {label}
           </Badge>
         );
       case "online":
         return (
           <Badge variant="teal" size="sm" className="gap-1">
-            <LuGlobe className="w-3 h-3" /> {t("payments.methods.online")}
+            <LuGlobe className="w-3 h-3" /> {label}
           </Badge>
         );
       case "insurance":
         return (
           <Badge variant="warning" size="sm" className="gap-1">
-            <LuShield className="w-3 h-3" /> {t("payments.methods.insurance")}
+            <LuShield className="w-3 h-3" /> {label}
           </Badge>
         );
       default:
         return (
           <Badge variant="neutral" size="sm">
-            {t("common.notAvailable")}
+            {label}
           </Badge>
         );
     }
@@ -114,14 +144,14 @@ export default function PaymentsPage() {
     {
       key: "method",
       header: t("payments.paymentMethod"),
-      render: (p) => getMethodBadge(p.method),
+      render: (p) => getMethodBadge(p),
     },
     {
       key: "transactionReference",
       header: t("payments.referenceNumber"),
       render: (p) => (
         <span className="font-mono text-xs text-slate-muted">
-          {p.transactionReference || "—"}
+          {p.referenceNumber || p.transactionReference || "—"}
         </span>
       ),
     },
@@ -156,6 +186,16 @@ export default function PaymentsPage() {
       <PageHeader
         title={t("payments.title")}
         subtitle={t("payments.subtitle")}
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsDailyClosingOpen(true)}
+            leftIcon={<LuCalendarCheck className="w-3.5 h-3.5 text-teal-primary" />}
+          >
+            {t("invoices.payment.dailyClosing", "التقفيل اليومي للخزينة")}
+          </Button>
+        }
       />
 
       {/* Filter and Overview */}
@@ -167,18 +207,21 @@ export default function PaymentsPage() {
               onChange={(e) =>
                 setQueryParams((prev) => ({
                   ...prev,
-                  method: (e.target.value as PaymentMethod) || undefined,
+                  method: e.target.value || undefined,
                   page: 1,
                 }))
               }
               placeholder={t("payments.allMethods")}
               options={[
                 { value: "", label: t("payments.allMethods") },
-                { value: "cash", label: t("payments.methods.cash") },
-                { value: "card", label: t("payments.methods.card") },
-                { value: "bank_transfer", label: t("payments.methods.bank_transfer") },
-                { value: "online", label: t("payments.methods.onlineGateway") },
-                { value: "insurance", label: t("payments.methods.insurance") },
+                ...(methodsData?.data?.map((m) => ({
+                  value: m.code,
+                  label: i18n.language === "ar" ? m.nameAr : m.nameEn,
+                })) || [
+                  { value: "cash", label: t("payments.methods.cash") },
+                  { value: "card", label: t("payments.methods.card") },
+                  { value: "vodafone_cash", label: t("payments.methods.vodafone_cash") },
+                ]),
               ]}
             />
           </div>
@@ -244,13 +287,26 @@ export default function PaymentsPage() {
 
               <div>
                 <span className="text-[10px] uppercase text-slate-muted font-semibold">{t("payments.paymentMethod")}:</span>
-                <div className="mt-0.5">{getMethodBadge(receiptPayment.method)}</div>
+                <div className="mt-0.5">{getMethodBadge(receiptPayment)}</div>
               </div>
 
-              {receiptPayment.transactionReference && (
-                <div className="col-span-2">
-                  <span className="text-[10px] uppercase text-slate-muted font-semibold">{t("payments.transactionReference")}:</span>
-                  <p className="font-mono text-ink">{receiptPayment.transactionReference}</p>
+              {(receiptPayment.referenceNumber || receiptPayment.transactionReference) && (
+                <div>
+                  <span className="text-[10px] uppercase text-slate-muted font-semibold">{t("payments.referenceNumber", "رقم العملية / المرجع")}:</span>
+                  <p className="font-mono text-ink">{receiptPayment.referenceNumber || receiptPayment.transactionReference}</p>
+                </div>
+              )}
+
+              {(receiptPayment.receivedBy || receiptPayment.createdBy) && (
+                <div>
+                  <span className="text-[10px] uppercase text-slate-muted font-semibold">{t("invoices.payment.staffMember", "الموظف المستلم")}:</span>
+                  <p className="font-medium text-ink">
+                    {typeof receiptPayment.receivedBy === "object" && receiptPayment.receivedBy
+                      ? `${receiptPayment.receivedBy.firstName} ${receiptPayment.receivedBy.lastName}`
+                      : typeof receiptPayment.createdBy === "object" && receiptPayment.createdBy
+                      ? `${receiptPayment.createdBy.firstName} ${receiptPayment.createdBy.lastName}`
+                      : "—"}
+                  </p>
                 </div>
               )}
             </div>
@@ -303,6 +359,11 @@ export default function PaymentsPage() {
           </div>
         )}
       </Modal>
+      {/* Daily Closing Register Modal */}
+      <DailyClosingModal
+        isOpen={isDailyClosingOpen}
+        onClose={() => setIsDailyClosingOpen(false)}
+      />
     </div>
   );
 }

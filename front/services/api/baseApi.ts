@@ -16,6 +16,7 @@ export const TAG_TYPES = [
   "PerformedService",
   "Invoice",
   "Payment",
+  "PaymentMethod",
   "MedicalAttachment",
   "LabOrder",
   "Notification",
