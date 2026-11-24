@@ -55,7 +55,7 @@ router.get(
 router.patch(
   "/:id",
   protect,
-  authorize("admin"),
+  authorize("admin", "doctor", "receptionist"),
   validateId("id", "invoice ID"),
   validate(updateInvoiceSchema),
   invoiceController.updateInvoice

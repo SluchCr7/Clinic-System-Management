@@ -12,12 +12,17 @@ export type InvoiceStatus =
 export interface InvoiceItem {
   type?: "consultation" | "performed_service";
   performedService?: string | null;
+  serviceId?: string | null;
   serviceName: string;
+  name?: string;
   serviceCode: string;
+  code?: string;
+  category?: string | null;
   unitPrice: number;
   quantity: number;
   discount: number;
   total: number;
+  lineTotal?: number;
 }
 
 export interface Invoice {
@@ -42,14 +47,22 @@ export interface Invoice {
   updatedAt: string;
 }
 
+export interface InvoiceServiceItem {
+  serviceId: string;
+  quantity: number;
+  discount?: number;
+}
+
 export interface CreateInvoiceRequest {
   visit: string;
+  services?: InvoiceServiceItem[];
   discount?: number;
   tax?: number;
   notes?: string | null;
 }
 
 export interface UpdateInvoiceRequest {
+  services?: InvoiceServiceItem[];
   discount?: number;
   tax?: number;
   notes?: string | null;

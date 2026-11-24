@@ -16,9 +16,21 @@ const InvoiceItemSchema = new mongoose.Schema(
       },
     },
 
+    serviceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MedicalService",
+      default: null,
+    },
+
     serviceName: {
       type: String,
       required: true,
+      trim: true,
+      maxlength: 200,
+    },
+
+    name: {
+      type: String,
       trim: true,
       maxlength: 200,
     },
@@ -29,6 +41,20 @@ const InvoiceItemSchema = new mongoose.Schema(
       uppercase: true,
       trim: true,
       maxlength: 50,
+    },
+
+    code: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      maxlength: 50,
+    },
+
+    category: {
+      type: String,
+      trim: true,
+      maxlength: 100,
+      default: null,
     },
 
     unitPrice: {
@@ -53,6 +79,11 @@ const InvoiceItemSchema = new mongoose.Schema(
     total: {
       type: Number,
       required: true,
+      min: 0,
+    },
+
+    lineTotal: {
+      type: Number,
       min: 0,
     },
   },
@@ -124,6 +155,11 @@ const InvoiceSchema = new mongoose.Schema(
     total: {
       type: Number,
       required: true,
+      min: 0,
+    },
+
+    lineTotal: {
+      type: Number,
       min: 0,
     },
 

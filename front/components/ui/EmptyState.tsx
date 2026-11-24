@@ -8,6 +8,7 @@ export interface EmptyStateProps {
   icon?: React.ReactNode;
   actionLabel?: string;
   onAction?: () => void;
+  actionNode?: React.ReactNode;
   className?: string;
 }
 
@@ -17,6 +18,7 @@ export function EmptyState({
   icon,
   actionLabel,
   onAction,
+  actionNode,
   className = "",
 }: EmptyStateProps) {
   return (
@@ -30,11 +32,13 @@ export function EmptyState({
       <p className="text-xs text-slate-muted max-w-sm mt-1.5 mb-5 leading-relaxed">
         {description}
       </p>
-      {actionLabel && onAction && (
+      {actionNode ? (
+        actionNode
+      ) : actionLabel && onAction ? (
         <Button variant="primary" size="sm" onClick={onAction}>
           {actionLabel}
         </Button>
-      )}
+      ) : null}
     </div>
   );
 }

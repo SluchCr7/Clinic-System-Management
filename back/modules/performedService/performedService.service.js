@@ -130,9 +130,9 @@ const validateDiscount = (price, quantity, discount) => {
 };
 
 const createPerformedService = async (data, currentUser) => {
-  if (!currentUser || currentUser.role !== "doctor") {
+  if (!currentUser || !["doctor", "receptionist"].includes(currentUser.role)) {
     throw new AppError(
-      "Only doctors have permission to record performed services",
+      "You do not have permission to record performed services",
       403,
       "FORBIDDEN"
     );
@@ -149,13 +149,17 @@ const createPerformedService = async (data, currentUser) => {
     performedAt,
   } = data;
 
-  const doctorId = await getDoctorScopeId(currentUser, Doctor);
-  if (!doctorId || doctorId.toString() !== doctor.toString()) {
-    throw new AppError(
-      "Doctors can only create performed services for their own visits",
-      403,
-      "FORBIDDEN"
-    );
+  if (currentUser.role === "doctor") {
+    const doctorId = await getDoctorScopeId(currentUser, Doctor);
+    if (!doctorId || doctorId.toString() !== doctor.toString()) {
+      throw new AppError(
+        "Doctors can only create performed services for their own visits",
+        403,
+        "FORBIDDEN"
+      );
+    }
+  } else {
+    await assertDoctorAccess(currentUser, doctor);
   }
 
   const [patientData, doctorData, visitData, medicalService, existingInvoice] = await Promise.all([
@@ -165,6 +169,18 @@ const createPerformedService = async (data, currentUser) => {
     validateMedicalService(service),
     Invoice.findOne({ visit, status: { $ne: "cancelled" } }),
   ]);
+
+  if (
+    medicalService.doctor &&
+    doctorData.user &&
+    medicalService.doctor.toString() !== doctorData.user.toString()
+  ) {
+    throw new AppError(
+      "Medical service does not belong to this doctor",
+      400,
+      "SERVICE_DOCTOR_MISMATCH"
+    );
+  }
 
   if (patientData.doctor && patientData.doctor.toString() !== doctor.toString()) {
     throw new AppError(
@@ -202,6 +218,7 @@ const createPerformedService = async (data, currentUser) => {
     service: medicalService._id,
     serviceName: medicalService.name,
     serviceCode: medicalService.code,
+    category: medicalService.category,
     price: medicalService.price,
     quantity,
     discount,

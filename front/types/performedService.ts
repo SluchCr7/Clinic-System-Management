@@ -12,6 +12,7 @@ export interface PerformedService {
   service: MedicalService | string;
   serviceName: string;
   serviceCode: string;
+  category?: string;
   price: number;
   quantity: number;
   discount: number;

@@ -4,11 +4,13 @@ const router = express.Router();
 
 const protect = require("../../middlewares/auth");
 const authorize = require("../../middlewares/authorize");
-const { validate, validateQuery, validateId } = require("../../middlewares/validation");
+const {
+  validate,
+  validateQuery,
+  validateId,
+} = require("../../middlewares/validation");
 
-const medicalServiceController = require(
-  "./medicalService.controller"
-);
+const medicalServiceController = require("./medicalService.controller");
 
 const {
   createMedicalServiceSchema,
@@ -16,24 +18,28 @@ const {
   medicalServiceListQuerySchema,
 } = require("./medicalService.validation");
 
-// Create Medical Service
+// Create Medical Service (doctor or admin)
 router.post(
   "/",
   protect,
-  authorize("admin"),
+  authorize("admin", "doctor"),
   validate(createMedicalServiceSchema),
   medicalServiceController.createMedicalService
+);
+
+// Get Distinct Categories (must be registered before /:id)
+router.get(
+  "/categories",
+  protect,
+  authorize("admin", "doctor", "receptionist"),
+  medicalServiceController.getCategories
 );
 
 // Get All Medical Services
 router.get(
   "/",
   protect,
-  authorize(
-    "admin",
-    "doctor",
-    "receptionist"
-  ),
+  authorize("admin", "doctor", "receptionist"),
   validateQuery(medicalServiceListQuerySchema),
   medicalServiceController.getMedicalServices
 );
@@ -42,20 +48,25 @@ router.get(
 router.get(
   "/:id",
   protect,
-  authorize(
-    "admin",
-    "doctor",
-    "receptionist"
-  ),
+  authorize("admin", "doctor", "receptionist"),
   validateId("id", "medical service ID"),
   medicalServiceController.getMedicalServiceById
+);
+
+// Activate Medical Service
+router.patch(
+  "/:id/activate",
+  protect,
+  authorize("admin", "doctor"),
+  validateId("id", "medical service ID"),
+  medicalServiceController.activateMedicalService
 );
 
 // Update Medical Service
 router.patch(
   "/:id",
   protect,
-  authorize("admin"),
+  authorize("admin", "doctor"),
   validateId("id", "medical service ID"),
   validate(updateMedicalServiceSchema),
   medicalServiceController.updateMedicalService
@@ -65,7 +76,7 @@ router.patch(
 router.delete(
   "/:id",
   protect,
-  authorize("admin"),
+  authorize("admin", "doctor"),
   validateId("id", "medical service ID"),
   medicalServiceController.deactivateMedicalService
 );

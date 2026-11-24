@@ -201,6 +201,96 @@ const applyClinicScope = async (
   }
 };
 
+/**
+ * Resolve the doctor User._id from a request based on the caller's role:
+ * - doctor: req.user._id
+ * - receptionist: the doctor they are linked to (req.user.doctor or active DoctorAssignment)
+ * - admin: req.body.doctor or req.query.doctor (required if options.required is true)
+ */
+const resolveDoctorId = async (req, { required = true } = {}) => {
+  const user = req.user;
+  if (!user) {
+    throw new AppError("Authentication required", 401, "UNAUTHORIZED");
+  }
+
+  if (user.role === "doctor") {
+    return user._id;
+  }
+
+  if (user.role === "receptionist") {
+    // 1. Check direct field on user
+    if (user.doctor) {
+      const directDoctorUser = await getDoctorUserId(user.doctor);
+      if (directDoctorUser) return directDoctorUser;
+    }
+
+    // 2. Check active DoctorAssignment
+    const assignment = await DoctorAssignment.findOne({
+      receptionist: user._id,
+      isActive: true,
+    })
+      .populate("doctor")
+      .lean();
+
+    if (assignment && assignment.doctor) {
+      const docUser = assignment.doctor.user || assignment.doctor;
+      return docUser?._id || docUser;
+    }
+
+    throw new AppError(
+      "موظف الاستقبال غير مرتبط بأي طبيب",
+      400,
+      "RECEPTIONIST_NOT_LINKED"
+    );
+  }
+
+  if (user.role === "admin") {
+    const doctorParam = req.body?.doctor || req.query?.doctor;
+    if (!doctorParam) {
+      if (required) {
+        throw new AppError("يجب تحديد الطبيب", 400, "DOCTOR_REQUIRED");
+      }
+      return null;
+    }
+
+    const doctorUserId = await getDoctorUserId(doctorParam);
+    if (!doctorUserId) {
+      throw new AppError(
+        "الطبيب المحدد غير صالح أو غير موجود",
+        400,
+        "INVALID_DOCTOR"
+      );
+    }
+    return doctorUserId;
+  }
+
+  throw new AppError("صلاحية غير معروفة", 403, "FORBIDDEN");
+};
+
+/**
+ * Given either a Doctor model ID or a User ID of a doctor, resolve to the User._id
+ */
+const getDoctorUserId = async (doctorOrUserId) => {
+  if (!doctorOrUserId) return null;
+  const idStr = doctorOrUserId._id || doctorOrUserId;
+
+  // 1. Check if it's a Doctor document
+  const doctorDoc = await Doctor.findById(idStr).select("user").lean();
+  if (doctorDoc && doctorDoc.user) {
+    return doctorDoc.user;
+  }
+
+  // 2. Check if it's a User document with role 'doctor'
+  const userDoc = await User.findOne({ _id: idStr, role: "doctor" })
+    .select("_id")
+    .lean();
+  if (userDoc) {
+    return userDoc._id;
+  }
+
+  return null;
+};
+
 module.exports = {
   getAuthorizedDoctorIds,
   getAuthorizedReceptionistIds,
@@ -208,4 +298,6 @@ module.exports = {
   assertDoctorAccess,
   assertPatientAccess,
   applyClinicScope,
+  resolveDoctorId,
+  getDoctorUserId,
 };

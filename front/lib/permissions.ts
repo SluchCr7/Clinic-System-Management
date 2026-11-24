@@ -21,6 +21,7 @@ export type Permission =
   | "laboratory.manage"
   | "billing.view"
   | "billing.manage"
+  | "medicalServices.view"
   | "medicalServices.manage"
   | "reports.view"
   | "users.manage"
@@ -46,6 +47,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "laboratory.manage",
     "billing.view",
     "billing.manage",
+    "medicalServices.view",
     "medicalServices.manage",
     "reports.view",
     "users.manage",
@@ -66,6 +68,8 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "laboratory.create",
     "laboratory.manage",
     "billing.view",
+    "medicalServices.view",
+    "medicalServices.manage",
     "notifications.view",
     "settings.view",
   ],
@@ -81,6 +85,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "prescriptions.view",
     "billing.view",
     "billing.manage",
+    "medicalServices.view",
     "notifications.view",
     "settings.view",
   ],
@@ -100,6 +105,7 @@ export function getRequiredRoutePermission(pathname: string): Permission | null 
   if (pathname.startsWith("/invoices") || pathname.startsWith("/payments")) {
     return "billing.view";
   }
+  if (pathname.startsWith("/medical-services")) return "medicalServices.view";
   if (pathname.startsWith("/reports")) return "reports.view";
   if (pathname.startsWith("/users")) return "users.manage";
   if (pathname.startsWith("/audit-logs")) return "auditLogs.view";

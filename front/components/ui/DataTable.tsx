@@ -29,6 +29,7 @@ export interface DataTableProps<T> {
   emptyDescription?: string;
   emptyActionLabel?: string;
   onEmptyAction?: () => void;
+  emptyAction?: React.ReactNode;
   pagination?: PaginationType;
   onPageChange?: (page: number) => void;
   sortBy?: string;
@@ -49,6 +50,7 @@ export function DataTable<T extends { _id?: string; id?: string }>({
   emptyDescription = "There are currently no items in this list.",
   emptyActionLabel,
   onEmptyAction,
+  emptyAction,
   pagination,
   onPageChange,
   sortBy,
@@ -127,6 +129,7 @@ export function DataTable<T extends { _id?: string; id?: string }>({
                     description={emptyDescription}
                     actionLabel={emptyActionLabel}
                     onAction={onEmptyAction}
+                    actionNode={emptyAction}
                     className="border-none rounded-none py-12"
                   />
                 </td>

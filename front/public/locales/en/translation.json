@@ -589,31 +589,53 @@
       "updateService": "Update Service"
     },
     "title": "Medical Services Catalog",
-    "subtitle": "Standard clinical fee schedules, consultation procedures, and duration standards",
-    "addService": "Add Medical Service",
+    "subtitle": "Manage doctor-owned clinical service catalog, procedures, and fees",
+    "addService": "Add Service",
+    "quickStart": "Add Template Services",
+    "addFirstService": "Add First Service",
+    "exportCsv": "Export CSV",
+    "importCsv": "Import CSV",
+    "duplicate": "Duplicate",
+    "activate": "Activate",
+    "deactivate": "Deactivate",
+    "confirmActivate": "Confirm Service Activation",
+    "confirmDeactivate": "Confirm Service Deactivation",
+    "activateNotice": "Activating or deactivating this service will not affect existing or previously finalized invoices.",
+    "selectDoctor": "Select Doctor:",
+    "allDoctors": "All Doctors",
     "emptyTitle": "No medical services found",
-    "emptyDescription": "There are no services configured matching your search criteria.",
-    "activeServices": "Active Services",
-    "inactiveServices": "Inactive Services",
+    "emptyDescription": "There are no medical services matching the selected filters.",
+    "activeServices": "Active Only",
+    "inactiveServices": "Inactive Only",
+    "allStatuses": "All Statuses",
+    "allCategories": "All Categories",
     "totalServices": "Total Services:",
+    "minutes": "mins",
+    "egp": "EGP",
+    "lastUpdated": "Last updated by {{user}} on {{date}}",
+    "priceHistory": "Price Change History",
     "table": {
       "code": "Code",
       "serviceDescription": "Service & Description",
       "category": "Category",
       "duration": "Duration",
-      "standardFee": "Standard Fee",
-      "status": "Status"
+      "standardFee": "Price",
+      "status": "Status",
+      "actions": "Actions"
     },
     "errors": {
-      "required": "Name and Code are required.",
+      "required": "Please fill in all required fields (Name, Code, Category, Price).",
       "createFailed": "Failed to create medical service.",
       "updateFailed": "Failed to update medical service.",
-      "deactivateFailed": "Failed to deactivate medical service."
+      "deactivateFailed": "Failed to deactivate medical service.",
+      "activateFailed": "Failed to activate medical service."
     },
     "success": {
       "created": "Medical service added successfully.",
       "updated": "Medical service updated successfully.",
-      "deactivated": "Medical service deactivated successfully."
+      "deactivated": "Medical service deactivated successfully.",
+      "activated": "Medical service activated successfully.",
+      "imported": "Services imported successfully."
     }
   },
   "patientForm": {

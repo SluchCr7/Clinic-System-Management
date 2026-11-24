@@ -6,6 +6,7 @@ const Appointment = require("../Appointment/appointment.model");
 const PerformedService = require("../performedService/performedService.model");
 const Patient = require("../Patient/patient.model");
 const Doctor = require("../Doctor/doctor.model");
+const MedicalService = require("../medicalService/medicalService.model");
 
 const { AppError } = require("../../middlewares/errorHandler");
 
@@ -210,8 +211,63 @@ const createInvoiceAttempt = async (data, currentUser) => {
     }
 
     // -----------------------------------------
-    // 4. Get Performed Services
+    // 4. Attach Requested Services & Get Performed Services
     // -----------------------------------------
+
+    if (data.services && Array.isArray(data.services) && data.services.length > 0) {
+      for (const item of data.services) {
+        const medicalService = await MedicalService.findById(
+          item.serviceId
+        ).session(session);
+
+        if (!medicalService) {
+          throw new AppError(
+            "Medical service not found",
+            404,
+            "MEDICAL_SERVICE_NOT_FOUND"
+          );
+        }
+
+        if (!medicalService.isActive) {
+          throw new AppError(
+            "Medical service is inactive",
+            400,
+            "MEDICAL_SERVICE_INACTIVE"
+          );
+        }
+
+        if (medicalService.doctor.toString() !== doctor.user.toString()) {
+          throw new AppError(
+            "Selected service does not belong to the visit's doctor",
+            400,
+            "SERVICE_DOCTOR_MISMATCH"
+          );
+        }
+
+        const qty = item.quantity || 1;
+        const disc = item.discount || 0;
+        const sPrice = roundMoney(medicalService.price);
+
+        await PerformedService.create(
+          [
+            {
+              visit: visit._id,
+              patient: visit.patient,
+              doctor: visit.doctor,
+              service: medicalService._id,
+              serviceName: medicalService.name,
+              serviceCode: medicalService.code,
+              category: medicalService.category,
+              price: sPrice,
+              quantity: qty,
+              discount: disc,
+              createdBy: currentUser?._id || doctor.user,
+            },
+          ],
+          { session }
+        );
+      }
+    }
 
     const performedServices =
       await PerformedService.find({
@@ -230,11 +286,15 @@ const createInvoiceAttempt = async (data, currentUser) => {
       {
         type: "consultation",
         serviceName: "Consultation fee",
+        name: "Consultation fee",
         serviceCode: "CONSULTATION",
+        code: "CONSULTATION",
+        category: "Consultation",
         unitPrice: consultationFee,
         quantity: 1,
         discount: 0,
         total: consultationFee,
+        lineTotal: consultationFee,
       },
       ...performedServices
         .filter((performedService) => !isConsultationService(performedService))
@@ -280,11 +340,23 @@ const createInvoiceAttempt = async (data, currentUser) => {
             performedService:
               performedService._id,
 
+            serviceId:
+              performedService.service || null,
+
             serviceName:
+              performedService.serviceName,
+
+            name:
               performedService.serviceName,
 
             serviceCode:
               performedService.serviceCode,
+
+            code:
+              performedService.serviceCode,
+
+            category:
+              performedService.category || "General",
 
             unitPrice:
               performedService.price,
@@ -296,6 +368,9 @@ const createInvoiceAttempt = async (data, currentUser) => {
               performedService.discount,
 
             total:
+              roundMoney(itemTotal),
+
+            lineTotal:
               roundMoney(itemTotal),
           };
         }),
@@ -725,6 +800,129 @@ const updateInvoice = async (id, data, currentUser) => {
       "Cancelled invoice cannot be updated",
       400,
       "INVOICE_CANCELLED"
+    );
+  }
+
+  // -------------------------------------------
+  // If services are being updated
+  // -------------------------------------------
+
+  if (data.services !== undefined) {
+    if (invoice.status === "paid") {
+      throw new AppError(
+        "Cannot modify services on a fully paid invoice",
+        400,
+        "INVOICE_ALREADY_PAID"
+      );
+    }
+
+    const doctor = await Doctor.findById(invoice.doctor);
+    if (!doctor) {
+      throw new AppError("Doctor not found", 404, "DOCTOR_NOT_FOUND");
+    }
+
+    const consultationItem = invoice.items.find(
+      (it) => it.type === "consultation"
+    ) || {
+      type: "consultation",
+      serviceName: "Consultation fee",
+      name: "Consultation fee",
+      serviceCode: "CONSULTATION",
+      code: "CONSULTATION",
+      category: "Consultation",
+      unitPrice: roundMoney(doctor.consultationFee),
+      quantity: 1,
+      discount: 0,
+      total: roundMoney(doctor.consultationFee),
+      lineTotal: roundMoney(doctor.consultationFee),
+    };
+
+    const newItems = [consultationItem];
+
+    // Remove existing performed services for this visit
+    await PerformedService.deleteMany({ visit: invoice.visit });
+
+    if (Array.isArray(data.services) && data.services.length > 0) {
+      for (const item of data.services) {
+        const medicalService = await MedicalService.findById(item.serviceId);
+        if (!medicalService) {
+          throw new AppError(
+            "Medical service not found",
+            404,
+            "MEDICAL_SERVICE_NOT_FOUND"
+          );
+        }
+
+        if (medicalService.doctor.toString() !== doctor.user.toString()) {
+          throw new AppError(
+            "Selected service does not belong to the invoice's doctor",
+            400,
+            "SERVICE_DOCTOR_MISMATCH"
+          );
+        }
+
+        const previouslyOnInvoice = invoice.items.some(
+          (it) => it.serviceId?.toString() === medicalService._id.toString()
+        );
+
+        if (!previouslyOnInvoice && !medicalService.isActive) {
+          throw new AppError(
+            "Medical service is inactive",
+            400,
+            "MEDICAL_SERVICE_INACTIVE"
+          );
+        }
+
+        const qty = Number.isSafeInteger(item.quantity) && item.quantity > 0 ? item.quantity : 1;
+        const disc = Number.isFinite(item.discount) && item.discount >= 0 ? item.discount : 0;
+        const sPrice = roundMoney(medicalService.price);
+        const itemSubtotal = sPrice * qty;
+
+        if (disc > itemSubtotal) {
+          throw new AppError(
+            "Discount cannot exceed item total",
+            400,
+            "INVALID_DISCOUNT"
+          );
+        }
+
+        const itemTotal = roundMoney(itemSubtotal - disc);
+
+        const performedService = await PerformedService.create({
+          visit: invoice.visit,
+          patient: invoice.patient,
+          doctor: invoice.doctor,
+          service: medicalService._id,
+          serviceName: medicalService.name,
+          serviceCode: medicalService.code,
+          category: medicalService.category,
+          price: sPrice,
+          quantity: qty,
+          discount: disc,
+          createdBy: currentUser?._id || doctor.user,
+        });
+
+        newItems.push({
+          type: "performed_service",
+          performedService: performedService._id,
+          serviceId: medicalService._id,
+          serviceName: medicalService.name,
+          name: medicalService.name,
+          serviceCode: medicalService.code,
+          code: medicalService.code,
+          category: medicalService.category || "General",
+          unitPrice: sPrice,
+          quantity: qty,
+          discount: disc,
+          total: itemTotal,
+          lineTotal: itemTotal,
+        });
+      }
+    }
+
+    invoice.items = newItems;
+    invoice.subtotal = roundMoney(
+      newItems.reduce((sum, it) => sum + it.total, 0)
     );
   }
 

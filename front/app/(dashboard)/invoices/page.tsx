@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useGetInvoicesQuery,
   useCreateInvoiceMutation,
+  useUpdateInvoiceMutation,
   useCancelInvoiceMutation,
   useGetEligibleVisitsQuery,
 } from "@/services/api/invoiceApi";
@@ -13,6 +14,7 @@ import {
   useCreatePaymentMutation,
 } from "@/services/api/paymentApi";
 import { useGetPerformedServicesQuery } from "@/services/api/performedServiceApi";
+import { useGetMedicalServicesQuery } from "@/services/api/medicalServiceApi";
 import type { Invoice, InvoiceQueryParams, InvoiceStatus } from "@/types/invoice";
 import type { PaymentMethod } from "@/types/payment";
 import type { PerformedService } from "@/types/performedService";
@@ -73,6 +75,7 @@ export default function InvoicesPage() {
 
   const { data, isLoading, isError, refetch } = useGetInvoicesQuery(queryParams);
   const [createInvoice, { isLoading: isCreatingInvoice }] = useCreateInvoiceMutation();
+  const [updateInvoice, { isLoading: isUpdatingInvoice }] = useUpdateInvoiceMutation();
   const [cancelInvoice, { isLoading: isCancelling }] = useCancelInvoiceMutation();
   const [createPayment, { isLoading: isRecordingPayment }] = useCreatePaymentMutation();
 
@@ -83,11 +86,38 @@ export default function InvoicesPage() {
   const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false);
   const [eligibleVisitsPage, setEligibleVisitsPage] = useState(1);
 
+  // Edit Services on existing invoice modal
+  const [isEditServicesOpen, setIsEditServicesOpen] = useState(false);
+  const [editInvoiceServices, setEditInvoiceServices] = useState<
+    Array<{
+      serviceId: string;
+      name: string;
+      code: string;
+      category?: string;
+      price: number;
+      quantity: number;
+    }>
+  >([]);
+  const [editAddingServiceId, setEditAddingServiceId] = useState<string>("");
+
   // Create Invoice Form State
   const [selectedVisitId, setSelectedVisitId] = useState<string>("");
   const [invoiceDiscount, setInvoiceDiscount] = useState<number>(0);
   const [invoiceTax, setInvoiceTax] = useState<number>(0);
   const [invoiceNotes, setInvoiceNotes] = useState<string>("");
+
+  // Services attached to the newly created invoice
+  const [selectedServices, setSelectedServices] = useState<
+    Array<{
+      serviceId: string;
+      name: string;
+      code: string;
+      category?: string;
+      price: number;
+      quantity: number;
+    }>
+  >([]);
+  const [addingServiceId, setAddingServiceId] = useState<string>("");
 
   // Payment Form State
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
@@ -134,16 +164,101 @@ export default function InvoicesPage() {
     typeof consultationFee === "number" &&
     Number.isFinite(consultationFee) &&
     consultationFee >= 0;
-  const selectedVisitServices = (visitServicesData?.data || []).filter(
-    (service) => !isConsultationPerformedService(service)
+
+  const selectedVisitDoctorUser =
+    selectedVisitDoctor && typeof selectedVisitDoctor.user === "object" && selectedVisitDoctor.user
+      ? selectedVisitDoctor.user
+      : null;
+  const selectedDoctorUserId =
+    selectedVisitDoctorUser?._id ||
+    (typeof selectedVisitDoctor?.user === "string" ? selectedVisitDoctor.user : undefined);
+
+  // Doctor's active medical services catalog
+  const { data: doctorCatalogData } = useGetMedicalServicesQuery(
+    selectedDoctorUserId
+      ? { doctor: selectedDoctorUserId, isActive: true, limit: 100 }
+      : { isActive: true, limit: 100 },
+    { skip: !selectedVisitId }
   );
+
+  // Doctor's active catalog for the view/edit invoice modal
+  const viewInvoiceDoctorUser =
+    viewInvoice && typeof viewInvoice.doctor === "object" && viewInvoice.doctor?.user
+      ? typeof viewInvoice.doctor.user === "object"
+        ? viewInvoice.doctor.user._id
+        : viewInvoice.doctor.user
+      : undefined;
+
+  const { data: editInvoiceCatalogData } = useGetMedicalServicesQuery(
+    viewInvoiceDoctorUser
+      ? { doctor: viewInvoiceDoctorUser, isActive: true, limit: 100 }
+      : { isActive: true, limit: 100 },
+    { skip: !isEditServicesOpen }
+  );
+
+  // Pre-populate services from visit's recorded performed services
+  useEffect(() => {
+    if (visitServicesData?.data && visitServicesData.data.length > 0) {
+      const initial = visitServicesData.data
+        .filter((s) => !isConsultationPerformedService(s))
+        .map((s) => ({
+          serviceId: (typeof s.service === "object" && s.service ? (s.service as { _id: string })._id : s.service) as string,
+          name: s.serviceName,
+          code: s.serviceCode,
+          category: s.category || "General",
+          price: s.price,
+          quantity: s.quantity || 1,
+        }));
+      setSelectedServices(initial);
+    } else {
+      setSelectedServices([]);
+    }
+  }, [visitServicesData]);
+
+  const handleAddServiceToInvoice = (serviceId: string) => {
+    if (!serviceId) return;
+    const svc = doctorCatalogData?.data?.find((s) => s._id === serviceId);
+    if (!svc) return;
+
+    setSelectedServices((prev) => {
+      const idx = prev.findIndex((s) => s.serviceId === serviceId);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx].quantity += 1;
+        return copy;
+      }
+      return [
+        ...prev,
+        {
+          serviceId: svc._id,
+          name: svc.name,
+          code: svc.code,
+          category: svc.category,
+          price: svc.price,
+          quantity: 1,
+        },
+      ];
+    });
+    setAddingServiceId("");
+  };
+
+  const handleRemoveServiceFromInvoice = (index: number) => {
+    setSelectedServices((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateServiceQuantity = (index: number, quantity: number) => {
+    if (quantity < 1) return;
+    setSelectedServices((prev) => {
+      const copy = [...prev];
+      copy[index].quantity = quantity;
+      return copy;
+    });
+  };
+
+  // Live Subtotal & Totals Calculation
   const servicesSubtotal = roundMoney(
-    selectedVisitServices.reduce(
-      (acc, service) =>
-        acc +
-        roundMoney(
-          service.price * service.quantity - service.discount
-        ),
+    selectedServices.reduce(
+      (acc, service) => acc + roundMoney(service.price * service.quantity),
       0
     )
   );
@@ -157,6 +272,8 @@ export default function InvoicesPage() {
 
   const handleOpenCreateInvoice = () => {
     setSelectedVisitId("");
+    setSelectedServices([]);
+    setAddingServiceId("");
     setInvoiceDiscount(0);
     setInvoiceTax(0);
     setInvoiceNotes("");
@@ -182,6 +299,10 @@ export default function InvoicesPage() {
     try {
       const result = await createInvoice({
         visit: selectedVisitId,
+        services: selectedServices.map((s) => ({
+          serviceId: s.serviceId,
+          quantity: s.quantity,
+        })),
         discount: Number(invoiceDiscount) || 0,
         tax: Number(invoiceTax) || 0,
         notes: invoiceNotes.trim() || undefined,
@@ -190,6 +311,7 @@ export default function InvoicesPage() {
       toast.success(t("invoices.create.success"));
       setIsCreateInvoiceOpen(false);
       setSelectedVisitId("");
+      setSelectedServices([]);
       setViewInvoice(result.data);
     } catch (err) {
       const extracted = extractApiError(err);
@@ -795,77 +917,138 @@ export default function InvoicesPage() {
                   {t("invoices.create.consultationUnavailable")}
                 </p>
               )}
-              <span className="font-semibold text-ink text-xs uppercase tracking-wider">
-                {t("invoices.create.performedServices")}
-              </span>
-              {isVisitServicesError ? (
-                <div className="flex items-center gap-2 text-status-error">
-                  <span>{t("invoices.create.servicesError")}</span>
+              {/* Services Selector and List */}
+              <div className="flex flex-col gap-2 pt-1 border-t border-border-subtle">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-ink text-xs uppercase tracking-wider">
+                    الخدمات الطبية الإضافية (اختياري)
+                  </span>
+                  <span className="text-[11px] text-slate-muted">
+                    {selectedServices.length} خدمة محددة
+                  </span>
+                </div>
+
+                {/* Add Service Picker */}
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <Select
+                      value={addingServiceId}
+                      onChange={(e) => setAddingServiceId(e.target.value)}
+                      placeholder="اختر خدمة من كتالوج الطبيب لإضافتها..."
+                      options={[
+                        { value: "", label: "-- اختر خدمة طبية من الكتالوج --" },
+                        ...(doctorCatalogData?.data?.map((s) => ({
+                          value: s._id,
+                          label: `${s.name} (${s.code}) — ${s.price} ج.م [${s.category}]`,
+                        })) || []),
+                      ]}
+                    />
+                  </div>
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="secondary"
                     size="sm"
-                    onClick={refetchVisitServices}
+                    disabled={!addingServiceId}
+                    onClick={() => handleAddServiceToInvoice(addingServiceId)}
+                    leftIcon={<LuPlus className="w-3.5 h-3.5" />}
                   >
-                    {t("invoices.create.retry")}
+                    إضافة
                   </Button>
                 </div>
-              ) : isLoadingVisitServices ? (
-                <p className="text-slate-muted">
-                  {t("invoices.create.loadingServices")}
-                </p>
-              ) : selectedVisitServices.length > 0 ? (
-                <div className="border border-border-subtle rounded-md overflow-hidden">
-                  <table className="w-full text-xs text-left">
-                    <thead className="bg-paper border-b border-border-subtle text-slate-muted font-medium">
-                      <tr>
-                        <th className="py-2 px-3">{t("invoices.modal.description")}</th>
-                        <th className="py-2 px-2 text-right">{t("invoices.modal.qty")}</th>
-                        <th className="py-2 px-3 text-right">{t("invoices.modal.rate")}</th>
-                        <th className="py-2 px-3 text-right">{t("invoices.modal.total")}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border-subtle">
-                      {selectedVisitServices.map((s) => (
-                        <tr key={s._id}>
-                          <td className="py-2 px-3 font-medium text-ink">
-                            {s.serviceName}
-                            {s.discount > 0 && (
-                              <span className="block text-[10px] font-normal text-status-success">
-                                {t("invoices.modal.discount")}: -${s.discount.toFixed(2)}
-                              </span>
-                            )}
-                            {s.serviceCode && (
-                              <span className="text-[10px] text-slate-muted font-mono ml-1.5">
-                                ({s.serviceCode})
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2 px-2 text-right text-slate-dark">{s.quantity}</td>
-                          <td className="py-2 px-3 text-right text-slate-dark">${s.price.toFixed(2)}</td>
-                          <td className="py-2 px-3 text-right font-semibold text-ink">
-                            ${(s.price * s.quantity - s.discount).toFixed(2)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="text-xs text-slate-muted p-2.5 bg-paper rounded-md border border-border-subtle">
-                  {t("invoices.create.optionalServicesEmpty")}
-                </p>
-              )}
 
-              <div className="flex justify-between text-slate-muted">
-                <span>{t("invoices.create.consultationFee")}:</span>
-                <span className="font-mono">
-                  ${hasValidConsultationFee ? consultationFee.toFixed(2) : "—"}
-                </span>
+                {/* Selected Services Table */}
+                {selectedServices.length > 0 ? (
+                  <div className="border border-border-subtle rounded-md overflow-hidden">
+                    <table className="w-full text-xs text-right">
+                      <thead className="bg-paper border-b border-border-subtle text-slate-muted font-medium">
+                        <tr>
+                          <th className="py-2 px-3">الخدمة والكود</th>
+                          <th className="py-2 px-2 text-center w-24">الكمية</th>
+                          <th className="py-2 px-3 text-right">السعر</th>
+                          <th className="py-2 px-3 text-right">الإجمالي</th>
+                          <th className="py-2 px-2 text-center w-10">إجراء</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border-subtle">
+                        {selectedServices.map((s, idx) => (
+                          <tr key={idx}>
+                            <td className="py-2 px-3 font-medium text-ink">
+                              <div>{s.name}</div>
+                              <div className="text-[10px] text-slate-muted font-mono flex items-center gap-1.5">
+                                <span>{s.code}</span>
+                                {s.category && <span>• {s.category}</span>}
+                              </div>
+                            </td>
+                            <td className="py-2 px-2 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateServiceQuantity(idx, s.quantity - 1)}
+                                  disabled={s.quantity <= 1}
+                                  className="w-5 h-5 rounded bg-surface border border-border-subtle text-ink flex items-center justify-center hover:bg-paper disabled:opacity-40"
+                                >
+                                  -
+                                </button>
+                                <span className="font-mono font-bold w-6 text-center text-xs">
+                                  {s.quantity}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateServiceQuantity(idx, s.quantity + 1)}
+                                  className="w-5 h-5 rounded bg-surface border border-border-subtle text-ink flex items-center justify-center hover:bg-paper"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono text-slate-dark">
+                              {s.price} ج.م
+                            </td>
+                            <td className="py-2 px-3 text-right font-semibold text-ink font-mono">
+                              {(s.price * s.quantity).toFixed(2)} ج.م
+                            </td>
+                            <td className="py-2 px-2 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveServiceFromInvoice(idx)}
+                                className="text-status-error hover:bg-status-error-bg p-1 rounded"
+                                title="إزالة الخدمة"
+                              >
+                                <LuBan className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-muted p-2.5 bg-paper rounded-md border border-border-subtle text-center">
+                    لم تتم إضافة أي خدمات إضافية (سيتم احتساب رسم الكشف الأساسي فقط).
+                  </p>
+                )}
               </div>
-              <div className="flex justify-between text-slate-muted">
-                <span>{t("invoices.create.servicesSubtotal")}:</span>
-                <span className="font-mono">${servicesSubtotal.toFixed(2)}</span>
+
+              {/* Price Breakdown Preview */}
+              <div className="flex flex-col gap-1.5 p-3 bg-paper rounded-lg border border-border-subtle text-xs">
+                <div className="flex justify-between text-slate-muted">
+                  <span>سعر الكشف (الرسم الأساسي للطبيب):</span>
+                  <span className="font-mono font-medium text-ink">
+                    {hasValidConsultationFee ? `${consultationFee.toFixed(2)} ج.م` : "—"}
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-muted">
+                  <span>إجمالي الخدمات الطبية:</span>
+                  <span className="font-mono font-medium text-ink">
+                    {servicesSubtotal.toFixed(2)} ج.م
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-dark pt-1 border-t border-border-subtle font-semibold">
+                  <span>المجموع الفرعي (الكشف + الخدمات):</span>
+                  <span className="font-mono text-ink">
+                    {selectedVisitSubtotal.toFixed(2)} ج.م
+                  </span>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 pt-2">

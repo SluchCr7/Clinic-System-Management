@@ -14,11 +14,11 @@ const {
   performedServiceListQuerySchema,
 } = require("./performedService.validation");
 
-// Create performed service - Doctor Only
+// Create performed service - Doctor and Receptionist
 router.post(
   "/",
   protect,
-  authorize("doctor"),
+  authorize("doctor", "receptionist"),
   validate(createPerformedServiceSchema),
   performedServiceController.createPerformedService
 );

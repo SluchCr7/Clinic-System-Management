@@ -4,11 +4,19 @@ const {
   objectId,
 } = require("../../utils/listQuery");
 
+const serviceItemSchema = Joi.object({
+  serviceId: Joi.string().hex().length(24).required(),
+  quantity: Joi.number().integer().min(1).default(1),
+  discount: Joi.number().min(0).default(0),
+});
+
 const createInvoiceSchema = Joi.object({
   visit: Joi.string()
     .hex()
     .length(24)
     .required(),
+
+  services: Joi.array().items(serviceItemSchema).optional(),
 
   discount: Joi.number()
     .min(0)
@@ -25,6 +33,8 @@ const createInvoiceSchema = Joi.object({
 });
 
 const updateInvoiceSchema = Joi.object({
+  services: Joi.array().items(serviceItemSchema).optional(),
+
   discount: Joi.number()
     .min(0),
 

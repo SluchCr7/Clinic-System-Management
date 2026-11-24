@@ -31,6 +31,15 @@ export const medicalServiceApi = baseApi.injectEndpoints({
           : [{ type: "MedicalService", id: "LIST" }],
     }),
 
+    getCategories: builder.query<ApiResponse<string[]>, { doctor?: string } | void>({
+      query: (params) => ({
+        url: "/medical-services/categories",
+        method: "GET",
+        params: cleanQueryParams(params),
+      }),
+      providesTags: [{ type: "MedicalService", id: "CATEGORIES" }],
+    }),
+
     getMedicalServiceById: builder.query<ApiResponse<MedicalService>, string>({
       query: (id) => ({
         url: `/medical-services/${id}`,
@@ -50,6 +59,7 @@ export const medicalServiceApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: [
         { type: "MedicalService", id: "LIST" },
+        { type: "MedicalService", id: "CATEGORIES" },
         "Search",
       ],
     }),
@@ -66,6 +76,20 @@ export const medicalServiceApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, { id }) => [
         { type: "MedicalService", id },
         { type: "MedicalService", id: "LIST" },
+        { type: "MedicalService", id: "CATEGORIES" },
+        "Search",
+      ],
+    }),
+
+    activateMedicalService: builder.mutation<ApiMessageResponse, string>({
+      query: (id) => ({
+        url: `/medical-services/${id}/activate`,
+        method: "PATCH",
+      }),
+      invalidatesTags: (_result, _error, id) => [
+        { type: "MedicalService", id },
+        { type: "MedicalService", id: "LIST" },
+        { type: "MedicalService", id: "CATEGORIES" },
         "Search",
       ],
     }),
@@ -78,6 +102,7 @@ export const medicalServiceApi = baseApi.injectEndpoints({
       invalidatesTags: (_result, _error, id) => [
         { type: "MedicalService", id },
         { type: "MedicalService", id: "LIST" },
+        { type: "MedicalService", id: "CATEGORIES" },
         "Search",
       ],
     }),
@@ -86,8 +111,10 @@ export const medicalServiceApi = baseApi.injectEndpoints({
 
 export const {
   useGetMedicalServicesQuery,
+  useGetCategoriesQuery,
   useGetMedicalServiceByIdQuery,
   useCreateMedicalServiceMutation,
   useUpdateMedicalServiceMutation,
+  useActivateMedicalServiceMutation,
   useDeactivateMedicalServiceMutation,
 } = medicalServiceApi;

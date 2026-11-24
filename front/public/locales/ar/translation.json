@@ -566,31 +566,53 @@
   },
   "medicalServices": {
     "title": "كتالوج الخدمات الطبية",
-    "subtitle": "جدول الرسوم الطبية القياسية، إجراءات الاستشارة، ومعايير المدة",
-    "addService": "إضافة خدمة طبية",
+    "subtitle": "إدارة قائمة الخدمات والإجراءات الطبية والأسعار الخاصة بكل طبيب",
+    "addService": "إضافة خدمة",
+    "quickStart": "إضافة خدمات مقترحة",
+    "addFirstService": "أضف أول خدمة",
+    "exportCsv": "تصدير CSV",
+    "importCsv": "استيراد CSV",
+    "duplicate": "نسخ الخدمة",
+    "activate": "تفعيل",
+    "deactivate": "إلغاء التفعيل",
+    "confirmActivate": "تأكيد تفعيل الخدمة",
+    "confirmDeactivate": "تأكيد إلغاء تفعيل الخدمة",
+    "activateNotice": "إلغاء أو إعادة تفعيل هذه الخدمة لن يؤثر على الفواتير أو الزيارات السابقة الصادرة بالفعل.",
+    "selectDoctor": "اختر الطبيب:",
+    "allDoctors": "كل الأطباء",
     "emptyTitle": "لا توجد خدمات طبية",
-    "emptyDescription": "لا توجد خدمات مهيأة تطابق معايير البحث.",
-    "activeServices": "الخدمات النشطة",
-    "inactiveServices": "الخدمات غير النشطة",
+    "emptyDescription": "لم يتم العثور على أي خدمات طبية مسجلة تطابق خيارات البحث الحالية.",
+    "activeServices": "النشطة فقط",
+    "inactiveServices": "غير النشطة",
+    "allStatuses": "كل الحالات",
+    "allCategories": "كل الفئات",
     "totalServices": "إجمالي الخدمات:",
+    "minutes": "دقيقة",
+    "egp": "ج.م",
+    "lastUpdated": "آخر تعديل بواسطة: {{user}} في {{date}}",
+    "priceHistory": "سجل تغير الأسعار",
     "table": {
       "code": "الكود",
       "serviceDescription": "الخدمة والوصف",
       "category": "الفئة",
       "duration": "المدة",
-      "standardFee": "الرسوم القياسية",
-      "status": "الحالة"
+      "standardFee": "السعر",
+      "status": "الحالة",
+      "actions": "الإجراءات"
     },
     "errors": {
-      "required": "الاسم والكود مطلوبان.",
+      "required": "يرجى تعبئة الحقول المطلوبة (الاسم، الكود، الفئة، السعر).",
       "createFailed": "فشل في إنشاء الخدمة الطبية.",
       "updateFailed": "فشل في تحديث الخدمة الطبية.",
-      "deactivateFailed": "فشل في إلغاء تنشيط الخدمة الطبية."
+      "deactivateFailed": "فشل في إلغاء تنشيط الخدمة الطبية.",
+      "activateFailed": "فشل في تفعيل الخدمة الطبية."
     },
     "success": {
       "created": "تمت إضافة الخدمة الطبية بنجاح.",
       "updated": "تم تحديث الخدمة الطبية بنجاح.",
-      "deactivated": "تم إلغاء تنشيط الخدمة الطبية بنجاح."
+      "deactivated": "تم إلغاء تنشيط الخدمة بنجاح.",
+      "activated": "تم تفعيل الخدمة بنجاح.",
+      "imported": "تم استيراد الخدمات بنجاح."
     }
   },
   "patientForm": {

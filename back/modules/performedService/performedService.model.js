@@ -41,6 +41,13 @@ const PerformedServiceSchema = new mongoose.Schema(
       maxlength: 50,
     },
 
+    category: {
+      type: String,
+      trim: true,
+      maxlength: 100,
+      default: null,
+    },
+
     price: {
       type: Number,
       required: true,

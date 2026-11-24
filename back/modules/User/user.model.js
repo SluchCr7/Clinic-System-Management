@@ -52,6 +52,13 @@ const UserSchema = new mongoose.Schema(
       index: true,
     },
 
+    doctor: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+
     isActive: {
       type: Boolean,
       default: true,
