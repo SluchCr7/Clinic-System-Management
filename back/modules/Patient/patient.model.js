@@ -133,6 +133,12 @@ PatientSchema.index({
 });
 
 PatientSchema.index({
+  doctor: 1,
+  firstName: 1,
+  lastName: 1,
+});
+
+PatientSchema.index({
   isActive: 1,
   createdAt: -1,
 });

@@ -15,7 +15,7 @@ const authorize = require("../../middlewares/authorize");
 router.post(
     "/",
     protect,
-    authorize("admin", "doctor", "receptionist"),
+    authorize("doctor", "receptionist"),
     validate(createAppointmentSchema),
     appointmentController.createAppointment
 );
@@ -39,7 +39,7 @@ router.get(
 router.patch(
     "/:id",
     protect,
-    authorize("admin", "doctor", "receptionist"),
+    authorize("doctor", "receptionist"),
     validateId("id", "appointment ID"),
     validate(updateAppointmentSchema),
     appointmentController.updateAppointment

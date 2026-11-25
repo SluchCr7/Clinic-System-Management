@@ -146,7 +146,7 @@ export default function MedicalServicesPage() {
   const isDoctor = role === "doctor";
   const isAdmin = role === "admin";
   const isReceptionist = role === "receptionist";
-  const canManage = isDoctor || isAdmin;
+  const canManage = isDoctor ;
 
   // Admin: selected doctor
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");

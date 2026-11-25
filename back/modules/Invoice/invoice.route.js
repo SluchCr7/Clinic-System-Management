@@ -21,7 +21,7 @@ const { createPaymentSchema } = require("../Payment/payment.validation");
 router.post(
   "/",
   protect,
-  authorize("admin", "receptionist"),
+  authorize("receptionist"),
   validate(createInvoiceSchema),
   invoiceController.createInvoice
 );
@@ -57,7 +57,7 @@ router.get(
 router.patch(
   "/:id",
   protect,
-  authorize("admin", "doctor", "receptionist"),
+  authorize("doctor", "receptionist"),
   validateId("id", "invoice ID"),
   validate(updateInvoiceSchema),
   invoiceController.updateInvoice

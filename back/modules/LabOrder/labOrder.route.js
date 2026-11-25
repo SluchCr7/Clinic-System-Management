@@ -45,7 +45,7 @@ router.get(
 router.patch(
   "/:id",
   protect,
-  authorize("admin", "doctor", "receptionist"),
+  authorize("doctor", "receptionist"),
   validateId("id"),
   validate(updateLabOrderSchema),
   labOrderController.updateLabOrder

@@ -1,7 +1,9 @@
 export type GlobalSearchResultType =
   | "patient"
   | "doctor"
+  | "receptionist"
   | "appointment"
+  | "visit"
   | "invoice"
   | "service";
 
@@ -17,7 +19,9 @@ export interface GlobalSearchResult {
 export interface GlobalSearchResults {
   patients: GlobalSearchResult[];
   doctors: GlobalSearchResult[];
+  receptionists?: GlobalSearchResult[];
   appointments: GlobalSearchResult[];
+  visits?: GlobalSearchResult[];
   invoices: GlobalSearchResult[];
   services: GlobalSearchResult[];
 }

@@ -22,7 +22,7 @@ const {
 router.post(
   "/",
   protect,
-  authorize("admin", "doctor"),
+  authorize("doctor"),
   validate(createMedicalServiceSchema),
   medicalServiceController.createMedicalService
 );
@@ -57,7 +57,7 @@ router.get(
 router.patch(
   "/:id/activate",
   protect,
-  authorize("admin", "doctor"),
+  authorize("doctor"),
   validateId("id", "medical service ID"),
   medicalServiceController.activateMedicalService
 );
@@ -66,7 +66,7 @@ router.patch(
 router.patch(
   "/:id",
   protect,
-  authorize("admin", "doctor"),
+  authorize("doctor"),
   validateId("id", "medical service ID"),
   validate(updateMedicalServiceSchema),
   medicalServiceController.updateMedicalService
