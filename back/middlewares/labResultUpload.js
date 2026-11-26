@@ -1,13 +1,68 @@
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 const crypto = require("crypto");
 const { AppError } = require("./errorHandler");
 
-// Ensure storage directory exists outside of public folder
-const STORAGE_DIR = path.resolve(__dirname, "../../storage/lab-results");
-if (!fs.existsSync(STORAGE_DIR)) {
-  fs.mkdirSync(STORAGE_DIR, { recursive: true });
+/**
+ * Resolves the storage directory safely for both standard servers and
+ * serverless / read-only execution environments (such as AWS Lambda or Vercel).
+ */
+const getStorageDir = () => {
+  if (process.env.LAB_RESULTS_STORAGE_DIR) {
+    return path.resolve(process.env.LAB_RESULTS_STORAGE_DIR);
+  }
+
+  // Detect serverless environment (/var/task or Lambda / Vercel env vars)
+  const isServerless = Boolean(
+    process.env.LAMBDA_TASK_ROOT ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.env.VERCEL ||
+    __dirname.startsWith("/var/task")
+  );
+
+  if (isServerless) {
+    return path.join(os.tmpdir(), "clinic-storage", "lab-results");
+  }
+
+  return path.resolve(__dirname, "../../storage/lab-results");
+};
+
+let resolvedStorageDir = getStorageDir();
+
+/**
+ * Ensures the target storage folder exists, falling back to os.tmpdir() if read-only.
+ */
+const ensureStorageDir = async () => {
+  try {
+    if (!fs.existsSync(resolvedStorageDir)) {
+      await fs.promises.mkdir(resolvedStorageDir, { recursive: true });
+    }
+  } catch {
+    // If standard path is not writable (e.g. read-only container), fallback to temp directory
+    resolvedStorageDir = path.join(os.tmpdir(), "clinic-storage", "lab-results");
+    if (!fs.existsSync(resolvedStorageDir)) {
+      await fs.promises.mkdir(resolvedStorageDir, { recursive: true });
+    }
+  }
+  return resolvedStorageDir;
+};
+
+// Safe non-crashing initialization at module load
+try {
+  if (!fs.existsSync(resolvedStorageDir)) {
+    fs.mkdirSync(resolvedStorageDir, { recursive: true });
+  }
+} catch {
+  try {
+    resolvedStorageDir = path.join(os.tmpdir(), "clinic-storage", "lab-results");
+    if (!fs.existsSync(resolvedStorageDir)) {
+      fs.mkdirSync(resolvedStorageDir, { recursive: true });
+    }
+  } catch {
+    // Silently continue at load time; ensureStorageDir will handle it on upload
+  }
 }
 
 // Memory storage to inspect raw buffer magic bytes before saving to disk
@@ -91,7 +146,9 @@ const saveInspectedFile = async (file) => {
   };
   const ext = extMap[realMime] || path.extname(file.originalname).toLowerCase();
   const randomizedName = `${crypto.randomUUID()}${ext}`;
-  const diskPath = path.join(STORAGE_DIR, randomizedName);
+
+  const targetDir = await ensureStorageDir();
+  const diskPath = path.join(targetDir, randomizedName);
 
   await fs.promises.writeFile(diskPath, file.buffer);
 
@@ -107,7 +164,9 @@ const saveInspectedFile = async (file) => {
 
 module.exports = {
   labResultUpload: upload,
-  STORAGE_DIR,
+  STORAGE_DIR: resolvedStorageDir,
+  getStorageDir,
+  ensureStorageDir,
   detectRealMimeType,
   saveInspectedFile,
 };
