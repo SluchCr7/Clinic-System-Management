@@ -82,7 +82,9 @@ export default function AppointmentsPage() {
 
   // Close dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = () => setActiveMenuId(null);
+    const handleClickOutside = () => {
+      setActiveMenuId((prev) => (prev !== null ? null : prev));
+    };
     window.addEventListener("click", handleClickOutside);
     return () => window.removeEventListener("click", handleClickOutside);
   }, []);
@@ -158,8 +160,8 @@ export default function AppointmentsPage() {
     setCancelReasonError(undefined);
   };
 
-  const formatClinicDateTimeForInput = (date: Date) => {
-    const formatter = new Intl.DateTimeFormat("sv-SE", {
+  const getCairoDateParts = (date: Date = new Date()) => {
+    const parts = new Intl.DateTimeFormat("en-US", {
       timeZone: "Africa/Cairo",
       year: "numeric",
       month: "2-digit",
@@ -167,11 +169,20 @@ export default function AppointmentsPage() {
       hour: "2-digit",
       minute: "2-digit",
       hourCycle: "h23",
-    });
-
-    return formatter.format(date).replace(" ", "T");
+    }).formatToParts(date);
+    return Object.fromEntries(parts.map((p) => [p.type, p.value]));
   };
-  const todayStr = formatClinicDateTimeForInput(new Date()).slice(0, 10);
+
+  const getCairoDateString = (date: Date = new Date()) => {
+    const p = getCairoDateParts(date);
+    return `${p.year}-${p.month}-${p.day}`;
+  };
+
+  const formatClinicDateTimeForInput = (date: Date) => {
+    const p = getCairoDateParts(date);
+    return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+  };
+  const todayStr = getCairoDateString();
 
   const handleOpenBookModal = () => {
     const tomorrow = new Date();
@@ -260,19 +271,27 @@ export default function AppointmentsPage() {
       header: t("appointments.dateTime"),
       className: "w-[120px] min-w-[120px] overflow-hidden whitespace-nowrap",
       render: (apt) => {
-        const d = new Date(apt.appointmentDate);
+        const d = apt.appointmentDate ? new Date(apt.appointmentDate) : null;
+        const isValid = Boolean(d && !isNaN(d.getTime()));
         return (
           <div className="flex flex-col">
             <span className="font-semibold text-ink text-xs">
-              {d.toLocaleDateString(isRtl ? "ar-EG" : "en-US", {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-              })}
+              {isValid && d
+                ? d.toLocaleDateString(isRtl ? "ar-EG" : "en-US", {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                  })
+                : "—"}
             </span>
             <span className="text-[11px] text-slate-muted font-mono flex items-center gap-1">
               <LuClock className="w-3 h-3 text-slate-light" />
-              {d.toLocaleTimeString(isRtl ? "ar-EG" : "en-US", { hour: "numeric", minute: "2-digit" })}
+              {isValid && d
+                ? d.toLocaleTimeString(isRtl ? "ar-EG" : "en-US", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })
+                : "—"}
             </span>
           </div>
         );
@@ -284,14 +303,18 @@ export default function AppointmentsPage() {
       className: "w-[190px] min-w-[190px] overflow-hidden whitespace-nowrap",
       render: (apt) => {
         const p = typeof apt.patient === "object" && apt.patient ? apt.patient : null;
+        const initial = p?.firstName?.trim()?.charAt(0) || "P";
+        const patientName = p
+          ? [p.firstName, p.lastName].filter(Boolean).join(" ") || t("appointments.patient")
+          : t("appointments.patient");
         return (
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-full bg-mint text-teal-dark font-semibold text-xs flex items-center justify-center shrink-0">
-              {p ? p.firstName[0] : "P"}
+              {initial}
             </div>
             <div className="min-w-0 overflow-hidden">
               <p className="truncate font-semibold text-ink leading-tight">
-                {p ? `${p.firstName} ${p.lastName}` : t("appointments.patient")}
+                {patientName}
               </p>
               <p className="truncate text-[11px] text-slate-muted font-mono">{p?.phone || ""}</p>
             </div>
@@ -306,17 +329,26 @@ export default function AppointmentsPage() {
       render: (apt) => {
         const doc = typeof apt.doctor === "object" && apt.doctor ? apt.doctor : null;
         const u = doc && typeof doc.user === "object" && doc.user ? doc.user : null;
+        const docName = u?.lastName
+          ? `Dr. ${u.lastName}`
+          : u?.firstName
+          ? `Dr. ${u.firstName}`
+          : t("common.doctor");
+        const clinicName =
+          doc?.clinic && typeof doc.clinic === "object" && "name" in doc.clinic
+            ? String(doc.clinic.name)
+            : null;
         return (
           <div className="min-w-0 overflow-hidden">
             <p className="truncate font-medium text-ink leading-tight">
-              {u ? `Dr. ${u.lastName}` : t("common.doctor")}
+              {docName}
             </p>
             <p className="truncate text-[11px] text-teal-primary font-medium">
               {doc?.specialization || t("appointments.general")}
             </p>
-            {doc?.clinic && typeof doc.clinic === "object" && (
+            {clinicName && (
               <p className="truncate text-[10px] text-slate-muted">
-                {doc.clinic.name}
+                {clinicName}
               </p>
             )}
           </div>
@@ -582,7 +614,20 @@ export default function AppointmentsPage() {
               const p = typeof apt.patient === "object" && apt.patient ? apt.patient : null;
               const doc = typeof apt.doctor === "object" && apt.doctor ? apt.doctor : null;
               const u = doc && typeof doc.user === "object" && doc.user ? doc.user : null;
-              const d = new Date(apt.appointmentDate);
+              const d = apt.appointmentDate ? new Date(apt.appointmentDate) : null;
+              const isValid = Boolean(d && !isNaN(d.getTime()));
+              const patientName = p
+                ? [p.firstName, p.lastName].filter(Boolean).join(" ") || t("common.patient")
+                : t("common.patient");
+              const docName = u?.lastName
+                ? `Dr. ${u.lastName}`
+                : u?.firstName
+                ? `Dr. ${u.firstName}`
+                : t("common.doctor");
+              const clinicName =
+                doc?.clinic && typeof doc.clinic === "object" && "name" in doc.clinic
+                  ? String(doc.clinic.name)
+                  : null;
 
               return (
                 <div
@@ -592,20 +637,22 @@ export default function AppointmentsPage() {
                   <div>
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <span className="text-xs font-bold text-teal-dark bg-mint px-2 py-0.5 rounded-sm">
-                        {d.toLocaleTimeString(isRtl ? "ar-EG" : "en-US", { hour: "numeric", minute: "2-digit" })}
+                        {isValid && d
+                          ? d.toLocaleTimeString(isRtl ? "ar-EG" : "en-US", { hour: "numeric", minute: "2-digit" })
+                          : "—"}
                       </span>
                       <StatusBadge status={apt.status} size="sm" />
                     </div>
 
                     <h4 className="text-sm font-semibold text-ink truncate">
-                      {p ? `${p.firstName} ${p.lastName}` : t("common.patient")}
+                      {patientName}
                     </h4>
                     <p className="text-xs text-slate-muted mt-0.5 truncate">
-                      {t("appointments.physician")}: {u ? `Dr. ${u.lastName}` : t("common.doctor")}
+                      {t("appointments.physician")}: {docName}
                     </p>
-                    {doc?.clinic && typeof doc.clinic === "object" && (
+                    {clinicName && (
                       <p className="text-[11px] text-slate-muted mt-0.5 truncate">
-                        {t("settings.clinicTab", "Clinic")}: {doc.clinic.name}
+                        {t("settings.clinicTab", "Clinic")}: {clinicName}
                       </p>
                     )}
 
@@ -617,7 +664,7 @@ export default function AppointmentsPage() {
                   </div>
 
                   <div className="pt-2 border-t border-border-subtle/80 flex items-center justify-between text-xs text-slate-muted">
-                    <span>{d.toLocaleDateString(isRtl ? "ar-EG" : "en-US")}</span>
+                    <span>{isValid && d ? d.toLocaleDateString(isRtl ? "ar-EG" : "en-US") : "—"}</span>
                     <span>{t("appointments.durationMinutes", { count: apt.duration })}</span>
                   </div>
                 </div>

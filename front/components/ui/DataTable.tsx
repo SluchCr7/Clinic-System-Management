@@ -61,12 +61,12 @@ export function DataTable<T extends { _id?: string; id?: string }>({
   className = "",
   tableClassName = "",
 }: DataTableProps<T>) {
+  const { i18n } = useTranslation();
+  const isArabic = !i18n.language || i18n.language === "ar";
+
   if (isError) {
     return <ErrorState onRetry={onRetry} className={className} />;
   }
-
-  const { i18n } = useTranslation();
-  const isArabic = !i18n.language || i18n.language === "ar";
 
   return (
     <div
@@ -87,10 +87,7 @@ export function DataTable<T extends { _id?: string; id?: string }>({
                     ? "text-center"
                     : "text-start";
 
-                const { i18n } = useTranslation();
-  const isArabic = !i18n.language || i18n.language === "ar";
-
-  return (
+                return (
                   <th
                     key={col.key}
                     scope="col"
