@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { TableRowSkeleton } from "./Skeleton";
 import { EmptyState, ErrorState } from "./EmptyState";
 import {
@@ -64,6 +65,9 @@ export function DataTable<T extends { _id?: string; id?: string }>({
     return <ErrorState onRetry={onRetry} className={className} />;
   }
 
+  const { i18n } = useTranslation();
+  const isArabic = !i18n.language || i18n.language === "ar";
+
   return (
     <div
       className={`bg-surface rounded-lg border border-border-subtle shadow-subtle overflow-hidden flex flex-col ${className}`}
@@ -83,7 +87,10 @@ export function DataTable<T extends { _id?: string; id?: string }>({
                     ? "text-center"
                     : "text-start";
 
-                return (
+                const { i18n } = useTranslation();
+  const isArabic = !i18n.language || i18n.language === "ar";
+
+  return (
                   <th
                     key={col.key}
                     scope="col"
@@ -137,7 +144,10 @@ export function DataTable<T extends { _id?: string; id?: string }>({
             ) : (
               data.map((row, idx) => {
                 const rowKey = row._id || row.id || String(idx);
-                return (
+                const { i18n } = useTranslation();
+  const isArabic = !i18n.language || i18n.language === "ar";
+
+  return (
                   <tr
                     key={rowKey}
                     onClick={() => onRowClick && onRowClick(row)}
@@ -155,7 +165,10 @@ export function DataTable<T extends { _id?: string; id?: string }>({
                           ? "text-center"
                           : "text-start";
 
-                      return (
+                      const { i18n } = useTranslation();
+  const isArabic = !i18n.language || i18n.language === "ar";
+
+  return (
                         <td
                           key={col.key}
                           className={`py-3.5 px-4 text-xs ${alignClass} ${
@@ -183,19 +196,39 @@ export function DataTable<T extends { _id?: string; id?: string }>({
       {pagination && onPageChange && (
         <div className="p-3.5 border-t border-border-subtle bg-paper/40 flex items-center justify-between gap-4 text-xs text-slate-muted">
           <div>
-            Showing{" "}
-            <span className="font-semibold text-ink">
-              {Math.min(
-                (pagination.page - 1) * pagination.limit + 1,
-                pagination.total
-              )}
-            </span>{" "}
-            to{" "}
-            <span className="font-semibold text-ink">
-              {Math.min(pagination.page * pagination.limit, pagination.total)}
-            </span>{" "}
-            of <span className="font-semibold text-ink">{pagination.total}</span>{" "}
-            entries
+            {isArabic ? (
+              <>
+                عرض{" "}
+                <span className="font-semibold text-ink">
+                  {Math.min(
+                    (pagination.page - 1) * pagination.limit + 1,
+                    pagination.total
+                  )}
+                </span>{" "}
+                إلى{" "}
+                <span className="font-semibold text-ink">
+                  {Math.min(pagination.page * pagination.limit, pagination.total)}
+                </span>{" "}
+                من{" "}
+                <span className="font-semibold text-ink">{pagination.total}</span>
+              </>
+            ) : (
+              <>
+                Showing{" "}
+                <span className="font-semibold text-ink">
+                  {Math.min(
+                    (pagination.page - 1) * pagination.limit + 1,
+                    pagination.total
+                  )}
+                </span>{" "}
+                to{" "}
+                <span className="font-semibold text-ink">
+                  {Math.min(pagination.page * pagination.limit, pagination.total)}
+                </span>{" "}
+                of <span className="font-semibold text-ink">{pagination.total}</span>{" "}
+                entries
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-1.5">

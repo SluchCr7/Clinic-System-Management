@@ -1143,6 +1143,7 @@
     "status": "Status",
     "cancelAppointment": "Cancel appointment",
     "allStatuses": "All Statuses",
+    "today" : "Today",
     "statusOptions": {
       "scheduled": "Scheduled",
       "confirmed": "Confirmed",

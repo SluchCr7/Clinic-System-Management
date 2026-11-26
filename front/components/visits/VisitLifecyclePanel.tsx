@@ -12,7 +12,9 @@ import {
 } from "@/services/api/appointmentApi";
 import type { Visit, Vitals } from "@/types/visit";
 import { extractApiError } from "@/services/api/baseQuery";
-import { Button, Card, CardContent, CardHeader, Input, Textarea, toast } from "@/components/ui";
+import { useGetPendingOrdersByPatientQuery } from "@/services/api/labOrderApi";
+import { Button, Card, CardContent, CardHeader, Input, Textarea, Modal, toast } from "@/components/ui";
+import { LuTriangleAlert } from "react-icons/lu";
 
 interface VisitLifecyclePanelProps {
   visit: Visit;
@@ -67,6 +69,14 @@ const VisitLifecyclePanel = ({ visit, role }: VisitLifecyclePanelProps) => {
     role === "doctor" &&
     ["in_progress", "completed"].includes(visit.status) &&
     !activeFollowUp;
+
+  const patientId = getId(visit.patient);
+  const { data: pendingOrdersData } = useGetPendingOrdersByPatientQuery(
+    { patientId, currentVisitId: visit._id },
+    { skip: !patientId }
+  );
+  const pendingCount = pendingOrdersData?.data?.length || 0;
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
 
   const [chiefComplaint, setChiefComplaint] = useState(visit.chiefComplaint);
   const [symptoms, setSymptoms] = useState(visit.symptoms.join(", "));
@@ -124,15 +134,24 @@ const VisitLifecyclePanel = ({ visit, role }: VisitLifecyclePanelProps) => {
     }
   };
 
-  const handleComplete = async () => {
+  const executeComplete = async () => {
     try {
       await completeVisit(visit._id).unwrap();
       toast.success(t("visits.workflow.completed"));
+      setIsConfirmModalOpen(false);
     } catch (error) {
       toast.error(
         extractApiError(error).message || t("visits.workflow.completeFailed")
       );
     }
+  };
+
+  const handleComplete = async () => {
+    if (pendingCount > 0) {
+      setIsConfirmModalOpen(true);
+      return;
+    }
+    await executeComplete();
   };
 
   const handleBookFollowUp = async (event: React.FormEvent) => {
@@ -406,6 +425,44 @@ const VisitLifecyclePanel = ({ visit, role }: VisitLifecyclePanelProps) => {
             </Button>
           ))}
       </CardContent>
+
+      {/* Forgetting Prevention Warning Dialog */}
+      <Modal
+        isOpen={isConfirmModalOpen}
+        onClose={() => setIsConfirmModalOpen(false)}
+        title="تنبيه: فحوصات وأشعة معلقة"
+      >
+        <div className="flex flex-col gap-4 text-xs">
+          <div className="p-3.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-200 flex items-start gap-2.5">
+            <LuTriangleAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <p className="leading-relaxed text-xs">
+              يوجد <strong className="font-bold text-white font-mono text-sm px-1">{pendingCount}</strong> فحوصات أو أشعة معلقة لم تُستلم نتائجها بعد لهذا المريض.
+              <br />
+              هل تريد المتابعة وإكمال الزيارة؟
+            </p>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-border-subtle">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsConfirmModalOpen(false)}
+            >
+              إلغاء ومراجعة الفحوصات
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              isLoading={isCompleting}
+              onClick={executeComplete}
+            >
+              متابعة وإكمال الزيارة
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </Card>
   );
 };

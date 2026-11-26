@@ -174,6 +174,8 @@ app.use("/api/payments", require("./modules/Payment/payment.route"));
 app.use("/api/payment-methods", require("./modules/PaymentMethod/paymentMethod.route"));
 app.use("/api/medical-attachments", require("./modules/medicalAttachment/medicalAttachment.route"));
 app.use("/api/lab-orders", require("./modules/LabOrder/labOrder.route"));
+app.use("/api/lab-order-items", require("./modules/LabOrder/labOrderItem.route"));
+app.use("/lab-order-items", require("./modules/LabOrder/labOrderItem.route"));
 app.use("/api/notifications", require("./modules/Notification/notification.route"));
 app.use("/api/audit-logs", require("./modules/AuditLog/auditLog.route"));
 app.use("/api/dashboard", require("./modules/Dashboard/dashboard.route"));

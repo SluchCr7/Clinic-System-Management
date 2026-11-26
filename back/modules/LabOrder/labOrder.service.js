@@ -1,152 +1,119 @@
 const LabOrder = require("./labOrder.model");
-
 const Visit = require("../Visit/visit.model");
 const Patient = require("../Patient/patient.model");
 const Doctor = require("../Doctor/doctor.model");
+const DoctorAssignment = require("../DoctorAssignment/doctorAssignment.model");
 const auditLogService = require("../AuditLog/auditLog.service");
-const {
-  applyClinicScope,
-  assertPatientAccess,
-  getAuthorizedReceptionistIds,
-} = require("../../utils/accessControl");
-
 const { AppError } = require("../../middlewares/errorHandler");
-const Notification = require("../Notification/notification.model");
-const { getIO } = require("../../utils/socket");
-const { assertVisitInProgress } = require("../../utils/visitLifecycle");
-
-const { paginateQuery } = require("../../utils/pagination");
-const {
-  getSearchRegex,
-  getSort,
-  applyCairoDateRange,
-  applyDoctorScope,
-  getDoctorScopeId,
-} = require("../../utils/listQuery");
+const { saveInspectedFile } = require("../../middlewares/labResultUpload");
+const fs = require("fs");
+const mongoose = require("mongoose");
 
 // ---------------------------------------------
-// Helpers
+// Clinic Isolation & Role Helpers
 // ---------------------------------------------
 
-const validatePatient = async (patientId) => {
-  const patient = await Patient.findById(patientId);
+/**
+ * Resolves clinicId strictly from user token / session profile.
+ * - Admin: 403 (No access to medical orders)
+ * - Doctor: Doctor's clinic
+ * - Receptionist: Assigned doctor's clinic
+ */
+const resolveUserClinicId = async (user) => {
+  if (!user) {
+    throw new AppError("Authentication required", 401, "UNAUTHORIZED");
+  }
 
-  if (!patient) {
+  if (user.role === "admin") {
     throw new AppError(
-      "Patient not found",
-      404,
-      "PATIENT_NOT_FOUND"
+      "Admin has no access to medical order data",
+      403,
+      "FORBIDDEN"
     );
   }
 
-  if (!patient.isActive) {
-    throw new AppError(
-      "Patient is inactive",
-      400,
-      "PATIENT_INACTIVE"
-    );
+  if (user.clinic) {
+    return new mongoose.Types.ObjectId(user.clinic);
   }
 
-  return patient;
+  if (user.role === "doctor") {
+    const doctor = await Doctor.findOne({ user: user._id, isActive: true })
+      .select("clinic _id")
+      .lean();
+    if (doctor?.clinic) {
+      return new mongoose.Types.ObjectId(doctor.clinic);
+    }
+  }
+
+  if (user.role === "receptionist") {
+    const assignment = await DoctorAssignment.findOne({
+      receptionist: user._id,
+      isActive: true,
+    })
+      .populate("doctor", "clinic")
+      .lean();
+
+    if (assignment?.clinic) {
+      return new mongoose.Types.ObjectId(assignment.clinic);
+    }
+    if (assignment?.doctor?.clinic) {
+      return new mongoose.Types.ObjectId(assignment.doctor.clinic);
+    }
+  }
+
+  throw new AppError("Clinic not found for this user", 404, "CLINIC_NOT_FOUND");
 };
 
-const validateDoctor = async (doctorId) => {
-  const doctor = await Doctor.findById(doctorId);
-
+const resolveDoctorProfile = async (user) => {
+  if (!user || user.role !== "doctor") {
+    throw new AppError(
+      "Only doctors have permission to perform this action",
+      403,
+      "FORBIDDEN"
+    );
+  }
+  const doctor = await Doctor.findOne({ user: user._id, isActive: true }).lean();
   if (!doctor) {
-    throw new AppError(
-      "Doctor not found",
-      404,
-      "DOCTOR_NOT_FOUND"
-    );
+    throw new AppError("Doctor profile not found", 404, "DOCTOR_NOT_FOUND");
   }
-
-  if (!doctor.isActive) {
-    throw new AppError(
-      "Doctor is inactive",
-      400,
-      "DOCTOR_INACTIVE"
-    );
-  }
-
   return doctor;
 };
 
-const validateVisit = async (
-  visitId,
-  patientId,
-  doctorId
-) => {
-  const visit = await Visit.findById(visitId);
+// ---------------------------------------------
+// Validation Helpers
+// ---------------------------------------------
 
-  if (!visit) {
-    throw new AppError(
-      "Visit not found",
-      404,
-      "VISIT_NOT_FOUND"
-    );
+const validatePatient = async (patientId, clinicId) => {
+  const patient = await Patient.findById(patientId);
+  if (!patient) {
+    throw new AppError("Patient not found", 404, "PATIENT_NOT_FOUND");
   }
+  if (!patient.isActive) {
+    throw new AppError("Patient is inactive", 400, "PATIENT_INACTIVE");
+  }
+  return patient;
+};
 
-  if (
-    visit.patient.toString() !==
-    patientId.toString()
-  ) {
+const validateVisit = async (visitId, patientId) => {
+  const visit = await Visit.findById(visitId);
+  if (!visit) {
+    throw new AppError("Visit not found", 404, "VISIT_NOT_FOUND");
+  }
+  if (visit.patient.toString() !== patientId.toString()) {
     throw new AppError(
       "Visit does not belong to this patient",
       400,
       "VISIT_PATIENT_MISMATCH"
     );
   }
-
-  if (
-    visit.doctor.toString() !==
-    doctorId.toString()
-  ) {
-    throw new AppError(
-      "Visit does not belong to this doctor",
-      400,
-      "VISIT_DOCTOR_MISMATCH"
-    );
-  }
-
-  return assertVisitInProgress(visit);
-};
-
-const validateTests = (tests) => {
-  if (!tests || tests.length === 0) {
-    throw new AppError(
-      "Lab order must contain at least one test",
-      400,
-      "LAB_TESTS_REQUIRED"
-    );
-  }
-
-  const normalizedCodes = tests
-    .filter((test) => test.code)
-    .map((test) => test.code.toUpperCase());
-
-  const uniqueCodes = new Set(normalizedCodes);
-
-  if (
-    uniqueCodes.size !==
-    normalizedCodes.length
-  ) {
-    throw new AppError(
-      "Duplicate lab tests are not allowed",
-      400,
-      "DUPLICATE_LAB_TEST"
-    );
-  }
+  return visit;
 };
 
 // ---------------------------------------------
-// Create Lab Order
+// 1. Create Lab Order (Doctor Only)
 // ---------------------------------------------
 
-const createLabOrder = async (
-  data,
-  currentUser
-) => {
+const createLabOrder = async (data, currentUser) => {
   if (!currentUser || currentUser.role !== "doctor") {
     throw new AppError(
       "Only doctors have permission to create lab orders",
@@ -155,107 +122,106 @@ const createLabOrder = async (
     );
   }
 
-  const {
-    type,
-    visit,
-    patient,
-    doctor,
-    tests,
-    reason,
-    priority,
-    notes,
-    orderedAt,
-    instructions,
-    clinicalNotes,
-    expectedBy,
-  } = data;
+  const doctor = await resolveDoctorProfile(currentUser);
+  const clinicId = await resolveUserClinicId(currentUser);
 
-  const doctorId = await getDoctorScopeId(currentUser, Doctor);
-  if (!doctorId || doctorId.toString() !== doctor.toString()) {
-    throw new AppError(
-      "Doctors can only create lab orders for their own visits",
-      403,
-      "FORBIDDEN"
-    );
+  const patientId = data.patientId || data.patient;
+  const visitId = data.visitId || data.visit;
+  const prescriptionId = data.prescriptionId || null;
+
+  await validatePatient(patientId, clinicId);
+  await validateVisit(visitId, patientId);
+
+  // Normalize items
+  let rawItems = data.items;
+  if (!rawItems || !rawItems.length) {
+    if (data.tests && data.tests.length) {
+      const defaultType =
+        data.type === "IMAGING" || data.type === "radiology"
+          ? "radiology"
+          : "lab";
+      rawItems = data.tests.map((t) => ({
+        name: t.name,
+        code: t.code,
+        instructions: t.instructions,
+        type: defaultType,
+        status: "ordered",
+      }));
+    }
   }
 
-  const [patientRecord] = await Promise.all([
-    validatePatient(patient),
-    validateDoctor(doctor),
-  ]);
-
-  if (patientRecord.doctor && patientRecord.doctor.toString() !== doctor.toString()) {
+  if (!rawItems || rawItems.length === 0) {
     throw new AppError(
-      "Patient does not belong to this doctor's clinic",
+      "Lab order must contain at least one lab or radiology item",
       400,
-      "PATIENT_DOCTOR_MISMATCH"
+      "LAB_ITEMS_REQUIRED"
     );
   }
 
-  await validateVisit(
-    visit,
-    patient,
-    doctor
-  );
+  const normalizedItems = rawItems.map((item) => ({
+    name: item.name.trim(),
+    type:
+      item.type === "radiology" || item.type === "IMAGING"
+        ? "radiology"
+        : "lab",
+    code: item.code || null,
+    instructions: item.instructions || null,
+    status: "ordered",
+    labName: item.labName || null,
+    resultNotes: item.resultNotes || null,
+    statusHistory: [
+      {
+        from: null,
+        to: "ordered",
+        changedBy: currentUser._id,
+        changedAt: new Date(),
+        reason: "Initial order creation",
+      },
+    ],
+  }));
 
-  validateTests(tests);
-
-  if (
-    orderedAt &&
-    new Date(orderedAt) > new Date()
-  ) {
-    throw new AppError(
-      "Lab order date cannot be in the future",
-      400,
-      "INVALID_ORDER_DATE"
-    );
-  }
+  const priority =
+    data.priority === "urgent" || data.priority === "stat"
+      ? "urgent"
+      : "routine";
 
   const labOrder = await LabOrder.create({
-    type: type || "LAB",
-    visit,
-    patient,
-    doctor,
-    tests,
-    reason,
+    clinicId,
+    patientId,
+    visitId,
+    prescriptionId,
+    orderedBy: currentUser._id,
+    doctor: doctor._id,
+    patient: patientId,
+    visit: visitId,
     priority,
-    notes,
-    orderedAt,
-    requestedAt: orderedAt || new Date(),
-    requestedBy: currentUser._id,
-    instructions,
-    clinicalNotes,
-    expectedBy,
+    type: normalizedItems.some((i) => i.type === "radiology")
+      ? "IMAGING"
+      : "LAB",
+    status: "REQUESTED",
+    items: normalizedItems,
+    tests: normalizedItems.map((i) => ({
+      name: i.name,
+      code: i.code,
+      instructions: i.instructions,
+    })),
+    reason: data.reason || null,
+    notes: data.notes || null,
+    orderedAt: data.orderedAt || new Date(),
     createdBy: currentUser._id,
   });
-
-  // -------------------------------------------
-  // Audit Log
-  // -------------------------------------------
 
   await auditLogService.logActivity({
     actor: currentUser,
     action: "LAB_ORDER_CREATED",
     resource: "LabOrder",
     resourceId: labOrder._id,
-
+    clinic: clinicId,
     details: {
-      visit: labOrder.visit,
-      patient: labOrder.patient,
-      doctor: labOrder.doctor,
-
-      tests: labOrder.tests,
-
-      reason: labOrder.reason,
-      priority: labOrder.priority,
-      notes: labOrder.notes,
-      type: labOrder.type,
-      instructions: labOrder.instructions,
-      clinicalNotes: labOrder.clinicalNotes,
-      expectedBy: labOrder.expectedBy,
-
-      status: labOrder.status,
-      orderedAt: labOrder.orderedAt,
+      visitId,
+      patientId,
+      priority,
+      itemsCount: normalizedItems.length,
     },
   });
 
@@ -263,463 +229,573 @@ const createLabOrder = async (
 };
 
 // ---------------------------------------------
-// Get Lab Orders
+// 2. Grouped List Aggregation (Server-Side)
 // ---------------------------------------------
 
-const getLabOrders = async (query = {}, currentUser = null) => {
-  const filter = {};
+const getGroupedLabOrders = async (queryParams, currentUser) => {
+  const clinicId = await resolveUserClinicId(currentUser);
 
-  if (query.type) {
-    filter.type = query.type;
+  const page = parseInt(queryParams.page, 10) || 1;
+  const limit = parseInt(queryParams.limit, 10) || 10;
+  const skip = (page - 1) * limit;
+
+  const filter = queryParams.filter || "pending"; // 'pending' (default) or 'all'
+  const filterStatus = queryParams.status; // 'ordered', 'received', 'cancelled', 'all'
+  const filterType = queryParams.type; // 'lab', 'radiology', 'all'
+  const filterPriority = queryParams.priority; // 'routine', 'urgent', 'all'
+  const search = (queryParams.search || "").trim();
+  const startDate = queryParams.startDate || queryParams.date;
+  const endDate = queryParams.endDate || queryParams.date;
+
+  // Build match stage
+  const matchStage = {
+    clinicId: new mongoose.Types.ObjectId(clinicId),
+  };
+
+  if (filterPriority && filterPriority !== "all") {
+    matchStage.priority = filterPriority === "stat" ? "urgent" : filterPriority;
   }
 
-  if (query.visit) {
-    filter.visit = query.visit;
+  if (startDate || endDate) {
+    matchStage.createdAt = {};
+    if (startDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      matchStage.createdAt.$gte = start;
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      matchStage.createdAt.$lte = end;
+    }
   }
 
-  if (query.patient) {
-    filter.patient = query.patient;
-  }
+  // Pipeline stages
+  const pipeline = [
+    { $match: matchStage },
 
-  if (query.doctor) {
-    filter.doctor = query.doctor;
-  }
-
-  if (query.status) {
-    filter.status = query.status;
-  }
-
-  if (query.priority) {
-    filter.priority = query.priority;
-  }
-
-  const searchRegex = getSearchRegex(query.search);
-  if (searchRegex) {
-    filter.$or = [
-      { reason: searchRegex },
-      { "tests.name": searchRegex },
-      { "tests.code": searchRegex },
-    ];
-  }
-
-  applyCairoDateRange(filter, "orderedAt", query);
-  await applyClinicScope(filter, query, currentUser, "doctor");
-
-  return paginateQuery(
-    LabOrder.find(filter)
-      .populate(
-        "patient",
-        "firstName lastName phone email dateOfBirth gender bloodType"
-      )
-      .populate({
-        path: "doctor",
-        select:
-          "user specialization licenseNumber profilePhoto",
-        populate: {
-          path: "user",
-          select:
-            "firstName lastName email phone",
-        },
-      })
-      .populate(
-        "visit",
-        "chiefComplaint diagnosis doctorNotes createdAt"
-      )
-      .populate(
-        "createdBy",
-        "firstName lastName email role"
-      )
-      .populate(
-        "updatedBy",
-        "firstName lastName email role"
-      )
-      .sort(
-        getSort(
-          query,
-          [
-            "orderedAt",
-            "priority",
-            "status",
-            "createdAt",
-            "updatedAt",
-          ],
-          "orderedAt"
-        )
-      ),
-    LabOrder.countDocuments(filter),
-    query.page,
-    query.limit
-  );
-};
-
-// ---------------------------------------------
-// Get Lab Order By ID
-// ---------------------------------------------
-
-const getLabOrderById = async (id, currentUser = null) => {
-  const filter = { _id: id };
-  const labOrder = await LabOrder.findOne(filter)
-    .populate(
-      "patient",
-      "firstName lastName phone email dateOfBirth gender bloodType"
-    )
-    .populate({
-      path: "doctor",
-      select:
-        "user specialization licenseNumber profilePhoto",
-      populate: {
-        path: "user",
-        select:
-          "firstName lastName email phone",
+    // Lookup Patient
+    {
+      $lookup: {
+        from: "patients",
+        localField: "patientId",
+        foreignField: "_id",
+        as: "patientInfo",
       },
-    })
-    .populate(
-      "visit",
-      "chiefComplaint diagnosis doctorNotes createdAt"
-    )
-    .populate(
-      "createdBy",
-      "firstName lastName email role"
-    )
-    .populate(
-      "updatedBy",
-      "firstName lastName email role"
-    )
-    .populate(
-      "resultAttachment",
-      "title description file type patient visit uploadedBy"
-    );
+    },
+    { $unwind: "$patientInfo" },
 
-  if (!labOrder) return null;
-  await assertPatientAccess(currentUser, labOrder.patient);
-  return labOrder;
+    // Lookup Visit
+    {
+      $lookup: {
+        from: "visits",
+        localField: "visitId",
+        foreignField: "_id",
+        as: "visitInfo",
+      },
+    },
+    { $unwind: "$visitInfo" },
+
+    // Add Computed Counts & Sorting Indicators
+    {
+      $addFields: {
+        totalItemsCount: { $size: { $ifNull: ["$items", []] } },
+        pendingCount: {
+          $size: {
+            $filter: {
+              input: { $ifNull: ["$items", []] },
+              as: "it",
+              cond: {
+                $in: ["$$it.status", ["ordered", "REQUESTED", "requested"]],
+              },
+            },
+          },
+        },
+        receivedCount: {
+          $size: {
+            $filter: {
+              input: { $ifNull: ["$items", []] },
+              as: "it",
+              cond: {
+                $in: [
+                  "$$it.status",
+                  ["received", "RESULT_RECEIVED", "result_received"],
+                ],
+              },
+            },
+          },
+        },
+        cancelledCount: {
+          $size: {
+            $filter: {
+              input: { $ifNull: ["$items", []] },
+              as: "it",
+              cond: {
+                $in: ["$$it.status", ["cancelled", "CANCELLED"]],
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      $addFields: {
+        hasPending: { $gt: ["$pendingCount", 0] },
+        isUrgent: { $eq: ["$priority", "urgent"] },
+      },
+    },
+  ];
+
+  // Search filter by patient name or phone
+  if (search) {
+    const searchRegex = new RegExp(search, "i");
+    pipeline.push({
+      $match: {
+        $or: [
+          { "patientInfo.firstName": searchRegex },
+          { "patientInfo.lastName": searchRegex },
+          { "patientInfo.phone": searchRegex },
+        ],
+      },
+    });
+  }
+
+  // Apply default Pending Only filter or status filters
+  if (filter === "pending") {
+    pipeline.push({ $match: { hasPending: true } });
+  }
+
+  if (filterStatus && filterStatus !== "all") {
+    const statusVal =
+      filterStatus === "REQUESTED"
+        ? "ordered"
+        : filterStatus === "RESULT_RECEIVED"
+        ? "received"
+        : filterStatus === "CANCELLED"
+        ? "cancelled"
+        : filterStatus;
+    pipeline.push({
+      $match: {
+        "items.status": { $in: [statusVal, statusVal.toUpperCase()] },
+      },
+    });
+  }
+
+  if (filterType && filterType !== "all") {
+    const typeVal = filterType.toLowerCase();
+    pipeline.push({
+      $match: {
+        "items.type": { $in: [typeVal, typeVal === "radiology" ? "IMAGING" : "LAB"] },
+      },
+    });
+  }
+
+  // Sorting cards:
+  // 1) Cards with pending items first
+  // 2) Then urgent priority cards
+  // 3) Then most recent visit / order date
+  pipeline.push({
+    $sort: {
+      hasPending: -1,
+      isUrgent: -1,
+      createdAt: -1,
+    },
+  });
+
+  // Facet for pagination
+  pipeline.push({
+    $facet: {
+      metadata: [{ $count: "total" }],
+      data: [{ $skip: skip }, { $limit: limit }],
+    },
+  });
+
+  const [result] = await LabOrder.aggregate(pipeline);
+  const total = result.metadata[0]?.total || 0;
+  const rawCards = result.data || [];
+
+  // Fixed item order inside each card:
+  // 1) By status: ordered (pending) first, then received, then cancelled.
+  // 2) Within each status: labs first, then radiology (consistent, never mixed).
+  // 3) Alphabetical by item name.
+  const statusRank = {
+    ordered: 1,
+    requested: 1,
+    REQUESTED: 1,
+    received: 2,
+    result_received: 2,
+    RESULT_RECEIVED: 2,
+    cancelled: 3,
+    CANCELLED: 3,
+  };
+
+  const formattedCards = rawCards.map((card) => {
+    const items = (card.items || []).slice().sort((a, b) => {
+      const rankA = statusRank[a.status] || 99;
+      const rankB = statusRank[b.status] || 99;
+      if (rankA !== rankB) return rankA - rankB;
+
+      // Labs first, then radiology
+      const isLabA = a.type === "lab" || a.type === "LAB" ? 0 : 1;
+      const isLabB = b.type === "lab" || b.type === "LAB" ? 0 : 1;
+      if (isLabA !== isLabB) return isLabA - isLabB;
+
+      // Alphabetical
+      return (a.name || "").localeCompare(b.name || "", "ar");
+    });
+
+    return {
+      _id: card._id,
+      clinicId: card.clinicId,
+      visitId: card.visitId,
+      patientId: card.patientId,
+      prescriptionId: card.prescriptionId,
+      priority: card.priority,
+      createdAt: card.createdAt,
+      patient: {
+        _id: card.patientInfo._id,
+        firstName: card.patientInfo.firstName,
+        lastName: card.patientInfo.lastName,
+        phone: card.patientInfo.phone,
+        gender: card.patientInfo.gender,
+        dateOfBirth: card.patientInfo.dateOfBirth,
+      },
+      visit: {
+        _id: card.visitInfo._id,
+        status: card.visitInfo.status,
+        createdAt: card.visitInfo.createdAt,
+        appointmentDate: card.visitInfo.appointmentDate,
+        chiefComplaint: card.visitInfo.chiefComplaint,
+      },
+      counts: {
+        total: card.totalItemsCount || items.length,
+        pending: card.pendingCount,
+        received: card.receivedCount,
+        cancelled: card.cancelledCount,
+      },
+      hasPending: card.hasPending,
+      items,
+    };
+  });
+
+  return {
+    data: formattedCards,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit) || 1,
+      hasNextPage: page * limit < total,
+      hasPrevPage: page > 1,
+    },
+  };
 };
 
 // ---------------------------------------------
-// Update Lab Order
+// 3. Update Lab Order Item Status (Doctor Only)
 // ---------------------------------------------
 
-const updateLabOrder = async (
-  id,
-  data,
-  currentUser
-) => {
-  if (!currentUser || !["admin", "doctor", "receptionist"].includes(currentUser.role)) {
+const updateLabOrderItem = async (itemId, updateData, files, currentUser) => {
+  if (!currentUser || currentUser.role !== "doctor") {
     throw new AppError(
-      "You do not have permission to update lab orders",
+      "Only doctors have permission to update lab and radiology orders",
       403,
       "FORBIDDEN"
     );
   }
 
-  const filter = { _id: id };
+  const userClinicId = await resolveUserClinicId(currentUser);
 
-  const labOrder =
-    await LabOrder.findOne(filter);
+  // Check if item belongs to this clinic
+  const order = await LabOrder.findOne({
+    "items._id": itemId,
+    clinicId: userClinicId,
+  });
 
-  if (!labOrder) {
-    return null;
+  if (!order) {
+    // Check if it belongs to another clinic (must return 404 per requirements)
+    const existsOtherClinic = await LabOrder.findOne({ "items._id": itemId });
+    if (existsOtherClinic) {
+      throw new AppError("Lab order item not found", 404, "LAB_ORDER_ITEM_NOT_FOUND");
+    }
+    throw new AppError("Lab order item not found", 404, "LAB_ORDER_ITEM_NOT_FOUND");
   }
-  const patientRecord = await Patient.findById(labOrder.patient);
-  await assertPatientAccess(currentUser, patientRecord);
 
-  // -------------------------------------------
-  // Save Previous Values For Audit
-  // -------------------------------------------
+  const item = order.items.id(itemId);
+  if (!item) {
+    throw new AppError("Lab order item not found", 404, "LAB_ORDER_ITEM_NOT_FOUND");
+  }
 
-  const previousValues = {
-    tests: labOrder.tests,
-    reason: labOrder.reason,
-    priority: labOrder.priority,
-    notes: labOrder.notes,
-    orderedAt: labOrder.orderedAt,
-    type: labOrder.type,
-    instructions: labOrder.instructions,
-    clinicalNotes: labOrder.clinicalNotes,
-    expectedBy: labOrder.expectedBy,
-    status: labOrder.status,
+  const oldStatus = item.status;
+  const newStatus = updateData.status
+    ? updateData.status === "REQUESTED"
+      ? "ordered"
+      : updateData.status === "RESULT_RECEIVED"
+      ? "received"
+      : updateData.status === "CANCELLED"
+      ? "cancelled"
+      : updateData.status
+    : oldStatus;
+
+  // Status transitions
+  if (newStatus !== oldStatus) {
+    item.status = newStatus;
+    if (newStatus === "received") {
+      item.receivedAt = updateData.receivedAt || new Date();
+    } else if (newStatus === "ordered") {
+      // Reverting from received back to ordered is allowed
+      item.receivedAt = null;
+    }
+
+    if (newStatus === "cancelled" && updateData.cancelReason) {
+      item.cancelReason = updateData.cancelReason;
+    }
+
+    item.statusHistory.push({
+      from: oldStatus,
+      to: newStatus,
+      changedBy: currentUser._id,
+      changedAt: new Date(),
+      reason: updateData.cancelReason || updateData.reason || null,
+    });
+
+    // Audit log entry
+    await auditLogService.logActivity({
+      actor: currentUser,
+      action: "LAB_ORDER_ITEM_STATUS_CHANGED",
+      resource: "LabOrderItem",
+      resourceId: item._id,
+      clinic: userClinicId,
+      details: {
+        orderId: order._id,
+        itemId: item._id,
+        itemName: item.name,
+        fromStatus: oldStatus,
+        toStatus: newStatus,
+        cancelReason: updateData.cancelReason || null,
+      },
+    });
+  }
+
+  if (updateData.labName !== undefined) {
+    item.labName = updateData.labName?.trim() || null;
+  }
+  if (updateData.resultNotes !== undefined) {
+    item.resultNotes = updateData.resultNotes?.trim() || null;
+  }
+  if (updateData.cancelReason !== undefined && newStatus === "cancelled") {
+    item.cancelReason = updateData.cancelReason?.trim() || null;
+  }
+
+  // Handle uploaded files
+  if (files && files.length > 0) {
+    for (const file of files) {
+      const saved = await saveInspectedFile(file);
+      item.resultFiles.push(saved);
+    }
+  }
+
+  item.updatedBy = currentUser._id;
+  await order.save();
+
+  return {
+    item,
+    orderId: order._id,
+  };
+};
+
+// ---------------------------------------------
+// 4. File Management & Secure Serving
+// ---------------------------------------------
+
+const deleteLabOrderItemFile = async (itemId, fileId, currentUser) => {
+  if (!currentUser || currentUser.role !== "doctor") {
+    throw new AppError(
+      "Only doctors have permission to delete result files",
+      403,
+      "FORBIDDEN"
+    );
+  }
+
+  const userClinicId = await resolveUserClinicId(currentUser);
+
+  const order = await LabOrder.findOne({
+    "items._id": itemId,
+    clinicId: userClinicId,
+  });
+
+  if (!order) {
+    throw new AppError("Lab order item not found", 404, "LAB_ORDER_ITEM_NOT_FOUND");
+  }
+
+  const item = order.items.id(itemId);
+  const fileSubdoc = item.resultFiles.id(fileId);
+  if (!fileSubdoc) {
+    throw new AppError("Result file not found", 404, "FILE_NOT_FOUND");
+  }
+
+  // Delete physical file from disk
+  if (fs.existsSync(fileSubdoc.path)) {
+    try {
+      await fs.promises.unlink(fileSubdoc.path);
+    } catch {
+      // Ignore disk delete errors
+    }
+  }
+
+  fileSubdoc.deleteOne();
+  await order.save();
+
+  return { success: true };
+};
+
+const getLabResultFileRecord = async (itemId, fileId, currentUser) => {
+  const userClinicId = await resolveUserClinicId(currentUser);
+
+  const order = await LabOrder.findOne({
+    "items._id": itemId,
+    clinicId: userClinicId,
+  });
+
+  if (!order) {
+    throw new AppError("Lab order item not found", 404, "LAB_ORDER_ITEM_NOT_FOUND");
+  }
+
+  const item = order.items.id(itemId);
+  const fileRecord = item.resultFiles.id(fileId);
+  if (!fileRecord) {
+    throw new AppError("Result file not found", 404, "FILE_NOT_FOUND");
+  }
+
+  if (!fs.existsSync(fileRecord.path)) {
+    throw new AppError("File does not exist on disk", 404, "FILE_NOT_FOUND");
+  }
+
+  return fileRecord;
+};
+
+// ---------------------------------------------
+// 5. Follow-Up Visit: Pending Orders for Patient
+// ---------------------------------------------
+
+const getPendingOrdersByPatient = async (patientId, currentUser, currentVisitId = null) => {
+  const clinicId = await resolveUserClinicId(currentUser);
+
+  const matchFilter = {
+    clinicId: new mongoose.Types.ObjectId(clinicId),
+    patientId: new mongoose.Types.ObjectId(patientId),
+    "items.status": { $in: ["ordered", "REQUESTED", "requested"] },
   };
 
-  // -------------------------------------------
-  // Tests
-  // -------------------------------------------
-
-  if (data.tests !== undefined) {
-    validateTests(data.tests);
-
-    labOrder.tests = data.tests;
+  // Exclude current visit's new orders if specified to show "previous orders awaiting results"
+  if (currentVisitId) {
+    matchFilter.visitId = { $ne: new mongoose.Types.ObjectId(currentVisitId) };
   }
 
-  // -------------------------------------------
-  // Basic Fields
-  // -------------------------------------------
+  const orders = await LabOrder.find(matchFilter)
+    .populate("visitId", "createdAt status appointmentDate")
+    .sort({ createdAt: -1 })
+    .lean();
 
-  if (data.reason !== undefined) {
-    labOrder.reason = data.reason;
-  }
-
-  if (data.priority !== undefined) {
-    labOrder.priority = data.priority;
-  }
-
-  if (data.notes !== undefined) {
-    labOrder.notes = data.notes;
-  }
-
-  if (data.type !== undefined) {
-    if (labOrder.status !== "REQUESTED") {
-      throw new AppError("Referral type can only be changed while requested", 409, "LAB_ORDER_LOCKED");
-    }
-    labOrder.type = data.type;
-  }
-
-  if (data.instructions !== undefined) labOrder.instructions = data.instructions;
-  if (data.clinicalNotes !== undefined) labOrder.clinicalNotes = data.clinicalNotes;
-  if (data.expectedBy !== undefined) labOrder.expectedBy = data.expectedBy;
-  if (data.receivedAt !== undefined) labOrder.receivedAt = data.receivedAt;
-  if (data.performedAt !== undefined) labOrder.performedAt = data.performedAt;
-  if (data.externalFacilityName !== undefined) labOrder.externalFacilityName = data.externalFacilityName;
-  if (data.resultNotes !== undefined) labOrder.resultNotes = data.resultNotes;
-  if (data.resultAttachment !== undefined) labOrder.resultAttachment = data.resultAttachment;
-
-  if (data.orderedAt !== undefined) {
-    if (
-      new Date(data.orderedAt) > new Date()
-    ) {
-      throw new AppError(
-        "Lab order date cannot be in the future",
-        400,
-        "INVALID_ORDER_DATE"
-      );
-    }
-
-    labOrder.orderedAt = data.orderedAt;
-  }
-
-  // -------------------------------------------
-  // Status Transition Rules
-  // -------------------------------------------
-
-  if (data.status !== undefined) {
-    const currentStatus = labOrder.status;
-    const newStatus = data.status;
-    let allowed = false;
-
-    if (currentStatus === "REQUESTED") {
-      allowed =
-        newStatus === "RESULT_RECEIVED" ||
-        newStatus === "CANCELLED";
-    } else if (currentStatus === "RESULT_RECEIVED") {
-      allowed =
-        newStatus === "REQUESTED" &&
-        ["admin", "doctor"].includes(currentUser.role);
-    } else if (currentStatus === "CANCELLED") {
-      allowed =
-        newStatus === "REQUESTED" &&
-        currentUser.role === "admin";
-    }
-
-    if (!allowed) {
-      throw new AppError(
-        `Invalid lab order status transition from ${currentStatus} to ${newStatus}`,
-        409,
-        "INVALID_STATUS_TRANSITION"
-      );
-    }
-
-    if (newStatus === "CANCELLED" && !data.statusChangeReason) {
-      throw new AppError(
-        "A reason is required when cancelling an external referral",
-        422,
-        "STATUS_REASON_REQUIRED"
-      );
-    }
-
-    if (
-      currentStatus === "RESULT_RECEIVED" &&
-      newStatus === "REQUESTED" &&
-      !data.statusChangeReason
-    ) {
-      throw new AppError(
-        "A reason is required when reopening a received result",
-        422,
-        "STATUS_REASON_REQUIRED"
-      );
-    }
-
-    if (
-      newStatus === "RESULT_RECEIVED" &&
-      ["doctor", "receptionist", "admin"].includes(currentUser.role)
-    ) {
-      if (!data.receivedAt) data.receivedAt = new Date();
-      labOrder.receivedBy = currentUser._id;
-      labOrder.receivedAt = data.receivedAt;
-      if (data.performedAt !== undefined) labOrder.performedAt = data.performedAt;
-      if (data.externalFacilityName !== undefined) {
-        labOrder.externalFacilityName = data.externalFacilityName;
-      }
-      if (data.resultNotes !== undefined) labOrder.resultNotes = data.resultNotes;
-      if (data.resultAttachment !== undefined) {
-        labOrder.resultAttachment = data.resultAttachment;
+  const pendingItems = [];
+  for (const order of orders) {
+    for (const item of order.items || []) {
+      if (["ordered", "REQUESTED", "requested"].includes(item.status)) {
+        pendingItems.push({
+          orderId: order._id,
+          itemId: item._id,
+          type: item.type,
+          name: item.name,
+          code: item.code,
+          priority: order.priority,
+          orderedAt: order.createdAt,
+          visitId: order.visitId?._id || order.visitId,
+          visitDate: order.visitId?.createdAt || order.createdAt,
+          labName: item.labName,
+          resultNotes: item.resultNotes,
+        });
       }
     }
-
-    if (newStatus === "CANCELLED" && currentUser.role !== "doctor" && currentUser.role !== "admin") {
-      throw new AppError(
-        "Only the doctor or administrator may cancel an external referral",
-        403,
-        "FORBIDDEN"
-      );
-    }
-
-    labOrder.status = newStatus;
-    labOrder.statusChangeReason =
-      data.statusChangeReason || labOrder.statusChangeReason || null;
-    labOrder.updatedBy = currentUser._id;
   }
 
-  labOrder.updatedBy =
-    currentUser._id;
+  return pendingItems;
+};
 
-  await labOrder.save();
+// ---------------------------------------------
+// 6. Backward Compatibility Methods
+// ---------------------------------------------
 
-  // -------------------------------------------
-  // Audit Log
-  // -------------------------------------------
+const getLabOrders = async (queryParams, currentUser) => {
+  // Can delegate to getGroupedLabOrders or return flat list
+  return getGroupedLabOrders(queryParams, currentUser);
+};
+
+const getLabOrderById = async (id, currentUser) => {
+  const clinicId = await resolveUserClinicId(currentUser);
+  const order = await LabOrder.findOne({
+    _id: id,
+    clinicId,
+  })
+    .populate("patientId", "firstName lastName phone")
+    .populate("visitId", "createdAt status");
+
+  if (!order) {
+    const existsOther = await LabOrder.findById(id);
+    if (existsOther) {
+      throw new AppError("Lab order not found", 404, "LAB_ORDER_NOT_FOUND");
+    }
+    throw new AppError("Lab order not found", 404, "LAB_ORDER_NOT_FOUND");
+  }
+
+  return order;
+};
+
+const updateLabOrder = async (id, data, currentUser) => {
+  // Compatibility method for existing tests/calls
+  if (currentUser.role !== "doctor") {
+    throw new AppError("Only doctors can update lab orders", 403, "FORBIDDEN");
+  }
+  const clinicId = await resolveUserClinicId(currentUser);
+  const order = await LabOrder.findOne({ _id: id, clinicId });
+  if (!order) {
+    throw new AppError("Lab order not found", 404, "LAB_ORDER_NOT_FOUND");
+  }
+
+  if (data.status) {
+    order.status = data.status;
+    const mapped =
+      data.status === "RESULT_RECEIVED"
+        ? "received"
+        : data.status === "CANCELLED"
+        ? "cancelled"
+        : "ordered";
+    for (const it of order.items) {
+      it.status = mapped;
+      if (mapped === "received") it.receivedAt = data.receivedAt || new Date();
+    }
+  }
+  if (data.receivedAt) order.receivedAt = data.receivedAt;
+  await order.save();
 
   await auditLogService.logActivity({
     actor: currentUser,
     action: "LAB_ORDER_UPDATED",
     resource: "LabOrder",
-    resourceId: labOrder._id,
-
-    details: {
-      previousValues,
-
-      newValues: {
-        tests: labOrder.tests,
-        reason: labOrder.reason,
-        priority: labOrder.priority,
-        notes: labOrder.notes,
-        orderedAt: labOrder.orderedAt,
-        type: labOrder.type,
-        instructions: labOrder.instructions,
-        clinicalNotes: labOrder.clinicalNotes,
-        expectedBy: labOrder.expectedBy,
-        receivedAt: labOrder.receivedAt,
-        performedAt: labOrder.performedAt,
-        externalFacilityName: labOrder.externalFacilityName,
-        resultNotes: labOrder.resultNotes,
-        resultAttachment: labOrder.resultAttachment,
-        status: labOrder.status,
-        statusChangeReason: labOrder.statusChangeReason,
-      },
-
-      statusChanged:
-        previousValues.status !==
-        labOrder.status,
-    },
+    resourceId: order._id,
+    clinic: clinicId,
   });
 
-  if (
-    previousValues.status !== "RESULT_RECEIVED" &&
-    labOrder.status === "RESULT_RECEIVED" &&
-    currentUser.role === "receptionist"
-  ) {
-    const doctor = await Doctor.findById(labOrder.doctor)
-      .populate("user", "_id firstName lastName")
-      .lean();
-    const recipientId = doctor?.user?._id;
-    if (
-      recipientId &&
-      recipientId.toString() !== currentUser._id.toString()
-    ) {
-      const testName =
-        labOrder.tests?.map((test) => test.name).join("، ") ||
-        "الطلب الخارجي";
-      const eventKey =
-        `lab-result:${labOrder._id}:${recipientId}`;
-      const notification = await Notification.findOneAndUpdate(
-        { eventKey },
-        {
-          $setOnInsert: {
-            recipient: recipientId,
-            type: "lab_result",
-            title: "وصلت نتيجة طلب خارجي",
-            message:
-              `وصلت نتيجة ${testName} للمريض ${patientRecord.firstName} ${patientRecord.lastName}`,
-            relatedModel: "LabOrder",
-            relatedId: labOrder._id,
-            eventKey,
-            createdBy: currentUser._id,
-            actor: currentUser._id,
-            entityType: "LabOrder",
-            entityId: labOrder._id,
-            link: `/lab-orders`,
-            priority: "medium",
-          },
-        },
-        { upsert: true, new: true }
-      );
-      try {
-        getIO().to(`user:${recipientId}`).emit("notification:new", {
-          notification,
-        });
-      } catch {
-        // Persisted notification is sufficient if realtime is unavailable.
-      }
-    }
-  }
-
-  if (
-    previousValues.status !== "CANCELLED" &&
-    labOrder.status === "CANCELLED" &&
-    currentUser.role === "doctor"
-  ) {
-    const receptionistIds = await getAuthorizedReceptionistIds(labOrder.doctor);
-    const testName =
-      labOrder.tests?.map((test) => test.name).join("، ") ||
-      "الطلب الخارجي";
-    for (const receptionistId of receptionistIds) {
-      const eventKey =
-        `lab-cancelled:${labOrder._id}:${receptionistId}`;
-      const notification = await Notification.findOneAndUpdate(
-        { eventKey },
-        {
-          $setOnInsert: {
-            recipient: receptionistId,
-            type: "lab_cancelled",
-            title: "تم إلغاء طلب خارجي",
-            message:
-              `أُلغي طلب ${testName} للمريض ${patientRecord.firstName} ${patientRecord.lastName}`,
-            relatedModel: "LabOrder",
-            relatedId: labOrder._id,
-            eventKey,
-            createdBy: currentUser._id,
-            actor: currentUser._id,
-            entityType: "LabOrder",
-            entityId: labOrder._id,
-            link: `/lab-orders`,
-            priority: "low",
-          },
-        },
-        { upsert: true, new: true }
-      );
-      try {
-        getIO().to(`user:${receptionistId}`).emit("notification:new", {
-          notification,
-        });
-      } catch {
-        // Persisted notification is sufficient if realtime is unavailable.
-      }
-    }
-  }
-
-  return labOrder;
+  return order;
 };
 
 module.exports = {
+  resolveUserClinicId,
   createLabOrder,
+  getGroupedLabOrders,
+  updateLabOrderItem,
+  deleteLabOrderItemFile,
+  getLabResultFileRecord,
+  getPendingOrdersByPatient,
   getLabOrders,
   getLabOrderById,
   updateLabOrder,

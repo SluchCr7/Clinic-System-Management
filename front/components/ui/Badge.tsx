@@ -78,6 +78,7 @@ export function StatusBadge({ status, size = "md", className = "" }: StatusBadge
     case "confirmed":
     case "completed":
     case "paid":
+    case "received":
     case "result-received":
       variant = "success";
       break;
@@ -89,6 +90,7 @@ export function StatusBadge({ status, size = "md", className = "" }: StatusBadge
     case "sample-collected":
     case "processing":
     case "requested":
+    case "ordered":
       variant = "teal";
       break;
 

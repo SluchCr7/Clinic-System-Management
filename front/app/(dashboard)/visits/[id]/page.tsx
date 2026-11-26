@@ -25,6 +25,7 @@ import { selectUserRole } from "@/features/auth/authSelectors";
 import { useAppSelector } from "@/redux/hooks";
 import { hasPermission } from "@/lib/permissions";
 import VisitLifecyclePanel from "@/components/visits/VisitLifecyclePanel";
+import PendingOrdersPanel from "@/components/visits/PendingOrdersPanel";
 import { extractApiError } from "@/services/api/baseQuery";
 import type { MedicationRoute } from "@/types/prescription";
 import type { LabOrderPriority, LabOrderType } from "@/types/labOrder";
@@ -125,7 +126,7 @@ export default function VisitWorkspacePage() {
       : null;
 
   const visitLabOrders = labOrdersData?.data?.filter((l) => {
-    const vId = typeof l.visit === "object" && l.visit ? l.visit._id : l.visit;
+    const vId = l.visitId || (typeof l.visit === "object" && l.visit ? l.visit._id : l.visit);
     return vId === visitId;
   }) || [];
 
@@ -457,40 +458,52 @@ export default function VisitWorkspacePage() {
     },
   ];
 
-  const labColumns: Column<(typeof visitLabOrders)[0]>[] = [
+  const labColumns: Column<any>[] = [
     {
       key: "type",
       header: t("labOrders.table.type"),
-      render: (l) => (
-        <span className="text-xs font-medium text-ink">
-          {t(l.type === "IMAGING" ? "labOrders.type.imaging" : "labOrders.type.lab")}
-        </span>
-      ),
+      render: (l: any) => {
+        const itemType = l.items?.[0]?.type || l.type || "lab";
+        return (
+          <span className="text-xs font-medium text-ink">
+            {t(
+              itemType === "IMAGING" || itemType === "radiology"
+                ? "labOrders.type.imaging"
+                : "labOrders.type.lab"
+            )}
+          </span>
+        );
+      },
     },
     {
       key: "tests",
       header: t("visits.workspace.testName"),
-      render: (l) => (
-        <div className="flex flex-col gap-0.5">
-          {l.tests.map((t, idx) => (
-            <span key={idx} className="text-xs font-semibold text-ink">
-              {t.name} {t.code && `(${t.code})`}
-            </span>
-          ))}
-        </div>
-      ),
+      render: (l: any) => {
+        const testsList = l.items && l.items.length ? l.items : l.tests || [];
+        return (
+          <div className="flex flex-col gap-0.5">
+            {testsList.map((t: any, idx: number) => (
+              <span key={idx} className="text-xs font-semibold text-ink">
+                {t.name} {t.code && `(${t.code})`}
+              </span>
+            ))}
+          </div>
+        );
+      },
     },
     {
       key: "priority",
       header: t("visits.workspace.priority"),
-      render: (l) => (
+      render: (l: any) => (
         <span className="capitalize text-xs font-medium text-slate-dark">{l.priority}</span>
       ),
     },
     {
       key: "status",
       header: t("common.status"),
-      render: (l) => <StatusBadge status={l.status} size="sm" />,
+      render: (l: any) => (
+        <StatusBadge status={l.status || (l.hasPending ? "ordered" : "received")} size="sm" />
+      ),
     },
   ];
 
@@ -588,6 +601,15 @@ export default function VisitWorkspacePage() {
           </Link>
         }
       />
+
+      {patient && (
+        <PendingOrdersPanel
+          patientId={patient._id}
+          currentVisitId={visit._id}
+          patientName={`${patient.firstName || ""} ${patient.lastName || ""}`.trim()}
+          isDoctor={role === "doctor"}
+        />
+      )}
 
       <VisitLifecyclePanel
         key={`${visit._id}:${visit.updatedAt}:${visit.status}`}

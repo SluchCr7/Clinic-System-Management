@@ -52,7 +52,6 @@ export default function AppointmentsPage() {
   const canEditAppointment = hasPermission(role, "appointments.edit");
   const [viewMode, setViewMode] = useState<"list" | "agenda">("list");
   const menuButtonRef = useRef<HTMLButtonElement>(null);
-  
   // State for active dropdown menu in table rows
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
@@ -172,6 +171,7 @@ export default function AppointmentsPage() {
 
     return formatter.format(date).replace(" ", "T");
   };
+  const todayStr = formatClinicDateTimeForInput(new Date()).slice(0, 10);
 
   const handleOpenBookModal = () => {
     const tomorrow = new Date();
@@ -450,8 +450,7 @@ export default function AppointmentsPage() {
         }
       />
 
-      {/* Filter Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-surface p-3 rounded-lg border border-border-subtle">
+      {/* <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-surface p-3 rounded-lg border border-border-subtle">
         <div className="flex items-center gap-2.5 w-full sm:w-auto">
           <Input
             type="date"
@@ -492,8 +491,63 @@ export default function AppointmentsPage() {
             />
           </div>
         </div>
-      </div>
+      </div> */}
+      {/* Filter Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-surface p-3 rounded-lg border border-border-subtle">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <Input
+            type="date"
+            value={queryParams.date || ""}
+            onChange={(e) =>
+              setQueryParams((prev) => ({
+                ...prev,
+                date: e.target.value || undefined,
+                page: 1,
+              }))
+            }
+            className="w-full sm:max-w-xs"
+          />
+          <Button
+            variant={queryParams.date === todayStr ? "primary" : "secondary"}
+            size="sm"
+            onClick={() =>
+              setQueryParams((prev) => ({
+                ...prev,
+                date: prev.date === todayStr ? undefined : todayStr,
+                page: 1,
+              }))
+            }
+          >
+            {t("appointments.today")}
+          </Button>
+        </div>
 
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <div className="w-full sm:w-36">
+            <Select
+              value={queryParams.status || ""}
+              onChange={(e) =>
+                setQueryParams((prev) => ({
+                  ...prev,
+                  status: (e.target.value as AppointmentStatus) || undefined,
+                  page: 1,
+                }))
+              }
+              placeholder={t("appointments.allStatuses")}
+              options={[
+                { value: "", label: t("appointments.allStatuses") },
+                { value: "scheduled", label: t("appointments.statusOptions.scheduled") },
+                { value: "confirmed", label: t("appointments.statusOptions.confirmed") },
+                { value: "checked_in", label: t("appointments.statusOptions.checkedIn") },
+                { value: "in_progress", label: t("appointments.statusOptions.inProgress") },
+                { value: "completed", label: t("appointments.statusOptions.completed") },
+                { value: "cancelled", label: t("appointments.statusOptions.cancelled") },
+                { value: "no-show", label: t("appointments.statusOptions.noShow") },
+              ]}
+            />
+          </div>
+        </div>
+      </div>
       {/* Main View */}
       {viewMode === "list" ? (
         <div className="w-full overflow-x-auto">

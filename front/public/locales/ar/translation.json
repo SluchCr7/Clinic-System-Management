@@ -51,6 +51,9 @@
       "unpaid": "غير مدفوع",
       "REQUESTED": "مطلوب",
       "RESULT_RECEIVED": "تم استلام النتيجة",
+      "result-received": "تم استلام النتيجة",
+      "received": "تم استلام النتيجة",
+      "ordered": "قيد الانتظار",
       "CANCELLED": "ملغي",
       "routine": "اعتيادي",
       "urgent": "عاجل",
@@ -1120,6 +1123,7 @@
     "status": "الحالة",
     "cancelAppointment": "إلغاء الموعد",
     "allStatuses": "كل الحالات",
+    "today" : "اليوم",
     "statusOptions": {
       "scheduled": "مجدول",
       "confirmed": "مؤكد",

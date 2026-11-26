@@ -439,26 +439,26 @@ export default function PatientProfilePage() {
             {
               key: "orderedAt",
               header: t("patientProfile.orderedDate"),
-              render: (l) => (
+              render: (l: any) => (
                 <span className="font-mono text-xs">
-                  {new Date(l.orderedAt).toLocaleDateString()}
+                  {l.orderedAt || l.createdAt ? new Date(l.orderedAt || l.createdAt).toLocaleDateString() : "-"}
                 </span>
               ),
             },
             {
               key: "tests",
               header: t("patientProfile.labTests"),
-              render: (l) => l.tests.map((t) => t.name).join(", "),
+              render: (l: any) => (l.items || l.tests || []).map((t: any) => t.name).join(", "),
             },
             {
               key: "priority",
               header: t("patientProfile.priority"),
-              render: (l) => <StatusBadge status={l.priority} size="sm" />,
+              render: (l: any) => <StatusBadge status={l.priority} size="sm" />,
             },
             {
               key: "status",
               header: t("patientProfile.status"),
-              render: (l) => <StatusBadge status={l.status} size="sm" />,
+              render: (l: any) => <StatusBadge status={l.status || (l.hasPending ? "ordered" : "received")} size="sm" />,
             },
           ]}
           data={labOrdersData?.data}

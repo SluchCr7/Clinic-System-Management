@@ -1,299 +1,568 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
-import { useGetLabOrdersQuery, useUpdateLabOrderMutation } from "@/services/api/labOrderApi";
-import { useCreateMedicalAttachmentMutation } from "@/services/api/medicalAttachmentApi";
-import type { LabOrder, LabOrderPriority, LabOrderStatus, LabOrderType } from "@/types/labOrder";
+import { useAppSelector } from "@/redux/hooks";
+import { selectUserRole } from "@/features/auth/authSelectors";
+import {
+  useGetLabOrdersQuery,
+  useUpdateLabOrderItemMutation,
+} from "@/services/api/labOrderApi";
+import type {
+  GroupedLabOrderCard,
+  LabOrderItem,
+  GroupedLabOrderQueryParams,
+} from "@/types/labOrder";
 import {
   PageHeader,
-  DataTable,
   Button,
-  Select,
+  CustomSelect,
   Input,
-  Textarea,
-  StatusBadge,
-  Modal,
+  Badge,
+  Skeleton,
+  EmptyState,
   toast,
-  type Column,
 } from "@/components/ui";
 import { extractApiError } from "@/services/api/baseQuery";
-import { LuCircleCheck, LuFlaskConical, LuScanLine, LuExternalLink } from "react-icons/lu";
+import { UpdateLabOrderStatusModal } from "@/components/lab-orders/UpdateLabOrderStatusModal";
+import {
+  LuFlaskConical,
+  LuScanLine,
+  LuExternalLink,
+  LuCheck,
+  LuFileText,
+  LuCalendar,
+  LuUser,
+  LuPhone,
+  LuSearch,
+  LuFilter,
+  LuSquarePen,
+  LuClock,
+  LuDownload,
+} from "react-icons/lu";
 
 export default function LabOrdersPage() {
   const { t } = useTranslation();
-  const [queryParams, setQueryParams] = useState({
-    page: 1,
+  const role = useAppSelector(selectUserRole);
+  const isDoctor = role === "doctor";
+
+  // Default filter: "pending" (Pending only) per key UX requirement
+  const [filterMode, setFilterMode] = useState<"pending" | "all">("pending");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [dateFilter, setDateFilter] = useState<string>("");
+  const [page, setPage] = useState<number>(1);
+
+  const queryParams: GroupedLabOrderQueryParams = {
+    page,
     limit: 10,
-    status: undefined as LabOrderStatus | undefined,
-    type: undefined as LabOrderType | undefined,
-    priority: undefined as LabOrderPriority | undefined,
-    search: "",
-  });
-  const { data, isLoading, isError, refetch } = useGetLabOrdersQuery(queryParams);
-  const [updateLabOrder, { isLoading: isUpdating }] = useUpdateLabOrderMutation();
-  const [createAttachment] = useCreateMedicalAttachmentMutation();
-
-  const [activeOrder, setActiveOrder] = useState<LabOrder | null>(null);
-  const [selectedStatus, setSelectedStatus] = useState<LabOrderStatus>("REQUESTED");
-  const [receivedAt, setReceivedAt] = useState(new Date().toISOString().slice(0, 10));
-  const [performedAt, setPerformedAt] = useState("");
-  const [facility, setFacility] = useState("");
-  const [resultNotes, setResultNotes] = useState("");
-  const [cancelReason, setCancelReason] = useState("");
-  const [resultFile, setResultFile] = useState<File | null>(null);
-
-  const openModal = (order: LabOrder, status: LabOrderStatus = order.status) => {
-    setActiveOrder(order);
-    setSelectedStatus(status);
-    setReceivedAt(new Date().toISOString().slice(0, 10));
-    setPerformedAt("");
-    setFacility("");
-    setResultNotes("");
-    setCancelReason("");
-    setResultFile(null);
+    filter: filterMode,
+    status: statusFilter !== "all" ? statusFilter : undefined,
+    type: typeFilter !== "all" ? typeFilter : undefined,
+    priority: priorityFilter !== "all" ? priorityFilter : undefined,
+    search: searchQuery.trim() || undefined,
+    date: dateFilter || undefined,
   };
 
-  const submitUpdate = async () => {
-    if (!activeOrder) return;
-    try {
-      let resultAttachment: string | undefined;
-      if (selectedStatus === "RESULT_RECEIVED" && resultFile) {
-        const patientId =
-          typeof activeOrder.patient === "object" ? activeOrder.patient._id : activeOrder.patient;
-        const visitId =
-          typeof activeOrder.visit === "object" ? activeOrder.visit._id : activeOrder.visit;
-        const formData = new FormData();
-        formData.append("file", resultFile);
-        formData.append("patient", patientId);
-        formData.append("visit", visitId);
-        formData.append("type", activeOrder.type === "IMAGING" ? "xray" : "lab_report");
-        formData.append("title", `نتيجة ${activeOrder.tests.map((test) => test.name).join("، ")}`);
-        formData.append("description", "نتيجة طلب تحاليل أو أشعة خارجية");
-        const upload = await createAttachment(formData).unwrap();
-        resultAttachment = upload.data._id;
-      }
+  const { data, isLoading, isError, refetch } = useGetLabOrdersQuery(queryParams);
+  const [updateItem, { isLoading: isQuickUpdating }] = useUpdateLabOrderItemMutation();
 
-      await updateLabOrder({
-        id: activeOrder._id,
+  // Active modal state
+  const [selectedItem, setSelectedItem] = useState<{
+    item: LabOrderItem;
+    patientName: string;
+  } | null>(null);
+
+  // Quick "Mark as received" directly from card (Doctor only)
+  const handleQuickReceive = async (itemId: string, itemName: string) => {
+    try {
+      await updateItem({
+        id: itemId,
         data: {
-          status: selectedStatus,
-          receivedAt: selectedStatus === "RESULT_RECEIVED" ? receivedAt : undefined,
-          performedAt: selectedStatus === "RESULT_RECEIVED" && performedAt ? performedAt : undefined,
-          externalFacilityName: selectedStatus === "RESULT_RECEIVED" ? facility || undefined : undefined,
-          resultNotes: selectedStatus === "RESULT_RECEIVED" ? resultNotes || undefined : undefined,
-          resultAttachment,
-          statusChangeReason:
-            selectedStatus === "CANCELLED"
-              ? cancelReason
-              : selectedStatus === "REQUESTED"
-                ? "تصحيح خطأ - إعادة فتح النتيجة"
-                : undefined,
+          status: "received",
+          receivedAt: new Date().toISOString(),
         },
       }).unwrap();
-      toast.success(t("labOrders.success.updated"));
-      setActiveOrder(null);
+      toast.success(`تم تسجيل استلام نتيجة "${itemName}" بنجاح`);
     } catch (err) {
-      const extracted = extractApiError(err);
-      toast.error(extracted.message || t("labOrders.errors.updateFailed"));
+      const errInfo = extractApiError(err);
+      toast.error(errInfo.message || "فشل تسجيل استلام النتيجة");
     }
   };
 
-  const requestedCount = useMemo(
-    () => (data?.data || []).filter((order) => order.status === "REQUESTED").length,
-    [data]
-  );
-
-  const columns: Column<LabOrder>[] = [
-    {
-      key: "patient",
-      header: t("common.patient"),
-      render: (order) => {
-        const patient = typeof order.patient === "object" ? order.patient : null;
-        return <span className="font-semibold text-xs text-ink">{patient ? `${patient.firstName} ${patient.lastName}` : "-"}</span>;
-      },
-    },
-    {
-      key: "type",
-      header: t("labOrders.table.type"),
-      render: (order) => (
-        <span className="flex items-center gap-1.5 text-xs text-ink">
-          {order.type === "IMAGING" ? <LuScanLine className="w-4 h-4" /> : <LuFlaskConical className="w-4 h-4" />}
-          {t(order.type === "IMAGING" ? "labOrders.type.imaging" : "labOrders.type.lab")}
-        </span>
-      ),
-    },
-    {
-      key: "tests",
-      header: t("labOrders.table.diagnosticTests"),
-      render: (order) => (
-        <div className="flex flex-col gap-1">
-          {order.tests.map((test, index) => (
-            <span key={`${test.name}-${index}`} className="text-xs font-medium text-ink">
-              • {test.name}
-            </span>
-          ))}
-          {order.instructions && <span className="text-[10px] text-slate-muted">{order.instructions}</span>}
-        </div>
-      ),
-    },
-    {
-      key: "visit",
-      header: t("labOrders.table.visit"),
-      render: (order) => {
-        const visitId = typeof order.visit === "object" ? order.visit._id : order.visit;
-        return (
-          <Link href={`/visits/${visitId}`} className="inline-flex items-center gap-1 text-xs text-teal-primary hover:underline">
-            {t("labOrders.table.openVisit")}
-            <LuExternalLink className="w-3 h-3" />
-          </Link>
-        );
-      },
-    },
-    {
-      key: "priority",
-      header: t("common.priority"),
-      render: (order) => <StatusBadge status={order.priority} size="sm" />,
-    },
-    {
-      key: "status",
-      header: t("labOrders.table.status"),
-      render: (order) => <StatusBadge status={order.status} size="sm" />,
-    },
-    {
-      key: "actions",
-      header: "",
-      align: "right",
-      render: (order) => (
-        <div className="flex justify-end gap-2">
-          {order.status === "REQUESTED" && (
-            <Button variant="secondary" size="sm" onClick={() => openModal(order, "RESULT_RECEIVED")}>
-              {t("labOrders.quickResult")}
-            </Button>
-          )}
-          {order.status !== "CANCELLED" && (
-            <Button variant="ghost" size="sm" onClick={() => openModal(order)}>
-              {t("labOrders.updateStatus")}
-            </Button>
-          )}
-        </div>
-      ),
-    },
-  ];
+  const cards: GroupedLabOrderCard[] = data?.data || [];
+  const pagination = data?.pagination;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6 max-w-6xl mx-auto pb-12">
+      {/* Page Header */}
       <PageHeader
-        title={t("labOrders.title")}
-        subtitle={t("labOrders.subtitle")}
-        badge={<StatusBadge status={`${requestedCount} ${t("labOrders.requestedPending")}`} size="sm" />}
+        title="طلبات التحاليل والأشعة الطبية"
+        subtitle="متابعة واستلام نتائج الفحوصات التشخيصية مجمعة حسب المريض والزيارة"
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setFilterMode("pending");
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                filterMode === "pending"
+                  ? "bg-teal-primary text-white shadow-sm"
+                  : "bg-surface border border-border-subtle text-slate-muted hover:text-ink"
+              }`}
+            >
+              المعلقة فقط
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFilterMode("all");
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                filterMode === "all"
+                  ? "bg-teal-primary text-white shadow-sm"
+                  : "bg-surface border border-border-subtle text-slate-muted hover:text-ink"
+              }`}
+            >
+              جميع الطلبات
+            </button>
+          </div>
+        }
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 bg-surface p-3 rounded-lg border border-border-subtle">
-        <Select
-          value={queryParams.status || ""}
-          onChange={(event) => setQueryParams((prev) => ({ ...prev, status: (event.target.value as LabOrderStatus) || undefined, page: 1 }))}
-          placeholder={t("labOrders.filter.allStatuses")}
-          options={[
-            { value: "", label: t("labOrders.filter.allStatuses") },
-            { value: "REQUESTED", label: t("labOrders.status.requested") },
-            { value: "RESULT_RECEIVED", label: t("labOrders.status.resultReceived") },
-            { value: "CANCELLED", label: t("labOrders.status.cancelled") },
-          ]}
-        />
-        <Select
-          value={queryParams.type || ""}
-          onChange={(event) => setQueryParams((prev) => ({ ...prev, type: (event.target.value as LabOrderType) || undefined, page: 1 }))}
-          placeholder={t("labOrders.filter.allTypes")}
-          options={[
-            { value: "", label: t("labOrders.filter.allTypes") },
-            { value: "LAB", label: t("labOrders.type.lab") },
-            { value: "IMAGING", label: t("labOrders.type.imaging") },
-          ]}
-        />
-        <Select
-          value={queryParams.priority || ""}
-          onChange={(event) => setQueryParams((prev) => ({ ...prev, priority: (event.target.value as LabOrderPriority) || undefined, page: 1 }))}
-          placeholder={t("labOrders.filter.allPriorities")}
-          options={[
-            { value: "", label: t("labOrders.filter.allPriorities") },
-            { value: "routine", label: t("labOrders.filter.routine") },
-            { value: "urgent", label: t("labOrders.filter.urgent") },
-            { value: "stat", label: t("labOrders.filter.stat") },
-          ]}
-        />
-        <Input
-          value={queryParams.search}
-          onChange={(event) => setQueryParams((prev) => ({ ...prev, search: event.target.value, page: 1 }))}
-          placeholder={t("labOrders.filter.searchPatient")}
-        />
-      </div>
+      {/* Filter Bar */}
+      <div className="bg-surface p-4 rounded-xl border border-border-subtle shadow-card flex flex-col gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          {/* Search Input */}
+          <div className="relative">
+            <Input
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(1);
+              }}
+              placeholder="ابحث باسم المريض أو الهاتف..."
+              className="ps-9"
+            />
+            <div className="absolute inset-y-0 start-3 flex items-center pointer-events-none text-slate-muted">
+              <LuSearch className="w-4 h-4" />
+            </div>
+          </div>
 
-      <DataTable
-        columns={columns}
-        data={data?.data}
-        isLoading={isLoading}
-        isError={isError}
-        onRetry={refetch}
-        emptyTitle={t("labOrders.emptyTitle")}
-        emptyDescription={t("labOrders.emptyDescription")}
-        pagination={data?.pagination}
-        onPageChange={(page) => setQueryParams((prev) => ({ ...prev, page }))}
-      />
-
-      <Modal
-        isOpen={Boolean(activeOrder)}
-        onClose={() => setActiveOrder(null)}
-        title={t("labOrders.modal.title")}
-        subtitle={activeOrder?.tests.map((test) => test.name).join("، ")}
-      >
-        <form onSubmit={(event) => { event.preventDefault(); void submitUpdate(); }} className="flex flex-col gap-4">
-          <Select
-            label={t("labOrders.modal.status")}
-            value={selectedStatus}
-            onChange={(event) => setSelectedStatus(event.target.value as LabOrderStatus)}
+          {/* Type Filter */}
+          <CustomSelect
+            value={typeFilter}
+            onChange={(val) => {
+              setTypeFilter(val);
+              setPage(1);
+            }}
             options={[
-              { value: "REQUESTED", label: t("labOrders.status.requested") },
-              { value: "RESULT_RECEIVED", label: t("labOrders.status.resultReceived") },
-              { value: "CANCELLED", label: t("labOrders.status.cancelled") },
+              { value: "all", label: "جميع الأنواع (تحاليل وأشعة)" },
+              { value: "lab", label: "تحاليل مخبرية فقط" },
+              { value: "radiology", label: "أشعة وتصوير طبي فقط" },
             ]}
           />
 
-          {selectedStatus === "RESULT_RECEIVED" && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Input label={t("labOrders.modal.receivedAt")} type="date" value={receivedAt} onChange={(event) => setReceivedAt(event.target.value)} />
-              <Input label={t("labOrders.modal.performedAt")} type="date" value={performedAt} onChange={(event) => setPerformedAt(event.target.value)} />
-              <div className="sm:col-span-2">
-                <Input label={t("labOrders.modal.facility")} value={facility} onChange={(event) => setFacility(event.target.value)} />
+          {/* Priority Filter */}
+          <CustomSelect
+            value={priorityFilter}
+            onChange={(val) => {
+              setPriorityFilter(val);
+              setPage(1);
+            }}
+            options={[
+              { value: "all", label: "جميع الأولويات" },
+              { value: "urgent", label: "عاجل (Urgent)" },
+              { value: "routine", label: "عادي (Routine)" },
+            ]}
+          />
+
+          {/* Status Filter (available if viewing all) */}
+          <CustomSelect
+            value={statusFilter}
+            onChange={(val) => {
+              setStatusFilter(val);
+              setPage(1);
+            }}
+            options={[
+              { value: "all", label: "جميع الحالات" },
+              { value: "ordered", label: "قيد الانتظار" },
+              { value: "received", label: "تم استلام النتيجة" },
+              { value: "cancelled", label: "ملغي" },
+            ]}
+          />
+
+          {/* Date Filter */}
+          <div className="relative">
+            <Input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => {
+                setDateFilter(e.target.value);
+                setPage(1);
+              }}
+              className="text-xs"
+            />
+            {dateFilter && (
+              <button
+                type="button"
+                onClick={() => setDateFilter("")}
+                className="absolute inset-y-0 end-2 flex items-center text-[10px] text-teal-primary hover:underline"
+              >
+                مسح
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      {isLoading ? (
+        <div className="flex flex-col gap-4">
+          <Skeleton className="h-44 w-full rounded-xl" />
+          <Skeleton className="h-44 w-full rounded-xl" />
+          <Skeleton className="h-44 w-full rounded-xl" />
+        </div>
+      ) : isError ? (
+        <div className="p-8 text-center bg-surface border border-border-subtle rounded-xl flex flex-col items-center gap-3">
+          <p className="text-sm font-semibold text-status-error">
+            حدث خطأ أثناء تحميل طلبات التحاليل والأشعة
+          </p>
+          <Button variant="secondary" size="sm" onClick={refetch}>
+            إعادة المحاولة
+          </Button>
+        </div>
+      ) : cards.length === 0 ? (
+        <EmptyState
+          title={filterMode === "pending" ? "لا توجد طلبات معلقة بانتظار النتائج" : "لا توجد طلبات تحاليل وأشعة مسجلة"}
+          description={
+            filterMode === "pending"
+              ? "تم استلام كافة نتائج الفحوصات الطبية أو لم يتم طلب فحوصات معلقة مؤخراً."
+              : "لم يتم العثور على أي نتائج مطابقة لمعايير البحث الحالية."
+          }
+          icon={<LuFlaskConical className="w-6 h-6" />}
+          actionNode={
+            filterMode === "pending" ? (
+              <Button variant="secondary" size="sm" onClick={() => setFilterMode("all")}>
+                عرض جميع الطلبات
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : (
+        <div className="flex flex-col gap-5">
+          {/* List of Grouped Visit Cards */}
+          {cards.map((card) => {
+            const patientName = `${card.patient?.firstName || ""} ${card.patient?.lastName || ""}`.trim() || "مريض غير معروف";
+            const visitDate = card.visit?.createdAt
+              ? new Date(card.visit.createdAt).toLocaleDateString("ar-EG", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })
+              : "تاريخ غير محدد";
+
+            const isUrgent = card.priority === "urgent";
+
+            return (
+              <div
+                key={card._id}
+                className={`bg-surface rounded-xl border transition-shadow overflow-hidden shadow-card ${
+                  isUrgent
+                    ? "border-amber-500/50 hover:shadow-amber-500/10"
+                    : "border-border-subtle hover:border-border-medium"
+                }`}
+              >
+                {/* Card Header */}
+                <div
+                  className={`p-4 border-b flex flex-wrap items-center justify-between gap-3 ${
+                    isUrgent ? "bg-amber-500/10 border-amber-500/20" : "bg-paper/60 border-border-subtle"
+                  }`}
+                >
+                  {/* Left: Patient Info & Visit Link */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-teal-primary/15 text-teal-primary flex items-center justify-center font-bold text-sm">
+                      <LuUser className="w-5 h-5" />
+                    </div>
+
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-ink text-sm sm:text-base">
+                          {patientName}
+                        </span>
+                        {card.patient?.phone && (
+                          <span className="text-[11px] text-slate-muted flex items-center gap-1 font-mono">
+                            <LuPhone className="w-3 h-3" />
+                            {card.patient.phone}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 text-xs text-slate-muted mt-0.5">
+                        <span className="flex items-center gap-1">
+                          <LuCalendar className="w-3.5 h-3.5" />
+                          زيارة: {visitDate}
+                        </span>
+                        <span>•</span>
+                        <Link
+                          href={`/visits/${card.visit._id}`}
+                          className="inline-flex items-center gap-1 text-teal-primary hover:underline font-semibold"
+                        >
+                          فتح الزيارة
+                          <LuExternalLink className="w-3 h-3" />
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Priority, Progress Indicator & Status Badge */}
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    {/* Priority Badge */}
+                    {isUrgent ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500 text-slate-950 shadow-sm animate-pulse">
+                        عاجل (Urgent)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-paper border border-border-subtle text-slate-muted">
+                        عادي
+                      </span>
+                    )}
+
+                    {/* Progress Indicator: "2 of 5 received" */}
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-paper border border-border-subtle text-xs font-bold text-ink">
+                      <span>تم استلام</span>
+                      <span className="text-teal-primary font-mono">{card.counts.received}</span>
+                      <span>من</span>
+                      <span className="font-mono">{card.counts.total}</span>
+                    </div>
+
+                    {/* Pending / Completed Badge */}
+                    {card.hasPending ? (
+                      <Badge variant="warning" size="sm" dot>
+                        {card.counts.pending} قيد الانتظار
+                      </Badge>
+                    ) : (
+                      <Badge variant="success" size="sm" dot>
+                        مكتمل
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                {/* Card Items List */}
+                <div className="divide-y divide-border-subtle">
+                  {card.items.map((item) => {
+                    const isLab = item.type === "lab" || item.type === "LAB";
+                    const isItemPending =
+                      item.status === "ordered" ||
+                      item.status === "REQUESTED";
+                    const isItemReceived =
+                      item.status === "received" ||
+                      item.status === "RESULT_RECEIVED";
+                    const isItemCancelled =
+                      item.status === "cancelled" ||
+                      item.status === "CANCELLED";
+
+                    return (
+                      <div
+                        key={item._id}
+                        className={`p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
+                          isItemPending
+                            ? "bg-surface hover:bg-paper/30"
+                            : isItemReceived
+                            ? "bg-teal-500/[0.02] hover:bg-teal-500/[0.05]"
+                            : "bg-paper/40 opacity-70"
+                        }`}
+                      >
+                        {/* Item Details */}
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div
+                            className={`p-2 rounded-lg shrink-0 mt-0.5 ${
+                              isLab
+                                ? "bg-teal-primary/15 text-teal-primary"
+                                : "bg-purple-500/15 text-purple-400"
+                            }`}
+                          >
+                            {isLab ? (
+                              <LuFlaskConical className="w-4 h-4" />
+                            ) : (
+                              <LuScanLine className="w-4 h-4" />
+                            )}
+                          </div>
+
+                          <div className="flex flex-col gap-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-ink text-xs sm:text-sm">
+                                {item.name}
+                              </span>
+                              {item.code && (
+                                <span className="font-mono text-[10px] text-slate-muted bg-paper px-1.5 py-0.5 rounded border border-border-subtle">
+                                  {item.code}
+                                </span>
+                              )}
+                              <span className="text-[11px] text-slate-muted">
+                                {isLab ? "تحليل مخبري" : "أشعة وتصوير"}
+                              </span>
+                            </div>
+
+                            {/* Center Name & Notes */}
+                            {item.labName && (
+                              <span className="text-[11px] text-teal-light font-medium">
+                                المركز / المعمل: {item.labName}
+                              </span>
+                            )}
+                            {item.resultNotes && (
+                              <p className="text-[11px] text-slate-muted line-clamp-2">
+                                النتيجة: {item.resultNotes}
+                              </p>
+                            )}
+                            {isItemCancelled && item.cancelReason && (
+                              <p className="text-[11px] text-status-error">
+                                سبب الإلغاء: {item.cancelReason}
+                              </p>
+                            )}
+
+                            {/* Attached Files */}
+                            {item.resultFiles && item.resultFiles.length > 0 && (
+                              <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                                {item.resultFiles.map((file) => (
+                                  <a
+                                    key={file._id}
+                                    href={`/api/lab-order-items/${item._id}/files/${file._id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-paper border border-border-subtle text-[11px] text-teal-primary hover:underline font-medium"
+                                  >
+                                    <LuFileText className="w-3 h-3" />
+                                    <span>{file.originalName}</span>
+                                    <LuDownload className="w-2.5 h-2.5" />
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Status Badge & Actions */}
+                        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                          {/* Item Status Badge */}
+                          {isItemReceived && (
+                            <Badge variant="success" size="sm" dot>
+                              تم استلام النتيجة
+                            </Badge>
+                          )}
+                          {isItemPending && (
+                            <Badge variant="teal" size="sm" dot>
+                              قيد الانتظار
+                            </Badge>
+                          )}
+                          {isItemCancelled && (
+                            <Badge variant="error" size="sm" dot>
+                              ملغي
+                            </Badge>
+                          )}
+
+                          {/* DOCTOR ONLY ACTIONS (Hidden completely for staff) */}
+                          {isDoctor && (
+                            <div className="flex items-center gap-1.5 ms-2">
+                              {/* Quick "Mark as received" button */}
+                              {isItemPending && (
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  disabled={isQuickUpdating}
+                                  onClick={() => handleQuickReceive(item._id, item.name)}
+                                  leftIcon={<LuCheck className="w-3.5 h-3.5" />}
+                                  className="text-xs py-1"
+                                >
+                                  استلام سريع
+                                </Button>
+                              )}
+
+                              {/* Update Status button with icon */}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  setSelectedItem({
+                                    item,
+                                    patientName,
+                                  })
+                                }
+                                leftIcon={<LuSquarePen className="w-3.5 h-3.5" />}
+                                className="text-xs py-1"
+                              >
+                                تحديث الحالة
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="sm:col-span-2">
-                <Textarea label={t("labOrders.modal.notes")} value={resultNotes} onChange={(event) => setResultNotes(event.target.value)} />
+            );
+          })}
+
+          {/* Pagination */}
+          {pagination && (pagination.pages || (pagination as any).totalPages || 1) > 1 && (
+            <div className="p-4 border border-border-subtle bg-surface rounded-xl flex items-center justify-between text-xs text-slate-muted">
+              <div>
+                عرض{" "}
+                <span className="font-semibold text-ink">
+                  {Math.min((page - 1) * pagination.limit + 1, pagination.total)}
+                </span>{" "}
+                إلى{" "}
+                <span className="font-semibold text-ink">
+                  {Math.min(page * pagination.limit, pagination.total)}
+                </span>{" "}
+                من{" "}
+                <span className="font-semibold text-ink">{pagination.total}</span>
               </div>
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-medium mb-1.5">{t("labOrders.modal.file")}</label>
-                <input type="file" accept=".pdf,image/*" onChange={(event) => setResultFile(event.target.files?.[0] || null)} className="block w-full text-xs" />
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  السابق
+                </Button>
+                <span className="font-bold text-ink px-2">
+                  {page} / {pagination.pages || (pagination as any).totalPages || 1}
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={page >= (pagination.pages || (pagination as any).totalPages || 1)}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  التالي
+                </Button>
               </div>
             </div>
           )}
+        </div>
+      )}
 
-          {selectedStatus === "CANCELLED" && (
-            <Textarea
-              label={t("labOrders.modal.cancelReason")}
-              value={cancelReason}
-              onChange={(event) => setCancelReason(event.target.value)}
-              required
-            />
-          )}
-
-          <div className="flex justify-end gap-2 pt-3 border-t border-border-subtle">
-            <Button type="button" variant="secondary" size="sm" onClick={() => setActiveOrder(null)}>{t("common.cancel")}</Button>
-            <Button type="submit" variant="primary" size="sm" isLoading={isUpdating} leftIcon={<LuCircleCheck className="w-3.5 h-3.5" />}>
-              {t("labOrders.updateStatus")}
-            </Button>
-          </div>
-        </form>
-      </Modal>
+      {/* Doctor Update Status Modal */}
+      {selectedItem && (
+        <UpdateLabOrderStatusModal
+          isOpen={Boolean(selectedItem)}
+          onClose={() => setSelectedItem(null)}
+          item={selectedItem.item}
+          patientName={selectedItem.patientName}
+          onSuccess={() => refetch()}
+        />
+      )}
     </div>
   );
 }

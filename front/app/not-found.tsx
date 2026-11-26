@@ -1,5 +1,7 @@
+"use client";
+
 import Link from "next/link";
-import { Button } from "@/components/ui";
+import { Button } from "@/components/ui/Button";
 import { LuFileQuestion } from "react-icons/lu";
 
 export default function NotFound() {

@@ -15,4 +15,6 @@ export * from "./Avatar";
 export * from "./PageHeader";
 export * from "./StatCard";
 export * from "./DataTable";
+export * from "./FileInput";
+export * from "./CustomSelect";
 export { default as Logo } from "./Logo";
