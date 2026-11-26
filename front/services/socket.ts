@@ -1,7 +1,17 @@
 import { io } from "socket.io-client";
 import { store } from "@/redux/store";
 import { notificationApi } from "@/services/api/notificationApi";
-export const socket = io(process.env.NEXT_PUBLIC_API_URL_SOCKET as string, {
+const getSocketUrl = () => {
+  if (process.env.NEXT_PUBLIC_API_URL_SOCKET) {
+    return process.env.NEXT_PUBLIC_API_URL_SOCKET;
+  }
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/?$/, "");
+  }
+  return "http://localhost:3001";
+};
+
+export const socket = io(getSocketUrl(), {
   autoConnect: false,
   withCredentials: true,
 });

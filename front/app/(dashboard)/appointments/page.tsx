@@ -752,7 +752,7 @@ export default function AppointmentsPage() {
             />
           </div>
 
-          {/* {(availabilityData?.data?.availableSlots?.length ?? 0) > 0 && (
+          {(availabilityData?.data?.availableSlots?.length ?? 0) > 0 && (
             <div className="p-3 rounded-md bg-paper border border-border-subtle">
               <p className="text-[10px] font-semibold text-slate-muted mb-2">
                 {t("appointments.bookModal.availableSlots")}
@@ -811,7 +811,7 @@ export default function AppointmentsPage() {
                 ))}
               </div>
             </div>
-          )} */}
+          )}
 
           <Input
             label={t("appointments.bookModal.reason")}

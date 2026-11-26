@@ -141,10 +141,8 @@ export function DataTable<T extends { _id?: string; id?: string }>({
             ) : (
               data.map((row, idx) => {
                 const rowKey = row._id || row.id || String(idx);
-                const { i18n } = useTranslation();
-  const isArabic = !i18n.language || i18n.language === "ar";
 
-  return (
+                return (
                   <tr
                     key={rowKey}
                     onClick={() => onRowClick && onRowClick(row)}
@@ -162,10 +160,7 @@ export function DataTable<T extends { _id?: string; id?: string }>({
                           ? "text-center"
                           : "text-start";
 
-                      const { i18n } = useTranslation();
-  const isArabic = !i18n.language || i18n.language === "ar";
-
-  return (
+                      return (
                         <td
                           key={col.key}
                           className={`py-3.5 px-4 text-xs ${alignClass} ${
